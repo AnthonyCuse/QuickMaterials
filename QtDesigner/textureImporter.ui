@@ -1,0 +1,834 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>512</width>
+    <height>380</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_2">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QFrame" name="mainUIFrame">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QFrame {
+    /* Background */
+    background-color:#555555;  /* Dark grey background color */ 
+    /* background-image: url('background.png');  /* Optional background image */ 
+    /* background-repeat: no-repeat;  /* Prevents the background image from repeating */ 
+    /* background-position: center;  /* Centers the background image */ 
+
+    /* Border */
+	border: 0px solid #333333;  /* Solid border with color and thickness */ 
+  /* Rounded corners with 10px radius */ 
+    /* border-style: solid;  /* Border style can be solid, dashed, dotted, etc. */ 
+
+    /* Padding and Margin */
+    padding:3px;  /* Inner space between the frame content and its border */ 
+    margin: 3px;  /* Outer space around the frame */ 
+    border-radius: 10px;  /* Rounded corners */
+    
+    /* Font */
+    /*font-family: Arial, Helvetica, sans-serif;  /* Font family */
+    /*font-size: 14px;  /* Font size */
+    /*font-weight: bold;  /* Font weight: normal, bold, bolder, lighter, or numeric values */
+    /*font-style: italic;  /* Font style: normal, italic, or oblique */
+   color: #ffffff;  /* Text color */
+    /*text-align: center;  /* Text alignment: left, right, center, justify */
+    /*text-decoration: underline;  /* Text decoration: underline, overline, line-through, none */
+    /*letter-spacing: 1px;  /* Spacing between letters */
+    
+    /* Shadow */
+    /*box-shadow: 2px 2px 5px #1a1a1a;  /* Adds a shadow with x-offset, y-offset, blur radius, and color */
+    
+    /* Gradient Background (Optional) */
+    /*background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #3e3e3e, stop:1 #2b2b2b);  /* Linear gradient */
+    /*background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #4a4a4a, stop:1 #2b2b2b);  /* Radial gradient */
+    
+    /* Opacity */
+    /*opacity: 0.9;  /* Transparency: 0.0 (fully transparent) to 1.0 (fully opaque) */
+    
+    /* Cursor */
+    /*cursor: pointer;  /* Changes the cursor to a pointer when hovering */
+}
+</string>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_3">
+      <item>
+       <widget class="QFrame" name="textureImporterFrame">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QFrame {
+    /* Background */
+    background-color:#444444;  /* Dark grey background color */ 
+    /* background-image: url('background.png');  /* Optional background image */ 
+    /* background-repeat: no-repeat;  /* Prevents the background image from repeating */ 
+    /* background-position: center;  /* Centers the background image */ 
+
+    /* Border */
+	border: 0px solid #333333;  /* Solid border with color and thickness */ 
+    border-radius: 1px;  /* Rounded corners with 10px radius */ 
+    /* border-style: solid;  /* Border style can be solid, dashed, dotted, etc. */ 
+
+    /* Padding and Margin */
+    padding: 2px;  /* Inner space between the frame content and its border */ 
+    margin: 2px;  /* Outer space around the frame */ 
+    border-radius: 10px;  /* Rounded corners */
+    
+    /* Font */
+    /*font-family: Arial, Helvetica, sans-serif;  /* Font family */
+    /*font-size: 14px;  /* Font size */
+    /*font-weight: bold;  /* Font weight: normal, bold, bolder, lighter, or numeric values */
+    /*font-style: italic;  /* Font style: normal, italic, or oblique */
+   color: #ffffff;  /* Text color */
+    /*text-align: center;  /* Text alignment: left, right, center, justify */
+    /*text-decoration: underline;  /* Text decoration: underline, overline, line-through, none */
+    /*letter-spacing: 1px;  /* Spacing between letters */
+    
+    /* Shadow */
+    /*box-shadow: 2px 2px 5px #1a1a1a;  /* Adds a shadow with x-offset, y-offset, blur radius, and color */
+    
+    /* Gradient Background (Optional) */
+    /*background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #3e3e3e, stop:1 #2b2b2b);  /* Linear gradient */
+    /*background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #4a4a4a, stop:1 #2b2b2b);  /* Radial gradient */
+    
+    /* Opacity */
+    /*opacity: 0.9;  /* Transparency: 0.0 (fully transparent) to 1.0 (fully opaque) */
+    
+    /* Cursor */
+    /*cursor: pointer;  /* Changes the cursor to a pointer when hovering */
+}
+</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Raised</enum>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout">
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout">
+           <item>
+            <spacer name="horizontalSpacer">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeType">
+              <enum>QSizePolicy::Fixed</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>50</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QLabel" name="textureImporterTitleLabel">
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>-1</pointsize>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QLabel {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 16px;  /* Adjust the font size as needed */
+    color: #d6d6d6;  /* White text color */
+    /*background-color: #555555;  /* Dark background color */
+    border: 0px solid #555555;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 0px 0px;  /* Padding around the text */
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Texture Importer</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButton">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QPushButton {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 14px;  /* Adjust the font size as needed */
+    color: #ffffff;  /* White text color */
+    background-color: #666666;  /* Dark background color */
+    border: 2px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 1px 6px;  /* Padding around the text */
+	height: 20px
+}
+
+QPushButton:hover {
+    background-color: #888888;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Settings</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="materialNameLayout">
+           <property name="spacing">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="materialTextLabel">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>125</width>
+               <height>16777215</height>
+              </size>
+             </property>
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>-1</pointsize>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QLabel {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 16px;  /* Adjust the font size as needed */
+    color: #d6d6d6;  /* White text color */
+    /*background-color: #555555;  /* Dark background color */
+    border: 0px solid #555555;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 0px 0px;  /* Padding around the text */
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Material:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignBottom|Qt::AlignRight|Qt::AlignTrailing</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="materialComboBox">
+             <property name="toolTip">
+              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Material type to create new materials with. Settings are applied to appropriate attributes per material type.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QComboBox {
+    font-family: 'Segoe UI';
+    font-size: 14px;
+    color: #ffffff;
+    background-color: #333333;  /* Matching background color with QPushButton */
+    border-radius: 6px;
+    padding: 1px 2px;  /* Top/Bottom = 2px, Left/Right = 10px */
+    padding-left: 10px;  /* Add more padding to the left for spacing */
+	margin: 2px 2px;
+}
+
+QComboBox:hover {
+    background-color: #5a5a5a;  /* Same hover effect as QPushButton */
+}
+
+QComboBox::drop-down {
+    border-left: 0px solid #666666;
+    width: 0px;  /* Adjust the size of the drop-down button */
+    background-color: #333333;
+    border-radius: 2px;
+    padding: 0px 0px;
+}
+
+QComboBox::down-arrow {
+    image: url(:/arrow-down.png);  /* Use your actual image file or a built-in Qt arrow */
+    width: 10px;  /* Set the width of the arrow */
+    height: 10px;  /* Set the height of the arrow */
+}
+
+QComboBox::down-arrow:hover {
+    image: url(:/arrow-down-hover.png);  /* Optional: arrow image for hover state */
+}
+
+QComboBox QAbstractItemView {
+    font-family: 'Segoe UI';
+    font-size: 14px;
+    color: #ffffff;
+    background-color: #262626;  /* Darker background for the drop-down menu */
+    border: 2px solid #666666;
+    border-radius: 4px;
+    selection-background-color: #5a5a5a;  /* Highlight selected item */
+    selection-color: #ffffff;
+    padding: 2px 10px;
+}
+
+QComboBox::disabled {
+    color: #cccccc;
+    border: 1px solid #555555;
+    background-color: #7a7a7a;
+}
+</string>
+             </property>
+             <property name="sizeAdjustPolicy">
+              <enum>QComboBox::AdjustToContents</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_5">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeType">
+              <enum>QSizePolicy::Fixed</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>70</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="searchFolderLayout">
+           <property name="spacing">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="searchFolderTextLabel">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>125</width>
+               <height>16777215</height>
+              </size>
+             </property>
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>-1</pointsize>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QLabel {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 16px;  /* Adjust the font size as needed */
+    color: #d6d6d6;  /* White text color */
+    /*background-color: #555555;  /* Dark background color */
+    border: 0px solid #555555;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 0px 0px;  /* Padding around the text */
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Textures Folder:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignBottom|Qt::AlignRight|Qt::AlignTrailing</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLineEdit" name="searchFolderLineEdit">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="toolTip">
+              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Naming Key:&lt;/p&gt;&lt;p&gt;&lt;br/&gt;(material_name) = Name of the material textures are being imported to&lt;/p&gt;&lt;p&gt;(texture_name) = BaseColor, Roughness, Metallic, Etc. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QLineEdit {
+    font-family: 'Segoe UI';
+    font-size: 14px;
+    color: #ffffff;
+    background-color: #333333;  /* Retaining the original background color */
+    border: 2px solid #444444;
+    border-radius: 8px;
+    padding: 2px 10px;
+}
+
+QLineEdit:hover {
+    background-color: #222222;
+}
+
+QLineEdit:focus {
+    border: 2px solid #555555;
+    background-color: #4a4a4a;
+}
+
+QLabel {
+    font-family: 'Segoe UI';
+    font-size: 14px;  /* Same larger font size as QLineEdit */
+    color: #ffffff;
+    background-color: #444444;  /* Matching background color */
+    border: 2px solid #444444;
+    border-radius: 8px;
+    padding: 4px 10px;
+}
+
+QLabel:hover {
+    background-color: #3a3a3a;
+}</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="searchFolderSetButton">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QPushButton {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 14px;  /* Adjust the font size as needed */
+    color: #ffffff;  /* White text color */
+    background-color: #666666;  /* Dark background color */
+    border: 2px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 0px;  /* Rounded corners */
+    padding: 2px 5px;  /* Padding around the text */
+}
+
+QPushButton:hover {
+    background-color: #777777;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Set</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_16">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeType">
+              <enum>QSizePolicy::Fixed</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>35</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="autoSetLayout">
+           <property name="sizeConstraint">
+            <enum>QLayout::SetMinimumSize</enum>
+           </property>
+           <item>
+            <widget class="QPushButton" name="autoSetAllButton">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>-1</pointsize>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QPushButton {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 14px;  /* Adjust the font size as needed */
+    color: #ffffff;  /* White text color */
+    background-color: #666666;  /* Dark background color */
+    border: 2px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 3px 0px;  /* Padding around the text */
+
+}
+
+QPushButton:hover {
+    background-color: #888888;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Auto Set All</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="editTextureSearchNamesButton">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>-1</pointsize>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QPushButton {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 14px;  /* Adjust the font size as needed */
+    color: #ffffff;  /* White text color */
+    background-color: #666666;  /* Dark background color */
+    border: 2px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 3px 0px;  /* Padding around the text */
+
+}
+
+QPushButton:hover {
+    background-color: #888888;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Edit Texture Search Names</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QScrollArea" name="texturesScrollArea">
+           <property name="verticalScrollBarPolicy">
+            <enum>Qt::ScrollBarAlwaysOn</enum>
+           </property>
+           <property name="widgetResizable">
+            <bool>true</bool>
+           </property>
+           <widget class="QWidget" name="scrollAreaWidgetContents">
+            <property name="geometry">
+             <rect>
+              <x>0</x>
+              <y>0</y>
+              <width>431</width>
+              <height>105</height>
+             </rect>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_6"/>
+           </widget>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="importTexturesButtonLayout">
+           <item>
+            <widget class="QPushButton" name="importTexturesButton">
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>-1</pointsize>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QPushButton {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 14px;  /* Adjust the font size as needed */
+    color: #ffffff;  /* White text color */
+    background-color: #666666;  /* Dark background color */
+    border: 2px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 6px 12px;  /* Padding around the text */
+	height: 30px
+}
+
+QPushButton:hover {
+    background-color: #888888;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Import Textures</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="useUdimCheckbox">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 12px;  /* Adjust the font size as needed */
+    color: #ffffff;  /* White text color */
+    background-color: #444444;  /* Dark background color */
+    border: 0px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 6px 12px;  /* Padding around the text */
+}
+
+QCheckBox::indicator {
+    width: 16px;  /* Width of the checkbox indicator */
+    height: 16px;  /* Height of the checkbox indicator */
+    border: 2px solid #444444;  /* Dark grey border color when unchecked */
+    border-radius: 4px;  /* Rounded corners for the checkbox indicator */
+    background-color: #2b2b2b;  /* Darker grey background when unchecked */
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;  /* White background when checked */
+    border: 2px solid #2b2b2b;  /* White border when checked */
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;  /* Darker grey background when unchecked */
+    border: 2px solid #444444;  /* Dark grey border when unchecked */
+}
+
+QCheckBox::indicator:checked:pressed {
+    background-color: #ffffff;  /* White background when pressed */
+    border: 2px solid #ffffff;  /* White border when pressed */
+}
+
+QCheckBox::indicator:checked:hover {
+    background-color: #ffffff;  /* White background when hovered */
+    border: 2px solid #ffffff;  /* White border when hovered */
+}
+
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;  /* White background when pressed */
+    border: 2px solid #ffffff;  /* White border when pressed */
+}
+
+QCheckBox::indicator:unchecked:hover {
+    background-color: #555555;  /* Grey background when hovered */
+    border: 2px solid #ffffff;  /* White border when hovered */
+}
+
+/* Disabled state for the checkbox */
+QCheckBox:disabled {
+    font-size: 12px;  /* Adjust the font size as needed */
+    color: #333333;  /* White text color */
+    font-size: 12px;  /* Adjust the font size as needed */
+    background-color: #444444;  /* Dark background color */
+    border: 0px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 6px 12px;  /* Padding around the text */
+}
+
+</string>
+             </property>
+             <property name="text">
+              <string>Use UDIM</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <spacer name="verticalSpacer">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Maximum</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>0</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
