@@ -11,9 +11,12 @@ import random
 import re
 import importlib
 
-import QuickMaterials.texture_importer as texture_importer
+try:
+    from . import texture_importer  # type: ignore
+except Exception:
+    import texture_importer  # type: ignore
 importlib.reload(texture_importer)
-from QuickMaterials.texture_importer import ImportTxTool
+ImportTxTool = texture_importer.ImportTxTool
 
 # Global instance for the UI
 quick_materials_ui_instance = None
@@ -33,8 +36,10 @@ def maya_main_window():
         return None
 
 
-class QuickMaterialsUI:
-    def __init__(self):
+class QuickMaterialsUI(QtWidgets.QDialog):
+    def __init__(self, parent=None):
+        super(QuickMaterialsUI, self).__init__(parent or maya_main_window())
+
         self.import_tx_tool = None
         # Store all UI elements in a dictionary
         self.ui_elements = {}
@@ -199,8 +204,8 @@ class QuickMaterialsUI:
             # Open the .ui file for reading
             uiFile.open(QtCore.QFile.ReadOnly)
 
-            # Load the .ui into a top‐level QWidget (no parent)
-            uiInstance = loader.load(uiFile)
+            # Load the .ui directly into this dialog
+            loader.load(uiFile, self)
 
             # Close the .ui file now that it’s loaded
             uiFile.close()
@@ -208,17 +213,15 @@ class QuickMaterialsUI:
             print(f"Error loading UI file: {e}")
             return
 
-        # Configure the window to behave as a normal standalone Qt window
-        uiInstance.setWindowFlags(QtCore.Qt.Window)
 
         # Set the window’s title
-        uiInstance.setWindowTitle("Quick Materials")
+        self.setWindowTitle("Quick Materials")
 
         # Collect all child widgets and layouts into ui_elements for easy lookup
-        self.auto_initialize_ui_elements(uiInstance)
+        self.auto_initialize_ui_elements(self)
 
-        # Store this top‐level window under the key 'quickMaterialsWindow'
-        self.ui_elements['quickMaterialsWindow'] = uiInstance
+        # Store this window under the key 'quickMaterialsWindow'
+        self.ui_elements['quickMaterialsWindow'] = self
 
         # Wire up all button/slider/checkbox signals to their respective slots
         self.setup_connections()
@@ -256,20 +259,20 @@ class QuickMaterialsUI:
         )
 
         # Set a fixed initial height, allow full width/height expansion
-        uiInstance.setFixedHeight(375)
-        uiInstance.setMinimumSize(0, 0)
-        uiInstance.setMaximumSize(16777215, 16777215)
+        self.setFixedHeight(375)
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(16777215, 16777215)
 
-        # Make this window stay on top of Maya’s interface
-        uiInstance.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.WindowStaysOnTopHint)
+        # Ensure this tool behaves like other Maya tools (not always on top)
+        self.setWindowFlags(QtCore.Qt.Tool)
 
         # Show the window, then raise and activate it so it appears above other Maya dialogs
-        uiInstance.show()
-        uiInstance.raise_()
-        uiInstance.activateWindow()
+        self.show()
+        self.raise_()
+        self.activateWindow()
 
         # Give keyboard focus to the main UI
-        uiInstance.setFocus()
+        self.setFocus()
 
 
 
@@ -670,7 +673,7 @@ class QuickMaterialsUI:
         """
         Resize the main UI window to 0 height after a slight delay to allow for proper event processing.
         Args:
-            delay (int): Time in milliseconds to wait before resizing (default: 1ms).
+            delay (int): Time in milliseconds to wait before resizing (default: 5ms).
         """
 
         # Get the main UI window (quickMaterialsWindow)+
@@ -1548,6 +1551,7 @@ def load_ui():
         old_win = quick_materials_ui_instance.ui_elements.get('quickMaterialsWindow')
         if old_win and isValid(old_win):
             old_win.close()
+        quick_materials_ui_instance = None
 
 
     quick_materials_ui_instance = QuickMaterialsUI()
