@@ -4,4 +4,4 @@ __pycache__/
 backup/
 quickMaterialsIcon.psd
 .vscode/
-sync_maya_scripts.py
+/sync_maya_scripts.py
