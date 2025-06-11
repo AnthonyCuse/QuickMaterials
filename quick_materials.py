@@ -702,10 +702,6 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             print(f"Error: Could not find widget for {layout_name}")
             return
 
-        # Determine the visibility state
-        layout_visible = first_widget.isVisible()
-
-        # If force_hide is True, hide the layout (set visibility to False)
 
         visible = target_widget.isVisible()
         if force_hide:
