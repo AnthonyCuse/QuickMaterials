@@ -291,11 +291,26 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             # Open the .ui file for reading
             uiFile.open(QtCore.QFile.ReadOnly)
 
-            # Load the .ui directly into this dialog
-            loader.load(uiFile, self)
+            # Load the .ui file
+            loaded_ui = loader.load(uiFile)
 
             # Close the .ui file now that it’s loaded
             uiFile.close()
+
+            # Create a layout on this dialog and add the loaded UI
+            layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(0, 0, 0, 0)
+            if loaded_ui:
+                loaded_ui.setParent(self)
+                loaded_ui.setSizePolicy(
+                    QtWidgets.QSizePolicy.Expanding,
+                    QtWidgets.QSizePolicy.Expanding,
+                )
+                layout.addWidget(loaded_ui)
+            self.setLayout(layout)
+            self.setSizePolicy(
+                QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
+            )
         except Exception as e:
             print(f"Error loading UI file: {e}")
             return
@@ -307,8 +322,11 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         # Collect all child widgets and layouts into ui_elements for easy lookup
         self.auto_initialize_ui_elements(self)
 
-        # Store this window under the key 'quickMaterialsWindow'
-        self.ui_elements['quickMaterialsWindow'] = self
+        # Store the main widget under the key 'quickMaterialsWindow'
+        if loaded_ui:
+            self.ui_elements['quickMaterialsWindow'] = loaded_ui
+        else:
+            self.ui_elements['quickMaterialsWindow'] = self
 
         # Wire up all button/slider/checkbox signals to their respective slots
         self.setup_connections()
