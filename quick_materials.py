@@ -345,7 +345,6 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             QtWidgets.QColorDialog.DontUseNativeDialog
         )
 
-        # Set a fixed initial height, allow full width/height expansion
         # Set sensible minimum sizes so the dock starts at a usable scale
         self.setMinimumSize(400, 375)
         self.setMaximumSize(16777215, 16777215)
@@ -682,74 +681,42 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             friendly_name (str): The friendly name to display on the toggle button.
             force_hide (bool): Whether to force-hide the layout on initialization.
         """
-        # Get the target layout and button from ui_elements
-        target_layout = self.ui_elements.get(layout_name)
+        # Retrieve the toggle button and target widget. Frames are used instead
+        # of layouts to avoid accessing deleted QLayout objects after docking.
         toggle_button = self.ui_elements.get(button_name)
 
         # Get the main UI window (quickMaterialsWindow)
         main_window = self.ui_elements.get('quickMaterialsWindow')
 
-        # Ensure the target layout, button, and main window exist
-        if not target_layout or not toggle_button or not main_window:
-            print(f"Error: {layout_name}, {button_name}, or main window not found.")
+        if not toggle_button or not main_window:
+            print(f"Error: {button_name} or main window not found.")
             return
 
-        # Helper function to find the first widget recursively, even within nested layouts
-        def find_first_widget(layout):
-            for i in range(layout.count()):
-                item = layout.itemAt(i)
-                widget = item.widget()
+        frame_name = layout_name.replace("Layout", "Frame")
+        target_widget = self.findChild(QtWidgets.QWidget, frame_name)
+        if not target_widget:
+            # Fallback to a widget with the same name as the layout
+            target_widget = self.findChild(QtWidgets.QWidget, layout_name)
 
-                # If we find a widget, return it
-                if widget:
-                    return widget
-
-                # If it's a layout, recurse through it
-                nested_layout = item.layout()
-                if nested_layout:
-                    widget = find_first_widget(nested_layout)
-                    if widget:
-                        return widget
-            return None
-
-        # Check for the first visible widget in the layout (including nested layouts)
-        first_widget = find_first_widget(target_layout)
-
-        if not first_widget:
-            print(f"Error: No visible widget found in layout {layout_name}")
+        if not target_widget:
+            print(f"Error: Could not find widget for {layout_name}")
             return
 
         # Determine the visibility state
         layout_visible = first_widget.isVisible()
 
         # If force_hide is True, hide the layout (set visibility to False)
+
+        visible = target_widget.isVisible()
         if force_hide:
-            layout_visible = True  # Force hide means we need to hide the layout
+           visible = True
 
-        # Recursively toggle visibility of all child widgets in the layout
-        def toggle_visibility(parent_layout, visible):
-            if isinstance(parent_layout, QtWidgets.QLayout):
-                for i in range(parent_layout.count()):
-                    item = parent_layout.itemAt(i)
-                    layout = item.layout()
-                    if layout:
-                        toggle_visibility(layout, visible)
-                    widget = item.widget()
-                    if widget:
-                        widget.setVisible(visible)
+        target_widget.setVisible(not visible)
+        toggle_button.setChecked(not visible)
+        toggle_button.setText(friendly_name)
 
-        # Start the toggle visibility process: hide if `layout_visible` is True, else show
-        toggle_visibility(target_layout, not layout_visible)
-
-        # Update the button text and checked state based on the visibility state
-        toggle_button.setText(f"{friendly_name}" if not layout_visible else f"{friendly_name}")
-        toggle_button.setChecked(not layout_visible)  # Set checked state
-
-        # Call the resize_ui function to resize the window dynamically with delay
+        # Resize the UI so the dock updates to the new height
         self.resize_ui()
-
-        # Debug: Print the current visibility state and button state
-        # print(f"Toggling visibility for {friendly_name} (now {'hidden' if layout_visible else 'visible'})")
 
     def resize_ui(self, delay=5):
         """Adjust the window height after layout visibility changes."""
