@@ -1,12 +1,15 @@
-# Import necessary modules at the beginning of the script
+
 import os
 import colorsys  # For HSV to RGB conversion
 from PySide2 import QtCore, QtUiTools, QtWidgets, QtGui
 from shiboken2 import wrapInstance
 from functools import partial
+
 import maya.cmds as cmds
-import maya.OpenMayaUI as omui
+import maya.OpenMayaUI as omui # type: ignore
+from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 import maya.mel as mel
+
 import random
 import re
 import importlib
@@ -36,7 +39,20 @@ def maya_main_window():
         return None
 
 
-class QuickMaterialsUI(QtWidgets.QDialog):
+# Load UI Function
+def load_ui():
+    """Convenience function to display the dockable Quick Materials UI."""
+    QuickMaterialsUI.show_ui()
+
+
+
+class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
+    """Dockable UI for the Quick Materials tool."""
+
+    # Store the current dockable instance
+    quick_materials_ui_instance = None
+    workspace_control_name = "QuickMaterialsWorkspaceControl"
+
     def __init__(self, parent=None):
         super(QuickMaterialsUI, self).__init__(parent or maya_main_window())
 
@@ -45,6 +61,77 @@ class QuickMaterialsUI(QtWidgets.QDialog):
         self.ui_elements = {}
         self.initialize_ui()
 
+
+    # ------------------------------------------------------------------
+    # Docking utilities
+    # ------------------------------------------------------------------
+    @classmethod
+    def show_ui(cls, dockable=True):
+        """Display the UI as a dockable widget inside Maya."""
+        global quick_materials_ui_instance
+
+        if cmds.workspaceControl(cls.workspace_control_name, query=True, exists=True):
+            cls.delete_existing_instance()
+
+        cls.quick_materials_ui_instance = cls()
+        quick_materials_ui_instance = cls.quick_materials_ui_instance
+        cls.quick_materials_ui_instance.setup_dockability()
+
+    def setup_dockability(self):
+        """Dock the window into a Maya workspace control."""
+        if not cmds.workspaceControl(self.workspace_control_name, query=True, exists=True):
+            cmds.workspaceControl(
+                self.workspace_control_name, label="Quick Materials", retain=False, floating=True
+            )
+
+        control_widget = omui.MQtUtil.findControl(self.workspace_control_name)
+        if control_widget:
+            wrapped_widget = wrapInstance(int(control_widget), QtWidgets.QWidget)
+            layout = wrapped_widget.layout() or QtWidgets.QVBoxLayout(wrapped_widget)
+            layout.setContentsMargins(0, 0, 0, 0)
+            wrapped_widget.setLayout(layout)
+
+            while layout.count():
+                child = layout.takeAt(0)
+                if child.widget():
+                    child.widget().deleteLater()
+
+            layout.addWidget(self)
+            wrapped_widget.setVisible(True)
+            wrapped_widget.update()
+
+            # Ensure a reasonable initial size when docked
+            self.setMinimumWidth(400)
+            self.adjustSize()
+            self.show()
+
+        cmds.workspaceControl(self.workspace_control_name, edit=True, visible=True)
+
+    @classmethod
+    def delete_existing_instance(cls):
+        """Close and clean up any existing dock or window instance."""
+        global quick_materials_ui_instance
+        if cmds.workspaceControl(cls.workspace_control_name, query=True, exists=True):
+            try:
+                cmds.deleteUI(cls.workspace_control_name, control=True)
+            except RuntimeError:
+                pass
+
+        if cmds.window(cls.workspace_control_name, exists=True):
+            try:
+                cmds.deleteUI(cls.workspace_control_name, window=True)
+            except RuntimeError:
+                pass
+
+        if cls.quick_materials_ui_instance:
+            cls.quick_materials_ui_instance.close()
+            cls.quick_materials_ui_instance.deleteLater()
+            cls.quick_materials_ui_instance = None
+
+        quick_materials_ui_instance = None
+
+        import gc
+        gc.collect()
 
 # Initialize UI
     def initialize_ui(self):
@@ -259,17 +346,12 @@ class QuickMaterialsUI(QtWidgets.QDialog):
         )
 
         # Set a fixed initial height, allow full width/height expansion
-        self.setFixedHeight(375)
-        self.setMinimumSize(0, 0)
+        # Set sensible minimum sizes so the dock starts at a usable scale
+        self.setMinimumSize(400, 375)
         self.setMaximumSize(16777215, 16777215)
 
         # Ensure this tool behaves like other Maya tools (not always on top)
         self.setWindowFlags(QtCore.Qt.Tool)
-
-        # Show the window, then raise and activate it so it appears above other Maya dialogs
-        self.show()
-        self.raise_()
-        self.activateWindow()
 
         # Give keyboard focus to the main UI
         self.setFocus()
@@ -1538,17 +1620,5 @@ class QuickMaterialsUI(QtWidgets.QDialog):
 
 
 
-# Load UI Function
-def load_ui():
-    global quick_materials_ui_instance
-    if quick_materials_ui_instance:
-        from shiboken2 import isValid
-        old_win = quick_materials_ui_instance.ui_elements.get('quickMaterialsWindow')
-        if old_win and isValid(old_win):
-            old_win.close()
-        quick_materials_ui_instance = None
-
-
-    quick_materials_ui_instance = QuickMaterialsUI()
 
 
