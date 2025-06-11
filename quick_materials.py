@@ -670,12 +670,7 @@ class QuickMaterialsUI(QtWidgets.QDialog):
         # print(f"Toggling visibility for {friendly_name} (now {'hidden' if layout_visible else 'visible'})")
 
     def resize_ui(self, delay=5):
-        """
-        Resize the main UI window to 0 height after a slight delay to allow for proper event processing.
-        Args:
-            delay (int): Time in milliseconds to wait before resizing (default: 5ms).
-        """
-
+        """Adjust the window height after layout visibility changes."""
         # Get the main UI window (quickMaterialsWindow)+
         quick_materials_window = self.ui_elements.get('quickMaterialsWindow')  # Reference the correct main window
 
@@ -688,7 +683,7 @@ class QuickMaterialsUI(QtWidgets.QDialog):
         def perform_resize():
             # Check validity just before resizing
             if quick_materials_window and isValid(quick_materials_window):
-                quick_materials_window.resize(quick_materials_window.width(), 0)
+                quick_materials_window.adjustSize()
             else:
                 print("DEBUG(resize_ui): Cannot resize—window is invalid or deleted.")
 
