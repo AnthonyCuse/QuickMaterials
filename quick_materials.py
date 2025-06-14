@@ -753,11 +753,34 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
         visible = target_widget.isVisible()
         if force_hide:
-           visible = True
+            visible = True
 
         target_widget.setVisible(not visible)
         toggle_button.setChecked(not visible)
         toggle_button.setText(friendly_name)
+
+        # Special handling for the material list so other widgets don't stretch
+        # when it is hidden. Show a spacer widget at the bottom of the main
+        # layout only when the material list is hidden.
+        if layout_name == "materialListLayout" and hasattr(self, "bottom_spacer"):
+            root_layout = getattr(self, "root_layout", None)
+            material_list_layout = self.ui_elements.get("materialListLayout")
+            if root_layout and material_list_layout:
+                list_index = root_layout.indexOf(material_list_layout)
+                spacer_index = root_layout.indexOf(self.bottom_spacer)
+
+                if not visible:  # we are showing the material list
+                    self.bottom_spacer.hide()
+                    if list_index != -1:
+                        root_layout.setStretch(list_index, 1)
+                    if spacer_index != -1:
+                        root_layout.setStretch(spacer_index, 0)
+                else:  # we are hiding the material list
+                    self.bottom_spacer.show()
+                    if list_index != -1:
+                        root_layout.setStretch(list_index, 0)
+                    if spacer_index != -1:
+                        root_layout.setStretch(spacer_index, 1)
 
         # Resize the UI so the dock updates to the new height
         self.resize_ui()
