@@ -322,11 +322,15 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         # Collect all child widgets and layouts into ui_elements for easy lookup
         self.auto_initialize_ui_elements(self)
 
+         # Set up stretch factors and spacer widget for layout scaling
+        self.setup_layout_stretches()
+
         # Store the main widget under the key 'quickMaterialsWindow'
         if loaded_ui:
             self.ui_elements['quickMaterialsWindow'] = loaded_ui
         else:
             self.ui_elements['quickMaterialsWindow'] = self
+
 
         # Wire up all button/slider/checkbox signals to their respective slots
         self.setup_connections()
@@ -346,16 +350,11 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         # Populate the materials list for the first time
         self.populate_materials_scroll_area()
 
-        # Toggle each section’s initial visibility (all visible by default)
-        self.toggle_layout_visibility(
-            'materialCreatorLayout', 'toggleMaterialCreatorVis', 'Material Creator', force_hide=False
-        )
-        self.toggle_layout_visibility(
-            'materialToolsLayout', 'toggleMaterialToolsVis', 'Material Tools', force_hide=False
-        )
-        self.toggle_layout_visibility(
-            'materialListLayout', 'toggleMaterialListVis', 'Material List', force_hide=False
-        )
+        # Ensure toggle buttons reflect the default visible state
+        for name in ('toggleMaterialCreatorVis', 'toggleMaterialToolsVis', 'toggleMaterialListVis'):
+            btn = self.ui_elements.get(name)
+            if btn and isValid(btn):
+                btn.setChecked(True)
 
         # Create the QColorDialog instance (hidden until needed)
         self.ui_elements['colorPicker'] = QtWidgets.QColorDialog()
@@ -387,6 +386,37 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             if object_name:  # Only store widgets that have an objectName
                 self.ui_elements[object_name] = child
                 # print(f"Initialized UI element: {object_name}")
+
+    def setup_layout_stretches(self):
+        """Prepare stretch factors so only the material list expands."""
+        root_layout = self.ui_elements.get('verticalLayout_6')
+        material_list_layout = self.ui_elements.get('materialListLayout')
+
+        if not root_layout or not material_list_layout:
+            return
+
+        self.root_layout = root_layout
+
+        # Replace the final spacer with an expanding QWidget we can show/hide
+        last_index = root_layout.count() - 1
+        if last_index >= 0:
+            last_item = root_layout.itemAt(last_index)
+            if last_item and not last_item.widget():
+                root_layout.takeAt(last_index)
+
+        self.bottom_spacer = QtWidgets.QWidget()
+        self.bottom_spacer.setSizePolicy(
+            QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding
+        )
+        root_layout.addWidget(self.bottom_spacer)
+        self.bottom_spacer.hide()
+
+        list_index = root_layout.indexOf(material_list_layout)
+        spacer_index = root_layout.indexOf(self.bottom_spacer)
+        if list_index != -1:
+            root_layout.setStretch(list_index, 1)
+        if spacer_index != -1:
+            root_layout.setStretch(spacer_index, 0)
 
     def setup_connections(self):
         """Set up all the necessary connections for the UI elements."""
