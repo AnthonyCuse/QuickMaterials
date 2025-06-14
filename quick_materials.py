@@ -27,6 +27,147 @@ quick_materials_ui_instance = None
 from shiboken2 import isValid
 
 
+
+base_stylesheet = """
+QPushButton#colorDisplayButton {{
+background-color: {background_color};
+color: #ffffff;
+border: 0px solid #333333;
+border-radius: 15px;  /* Rounded corners */
+padding: 10px 20px;  /* Padding inside the button */
+}}
+
+QPushButton#colorDisplayButton:hover {{
+border: 2px solid #444444;
+}}
+
+QPushButton#colorDisplayButton:pressed {{
+border: 2px solid #888888;
+}}
+"""
+
+# Stylesheet for grid‐style buttons (e.g., material swatches)
+grid_button_stylesheet = """
+QPushButton {{
+background-color: {background_color};
+border: 1px solid #333333;
+border-radius: 1px;  /* Slightly rounded corners */
+margin: 0px;  /* No margins to minimize spacing */
+}}
+
+QPushButton:hover {{
+border: 2px solid #ffffff;  /* Highlight border on hover */
+}}
+"""
+
+# Stylesheet for the material list (buttons, line edits, labels)
+material_list_widget_style = """
+QPushButton {
+font-family: 'Segoe UI';
+font-size: 12px;
+color: #ffffff;
+background-color: #666666;
+border: 2px solid #666666;
+border-radius: 8px;
+padding: 3px 10px;
+}
+
+QPushButton:hover {
+background-color: #5a5a5a;
+}
+
+QPushButton:pressed {
+background-color: #4a4a4a;
+}
+
+QPushButton:disabled {
+color: #cccccc;
+border: 1px solid #555555;
+background-color: #7a7a7a;
+}
+
+QLineEdit {
+font-family: 'Segoe UI';
+font-size: 14px;
+color: #ffffff;
+background-color: #444444;
+border: 2px solid #444444;
+border-radius: 8px;
+padding: 3px 10px;
+}
+
+QLineEdit:hover {
+background-color: #3a3a3a;
+}
+
+QLineEdit:focus {
+border: 2px solid #555555;
+background-color: #4a4a4a;
+}
+
+QLabel {
+font-family: 'Segoe UI';
+font-size: 14px;
+color: #ffffff;
+background-color: transparent;
+border: none;
+padding: 3px 10px;
+}
+
+/* QLabel styles for default materials to prevent hover highlighting */
+QLabel[materialType="default"] {
+background-color: transparent;
+color: #aaaaaa;
+border: none;
+}
+
+QLabel[materialType="default"]:hover {
+background-color: transparent;
+}
+"""
+
+# Stylesheet for the QColorDialog (color picker)
+qcolor_dialog_style = """
+QColorDialog {
+background-color: #444444;
+border: 2px solid #666666;
+}
+
+QColorDialog QPushButton {
+font-family: 'Segoe UI';
+font-size: 12px;
+color: #ffffff;
+background-color: #666666;
+border: 2px solid #666666;
+border-radius: 8px;
+padding: 3px 10px;
+}
+
+QColorDialog QPushButton:hover {
+background-color: #5a5a5a;
+}
+
+QColorDialog QPushButton:pressed {
+background-color: #4a4a4a;
+}
+
+QColorDialog QLineEdit {
+font-family: 'Segoe UI';
+font-size: 14px;
+color: #ffffff;
+background-color: #444444;
+border: 2px solid #444444;
+border-radius: 8px;
+padding: 3px 10px;
+}
+"""
+
+
+
+
+
+
+
 def maya_main_window():
     """
     Get the Maya main window as a QWidget instance.
@@ -136,139 +277,11 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 # Initialize UI
     def initialize_ui(self):
         # Base stylesheet for the color display button, with a placeholder for dynamic color
-        self.base_stylesheet = """
-        QPushButton#colorDisplayButton {{
-            background-color: {background_color};
-            color: #ffffff;
-            border: 0px solid #333333;
-            border-radius: 15px;  /* Rounded corners */
-            padding: 10px 20px;  /* Padding inside the button */
-        }}
+        self.base_stylesheet = base_stylesheet
+        self.grid_button_stylesheet = grid_button_stylesheet
+        self.material_list_widget_style = material_list_widget_style
+        self.qcolor_dialog_style = qcolor_dialog_style
 
-        QPushButton#colorDisplayButton:hover {{
-            border: 2px solid #444444;
-        }}
-
-        QPushButton#colorDisplayButton:pressed {{
-            border: 2px solid #888888;
-        }}
-        """
-
-        # Stylesheet for grid‐style buttons (e.g., material swatches)
-        self.grid_button_stylesheet = """
-        QPushButton {{
-            background-color: {background_color};
-            border: 1px solid #333333;
-            border-radius: 1px;  /* Slightly rounded corners */
-            margin: 0px;  /* No margins to minimize spacing */
-        }}
-
-        QPushButton:hover {{
-            border: 2px solid #ffffff;  /* Highlight border on hover */
-        }}
-        """
-
-        # Stylesheet for the material list (buttons, line edits, labels)
-        self.material_list_widget_style = """
-        QPushButton {
-            font-family: 'Segoe UI';
-            font-size: 12px;
-            color: #ffffff;
-            background-color: #666666;
-            border: 2px solid #666666;
-            border-radius: 8px;
-            padding: 3px 10px;
-        }
-
-        QPushButton:hover {
-            background-color: #5a5a5a;
-        }
-
-        QPushButton:pressed {
-            background-color: #4a4a4a;
-        }
-
-        QPushButton:disabled {
-            color: #cccccc;
-            border: 1px solid #555555;
-            background-color: #7a7a7a;
-        }
-
-        QLineEdit {
-            font-family: 'Segoe UI';
-            font-size: 14px;
-            color: #ffffff;
-            background-color: #444444;
-            border: 2px solid #444444;
-            border-radius: 8px;
-            padding: 3px 10px;
-        }
-
-        QLineEdit:hover {
-            background-color: #3a3a3a;
-        }
-
-        QLineEdit:focus {
-            border: 2px solid #555555;
-            background-color: #4a4a4a;
-        }
-
-        QLabel {
-            font-family: 'Segoe UI';
-            font-size: 14px;
-            color: #ffffff;
-            background-color: transparent;
-            border: none;
-            padding: 3px 10px;
-        }
-
-        /* QLabel styles for default materials to prevent hover highlighting */
-        QLabel[materialType="default"] {
-            background-color: transparent;
-            color: #aaaaaa;
-            border: none;
-        }
-
-        QLabel[materialType="default"]:hover {
-            background-color: transparent;
-        }
-        """
-
-        # Stylesheet for the QColorDialog (color picker)
-        self.qcolor_dialog_style = """
-        QColorDialog {
-            background-color: #444444;
-            border: 2px solid #666666;
-        }
-
-        QColorDialog QPushButton {
-            font-family: 'Segoe UI';
-            font-size: 12px;
-            color: #ffffff;
-            background-color: #666666;
-            border: 2px solid #666666;
-            border-radius: 8px;
-            padding: 3px 10px;
-        }
-
-        QColorDialog QPushButton:hover {
-            background-color: #5a5a5a;
-        }
-
-        QColorDialog QPushButton:pressed {
-            background-color: #4a4a4a;
-        }
-
-        QColorDialog QLineEdit {
-            font-family: 'Segoe UI';
-            font-size: 14px;
-            color: #ffffff;
-            background-color: #444444;
-            border: 2px solid #444444;
-            border-radius: 8px;
-            padding: 3px 10px;
-        }
-        """
 
         # State variable to track whether default materials are hidden
         self.hide_defaults_state = False
