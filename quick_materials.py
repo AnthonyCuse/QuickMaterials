@@ -423,6 +423,8 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         )
         root_layout.addWidget(self.bottom_spacer)
         self.bottom_spacer.hide()
+        # Store reference for later lookups
+        self.ui_elements["bottomSpacer"] = self.bottom_spacer
 
         list_index = root_layout.indexOf(material_list_layout)
         spacer_index = root_layout.indexOf(self.bottom_spacer)
@@ -745,11 +747,16 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         # Retrieve the toggle button and target widget. Frames are used instead
         # of layouts to avoid accessing deleted QLayout objects after docking.
         toggle_button = self.ui_elements.get(button_name)
+        if toggle_button and not isValid(toggle_button):
+            # The button reference may be stale (e.g., UI recreated). Try to find it again.
+            toggle_button = self.findChild(QtWidgets.QPushButton, button_name)
+            if toggle_button:
+                self.ui_elements[button_name] = toggle_button
 
         # Get the main UI window (quickMaterialsWindow)
         main_window = self.ui_elements.get('quickMaterialsWindow')
 
-        if not toggle_button or not main_window:
+        if not toggle_button or not main_window or not isValid(main_window):
             print(f"Error: {button_name} or main window not found.")
             return
 
@@ -769,8 +776,9 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             visible = True
 
         target_widget.setVisible(not visible)
-        toggle_button.setChecked(not visible)
-        toggle_button.setText(friendly_name)
+        if isValid(toggle_button):
+            toggle_button.setChecked(not visible)
+            toggle_button.setText(friendly_name)
 
         # Special handling for the material list so other widgets don't stretch
         # when it is hidden. Show a spacer widget at the bottom of the main
