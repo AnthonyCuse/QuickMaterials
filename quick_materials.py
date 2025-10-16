@@ -1801,7 +1801,8 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
         if is_single_material_for_all:
             # Create one material for all meshes with the selected color
-            material_name = self.generate_material(valid_mesh_objs[0], color_rgb, used_material_names)
+            selection_label = self._make_selection_label(valid_mesh_objs)
+            material_name = self.generate_material(selection_label, color_rgb, used_material_names)
             if not material_name:
                 return
 
@@ -1821,7 +1822,8 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                     self.selected_color.setHsvF(hue, self.get_current_saturation(), self.get_current_value())
                     color_rgb = self.get_current_color_rgb()
 
-                material_name = self.generate_material(mesh_name, color_rgb, used_material_names)
+                selection_label = self._make_selection_label([mesh_name])
+                material_name = self.generate_material(selection_label, color_rgb, used_material_names)
                 if not material_name:
                     return
 
@@ -1855,28 +1857,53 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         return True
 
     def get_valid_meshes(self):
-        """Retrieve valid mesh objects from the current selection."""
-        selected_objs = cmds.ls(selection=True, objectsOnly=True)
+        """Retrieve valid mesh transform objects from the current selection, expanding groups.
 
-        valid_meshes = []
-        for obj in selected_objs:
-            shapes = cmds.listRelatives(obj, shapes=True, fullPath=True)
-
-            if shapes:
-                for shape in shapes:
-                    shape_type = cmds.nodeType(shape)
-                    if shape_type == 'mesh':
-                        valid_meshes.append(obj)
-                        break
-            else:
-                return None
-                # print(f"[DEBUG] {obj} has no shapes or no mesh shapes.")
-
-        if not valid_meshes:
+        Rules:
+          - If a group (transform with children) is selected, include all descendant mesh transforms.
+          - If both a group and one of its child meshes are selected, do not duplicate; the child under the group is covered by the group selection.
+          - Return unique transform paths (short names acceptable) that own mesh shapes.
+        """
+        selected_transforms = cmds.ls(selection=True, objectsOnly=True) or []
+        if not selected_transforms:
             return None
-            # print("[DEBUG] No valid meshes found in the selection.")
 
-        return valid_meshes
+        # Identify selected group transforms
+        selected_groups = set()
+        for obj in selected_transforms:
+            # Treat as group if it has any descendants
+            if cmds.listRelatives(obj, children=True):
+                selected_groups.add(obj)
+
+        # All descendants of selected groups (to exclude direct duplicates later)
+        descendants_of_groups = set()
+        for grp in selected_groups:
+            for desc in cmds.listRelatives(grp, ad=True, type='transform') or []:
+                descendants_of_groups.add(desc)
+
+        # Collect mesh transforms from selected groups
+        mesh_targets = set()
+        for grp in selected_groups:
+            # Find transforms that own a mesh shape anywhere under the group
+            for desc in cmds.listRelatives(grp, ad=True, type='transform') or []:
+                shapes = cmds.listRelatives(desc, shapes=True, fullPath=True) or []
+                if any(cmds.nodeType(s) == 'mesh' for s in shapes):
+                    mesh_targets.add(desc)
+
+        # Collect explicitly selected mesh transforms that are NOT descendants of selected groups
+        for obj in selected_transforms:
+            if obj in descendants_of_groups:
+                # Covered by the group's expansion; skip to avoid duplicates
+                continue
+            shapes = cmds.listRelatives(obj, shapes=True, fullPath=True) or []
+            if any(cmds.nodeType(s) == 'mesh' for s in shapes):
+                mesh_targets.add(obj)
+
+        if not mesh_targets:
+            return None
+
+        # Return deterministic order
+        return sorted(mesh_targets)
 
     def determine_material_type(self):
         """
@@ -1991,13 +2018,27 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         self.update_saturation_slider_gradient()
 
 
-    def generate_material(self, mesh_name, color_rgb, used_material_names):
+    def _make_selection_label(self, mesh_list):
+        """Build a concise selection label from a list of mesh transform names.
+
+        Examples:
+          - ["pCube1"]            -> "pCube1"
+          - ["a","b","c"]       -> "a_b_c"
+        """
+        if not mesh_list:
+            return "selection"
+        # Normalize to short names
+        short = [m.split('|')[-1] for m in mesh_list]
+        return "_".join(short)
+
+
+    def generate_material(self, selection_label, color_rgb, used_material_names):
         # Normalize type once
         mat_type = self.determine_material_type()
         mat_key = mat_type  # already normalized to 'standardSurface' or 'surfaceShader'
 
         # Name
-        material_name = self.get_unique_material_name(mesh_name, mat_key, used_material_names)
+        material_name = self.get_unique_material_name(selection_label, mat_key, used_material_names, color_rgb)
 
         try:
             material = cmds.shadingNode(mat_key, asShader=True, name=material_name)
@@ -2037,12 +2078,46 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
         return material_name
 
-    def get_unique_material_name(self, mesh_name, material_type, used_material_names):
-        """Generate a unique material name."""
+    def get_unique_material_name(self, selection_label, material_type, used_material_names, color_rgb):
+        """Generate a unique material name with tokens: (selection), (mat_type), (scene), (project), (color).
+
+        Back-compat: also replace (mesh) with the same as (selection).
+        """
         custom_name_template = self.ui_elements.get('materialNamingLineEdit').text().strip() if self.ui_elements.get(
             'materialNamingLineEdit') else ""
-        base_material_name = custom_name_template.replace("(mesh)", mesh_name).replace(
-            "(mat_type)", material_type) if custom_name_template else f"M_{mesh_name}_{material_type}"
+
+        # Resolve tokens
+        try:
+            scene_path = cmds.file(q=True, sn=True) or ""
+            scene_name = os.path.splitext(os.path.basename(scene_path))[0] if scene_path else "untitled"
+        except Exception:
+            scene_name = "untitled"
+
+        try:
+            project_root = cmds.workspace(q=True, rd=True) or ""
+            project_name = os.path.basename(os.path.normpath(project_root)) if project_root else "project"
+        except Exception:
+            project_name = "project"
+
+        # Color token: use readable color name
+        try:
+            r, g, b = [max(0, min(1, float(c))) for c in (color_rgb[0], color_rgb[1], color_rgb[2])]
+            color_name = self._readable_color_name(int(r*255), int(g*255), int(b*255))
+        except Exception:
+            color_name = "White"
+
+        if custom_name_template:
+            base_material_name = (
+                custom_name_template
+                .replace("(selection)", selection_label)
+                .replace("(mesh)", selection_label)  # back-compat
+                .replace("(mat_type)", material_type)
+                .replace("(scene)", scene_name)
+                .replace("(project)", project_name)
+                .replace("(color)", color_name)
+            )
+        else:
+            base_material_name = f"M_{selection_label}_{material_type}"
 
         # Ensure the name is unique
         final_material_name = base_material_name
@@ -2061,6 +2136,74 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             cmds.sets(mesh_name, edit=True, forceElement=shading_group)
         except RuntimeError as e:
             cmds.warning(f"Failed to assign material: {e}")
+
+    def _readable_color_name(self, r, g, b):
+        """Return a human-readable color name closest to the given RGB.
+
+        Uses a compact subset of CSS color names for readability without external deps.
+        """
+        palette = [
+            ("Black", (0, 0, 0)),
+            ("DimGray", (105, 105, 105)),
+            ("Gray", (128, 128, 128)),
+            ("DarkRed", (139, 0, 0)),
+            ("Red", (255, 0, 0)),
+            ("Tomato", (255, 99, 71)),
+            ("Coral", (255, 127, 80)),
+            ("Orange", (255, 165, 0)),
+            ("DarkOrange", (255, 140, 0)),
+            ("Gold", (255, 215, 0)),
+            ("Yellow", (255, 255, 0)),
+            ("Khaki", (240, 230, 140)),
+            ("Olive", (128, 128, 0)),
+            ("DarkOliveGreen", (85, 107, 47)),
+            ("Green", (0, 128, 0)),
+            ("Lime", (0, 255, 0)),
+            ("SpringGreen", (0, 255, 127)),
+            ("LightGreen", (144, 238, 144)),
+            ("SeaGreen", (46, 139, 87)),
+            ("Teal", (0, 128, 128)),
+            ("Cyan", (0, 255, 255)),
+            ("LightCyan", (224, 255, 255)),
+            ("Turquoise", (64, 224, 208)),
+            ("LightSeaGreen", (32, 178, 170)),
+            ("SteelBlue", (70, 130, 180)),
+            ("DeepSkyBlue", (0, 191, 255)),
+            ("DodgerBlue", (30, 144, 255)),
+            ("RoyalBlue", (65, 105, 225)),
+            ("Blue", (0, 0, 255)),
+            ("Navy", (0, 0, 128)),
+            ("Indigo", (75, 0, 130)),
+            ("Purple", (128, 0, 128)),
+            ("Violet", (238, 130, 238)),
+            ("Magenta", (255, 0, 255)),
+            ("Orchid", (218, 112, 214)),
+            ("HotPink", (255, 105, 180)),
+            ("DeepPink", (255, 20, 147)),
+            ("Pink", (255, 192, 203)),
+            ("RosyBrown", (188, 143, 143)),
+            ("Sienna", (160, 82, 45)),
+            ("SaddleBrown", (139, 69, 19)),
+            ("Brown", (165, 42, 42)),
+            ("Chocolate", (210, 105, 30)),
+            ("Tan", (210, 180, 140)),
+            ("Beige", (245, 245, 220)),
+            ("Gainsboro", (220, 220, 220)),
+            ("Silver", (192, 192, 192)),
+            ("White", (255, 255, 255)),
+        ]
+
+        best_name = "White"
+        best_dist = 1e9
+        for name, (pr, pg, pb) in palette:
+            dr = pr - r
+            dg = pg - g
+            db = pb - b
+            d = dr*dr + dg*dg + db*db
+            if d < best_dist:
+                best_dist = d
+                best_name = name
+        return best_name
 
     def set_random_hue_color(self):
         """Generate and apply a random hue while maintaining the current saturation and value."""
@@ -4305,23 +4448,34 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         return False
 
     # True if the material is assigned to any of the selected shapes.
+    def _get_materials_from_selection(self):
+        """Get all materials assigned to currently selected objects."""
+        selected_objects = cmds.ls(sl=True, l=True) or []
+        if not selected_objects:
+            return set()
+        
+        materials = set()
+        for obj in selected_objects:
+            # Get shapes from the object
+            shapes = cmds.listRelatives(obj, s=True, f=True) or []
+            for shape in shapes:
+                # Find shading engines connected to this shape
+                sgs = cmds.listConnections(shape, type="shadingEngine") or []
+                for sg in sgs:
+                    # Find materials connected to this shading engine
+                    surface_shaders = cmds.listConnections(sg + ".surfaceShader") or []
+                    materials.update(cmds.ls(surface_shaders, materials=True))
+        
+        return materials
+
     def _material_affects_any_of_selection(self, material, sel_shapes):
         """True if the material is assigned to any of the selected shapes."""
         if not sel_shapes:
             return False
-        sgs = self._connected_shading_engines(material)
-        if not sgs:
-            return False
-        sel_set = set(sel_shapes)
-        for sg in sgs:
-            try:
-                members = cmds.sets(sg, q=True) or []
-                # Compare sets directly; names can be long-path, so we normalize to node names
-                if any((m.split('|')[-1] in s or s.split('|')[-1] in m) for s in sel_set for m in members):
-                    return True
-            except Exception:
-                pass
-        return False
+        
+        # Use the more direct approach: get all materials from selection and check if our material is in that set
+        materials_from_selection = self._get_materials_from_selection()
+        return material in materials_from_selection
 
     # -------------------------------
     # 9) Utilities / Qt Guards / Misc
