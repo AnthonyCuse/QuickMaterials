@@ -1,0 +1,959 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>250</width>
+    <height>289</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <layout class="QGridLayout" name="gridLayout_2">
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <item row="0" column="0">
+    <widget class="QFrame" name="mainUIFrame">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="MinimumExpanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">QFrame {
+    /* Background */
+    background-color:#555555;  /* Dark grey background color */ 
+    /* background-image: url('background.png');  /* Optional background image */ 
+    /* background-repeat: no-repeat;  /* Prevents the background image from repeating */ 
+    /* background-position: center;  /* Centers the background image */ 
+
+    /* Border */
+	border: 0px solid #333333;  /* Solid border with color and thickness */ 
+  /* Rounded corners with 10px radius */ 
+    /* border-style: solid;  /* Border style can be solid, dashed, dotted, etc. */ 
+
+    /* Padding and Margin */
+    padding: 0px;  /* Inner space between the frame content and its border */ 
+    margin: 0px;  /* Outer space around the frame */ 
+    border-radius: 10px;  /* Rounded corners */
+    
+    /* Font */
+    /*font-family: Arial, Helvetica, sans-serif;  /* Font family */
+    /*font-size: 14px;  /* Font size */
+    /*font-weight: bold;  /* Font weight: normal, bold, bolder, lighter, or numeric values */
+    /*font-style: italic;  /* Font style: normal, italic, or oblique */
+   color: #ffffff;  /* Text color */
+    /*text-align: center;  /* Text alignment: left, right, center, justify */
+    /*text-decoration: underline;  /* Text decoration: underline, overline, line-through, none */
+    /*letter-spacing: 1px;  /* Spacing between letters */
+    
+    /* Shadow */
+    /*box-shadow: 2px 2px 5px #1a1a1a;  /* Adds a shadow with x-offset, y-offset, blur radius, and color */
+    
+    /* Gradient Background (Optional) */
+    /*background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #3e3e3e, stop:1 #2b2b2b);  /* Linear gradient */
+    /*background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #4a4a4a, stop:1 #2b2b2b);  /* Radial gradient */
+    
+    /* Opacity */
+    /*opacity: 0.9;  /* Transparency: 0.0 (fully transparent) to 1.0 (fully opaque) */
+    
+    /* Cursor */
+    /*cursor: pointer;  /* Changes the cursor to a pointer when hovering */
+}
+</string>
+     </property>
+     <property name="midLineWidth">
+      <number>3</number>
+     </property>
+     <layout class="QGridLayout" name="gridLayout" rowstretch="0" columnstretch="0">
+      <property name="leftMargin">
+       <number>4</number>
+      </property>
+      <property name="topMargin">
+       <number>4</number>
+      </property>
+      <property name="rightMargin">
+       <number>4</number>
+      </property>
+      <property name="bottomMargin">
+       <number>4</number>
+      </property>
+      <property name="spacing">
+       <number>0</number>
+      </property>
+      <item row="0" column="0">
+       <widget class="QFrame" name="textureImporterFrame">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QFrame {
+    /* Background */
+    background-color:#444444;  /* Dark grey background color */ 
+    /* background-image: url('background.png');  /* Optional background image */ 
+    /* background-repeat: no-repeat;  /* Prevents the background image from repeating */ 
+    /* background-position: center;  /* Centers the background image */ 
+
+    /* Border */
+	border: 0px solid #333333;  /* Solid border with color and thickness */ 
+    border-radius: 1px;  /* Rounded corners with 10px radius */ 
+    /* border-style: solid;  /* Border style can be solid, dashed, dotted, etc. */ 
+
+    /* Padding and Margin */
+    padding: 2px;  /* Inner space between the frame content and its border */ 
+    margin: 2px;  /* Outer space around the frame */ 
+    border-radius: 10px;  /* Rounded corners */
+    
+    /* Font */
+    /*font-family: Arial, Helvetica, sans-serif;  /* Font family */
+    /*font-size: 14px;  /* Font size */
+    /*font-weight: bold;  /* Font weight: normal, bold, bolder, lighter, or numeric values */
+    /*font-style: italic;  /* Font style: normal, italic, or oblique */
+   color: #ffffff;  /* Text color */
+    /*text-align: center;  /* Text alignment: left, right, center, justify */
+    /*text-decoration: underline;  /* Text decoration: underline, overline, line-through, none */
+    /*letter-spacing: 1px;  /* Spacing between letters */
+    
+    /* Shadow */
+    /*box-shadow: 2px 2px 5px #1a1a1a;  /* Adds a shadow with x-offset, y-offset, blur radius, and color */
+    
+    /* Gradient Background (Optional) */
+    /*background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #3e3e3e, stop:1 #2b2b2b);  /* Linear gradient */
+    /*background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #4a4a4a, stop:1 #2b2b2b);  /* Radial gradient */
+    
+    /* Opacity */
+    /*opacity: 0.9;  /* Transparency: 0.0 (fully transparent) to 1.0 (fully opaque) */
+    
+    /* Cursor */
+    /*cursor: pointer;  /* Changes the cursor to a pointer when hovering */
+}
+</string>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::StyledPanel</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Raised</enum>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout">
+         <property name="leftMargin">
+          <number>9</number>
+         </property>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout">
+           <item>
+            <widget class="QLabel" name="textureImporterTitleLabel">
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>-1</pointsize>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QLabel {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 16px;  /* Adjust the font size as needed */
+    font-weight: bold;  /* Makes the text bold */
+    color: #d6d6d6;  /* White text color */
+    /*background-color: #555555;  /* Dark background color */
+    border: 0px solid #555555;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 0px 0px;  /* Padding around the text */
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Texture Importer Settings</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="autoSetLayout">
+           <property name="spacing">
+            <number>6</number>
+           </property>
+           <property name="sizeConstraint">
+            <enum>QLayout::SetMinimumSize</enum>
+           </property>
+           <item>
+            <widget class="QPushButton" name="editTextureSearchNamesButton">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>-1</pointsize>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QPushButton {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 12px;  /* Adjust the font size as needed */
+    color: #ffffff;  /* White text color */
+    background-color: #666666;  /* Dark background color */
+    border: 2px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 2px 5px;  /* Padding around the text */
+
+}
+
+QPushButton:hover {
+    background-color: #888888;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Edit Texture Search Names</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QVBoxLayout" name="verticalLayout_3">
+           <property name="spacing">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="textureImporterTitleLabel_2">
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>-1</pointsize>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QLabel {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 12px;  /* Adjust the font size as needed */
+    color: #d6d6d6;  /* White text color */
+    /*background-color: #555555;  /* Dark background color */
+    border: 0px solid #555555;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 0px 0px;  /* Padding around the text */
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Texture Search Folder Default Location:</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="textureSearchMayaFileCheckbox">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';
+    font-size: 11px;              /* Slightly smaller text */
+    color: #f2f2f2;
+    background-color: #444444;
+    border: none;
+    border-radius: 6px;           /* Softer, smaller rounding */
+    padding: 2px 6px;             /* Less padding = tighter fit */
+    margin: 1px 0;                /* Small vertical margin */
+}
+
+QCheckBox::indicator {
+    width: 12px;                  /* Smaller checkbox */
+    height: 12px;
+    border: 1px solid #444444;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 1px solid #2b2b2b;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;
+    border: 1px solid #444444;
+}
+
+QCheckBox::indicator:checked:hover,
+QCheckBox::indicator:unchecked:hover {
+    border: 1px solid #ffffff;
+}
+
+QCheckBox::indicator:checked:pressed,
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;
+    border: 1px solid #ffffff;
+}
+
+/* Disabled state */
+QCheckBox:disabled {
+    color: #666666;
+    background-color: #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+</string>
+             </property>
+             <property name="text">
+              <string>Current Maya File</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+             <attribute name="buttonGroup">
+              <string notr="true">textureSearchDefaultsButtonGroup</string>
+             </attribute>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="textureSearchMayaSourceimagesCheckbox">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';
+    font-size: 11px;              /* Slightly smaller text */
+    color: #f2f2f2;
+    background-color: #444444;
+    border: none;
+    border-radius: 6px;           /* Softer, smaller rounding */
+    padding: 2px 6px;             /* Less padding = tighter fit */
+    margin: 1px 0;                /* Small vertical margin */
+}
+
+QCheckBox::indicator {
+    width: 12px;                  /* Smaller checkbox */
+    height: 12px;
+    border: 1px solid #444444;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 1px solid #2b2b2b;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;
+    border: 1px solid #444444;
+}
+
+QCheckBox::indicator:checked:hover,
+QCheckBox::indicator:unchecked:hover {
+    border: 1px solid #ffffff;
+}
+
+QCheckBox::indicator:checked:pressed,
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;
+    border: 1px solid #ffffff;
+}
+
+/* Disabled state */
+QCheckBox:disabled {
+    color: #666666;
+    background-color: #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+</string>
+             </property>
+             <property name="text">
+              <string>MayaProject/Sourceimages</string>
+             </property>
+             <property name="checked">
+              <bool>false</bool>
+             </property>
+             <attribute name="buttonGroup">
+              <string notr="true">textureSearchDefaultsButtonGroup</string>
+             </attribute>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="textureSearchCustomPathCheckbox">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';
+    font-size: 11px;              /* Slightly smaller text */
+    color: #f2f2f2;
+    background-color: #444444;
+    border: none;
+    border-radius: 6px;           /* Softer, smaller rounding */
+    padding: 2px 6px;             /* Less padding = tighter fit */
+    margin: 1px 0;                /* Small vertical margin */
+}
+
+QCheckBox::indicator {
+    width: 12px;                  /* Smaller checkbox */
+    height: 12px;
+    border: 1px solid #444444;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 1px solid #2b2b2b;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;
+    border: 1px solid #444444;
+}
+
+QCheckBox::indicator:checked:hover,
+QCheckBox::indicator:unchecked:hover {
+    border: 1px solid #ffffff;
+}
+
+QCheckBox::indicator:checked:pressed,
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;
+    border: 1px solid #ffffff;
+}
+
+/* Disabled state */
+QCheckBox:disabled {
+    color: #666666;
+    background-color: #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+</string>
+             </property>
+             <property name="text">
+              <string>Custom Path</string>
+             </property>
+             <property name="checked">
+              <bool>false</bool>
+             </property>
+             <attribute name="buttonGroup">
+              <string notr="true">textureSearchDefaultsButtonGroup</string>
+             </attribute>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_2">
+             <property name="spacing">
+              <number>6</number>
+             </property>
+             <property name="sizeConstraint">
+              <enum>QLayout::SetDefaultConstraint</enum>
+             </property>
+             <item>
+              <widget class="QLabel" name="customSearchFolderPathLabel">
+               <property name="enabled">
+                <bool>true</bool>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>0</height>
+                </size>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>35</width>
+                 <height>16777215</height>
+                </size>
+               </property>
+               <property name="font">
+                <font>
+                 <family>Segoe UI</family>
+                 <pointsize>-1</pointsize>
+                </font>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">QLabel {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 12px;  /* Adjust the font size as needed */
+    color: #d6d6d6;  /* White text color */
+    /*background-color: #555555;  /* Dark background color */
+    border: 0px solid #555555;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 0px 0px;  /* Padding around the text */
+}
+
+QLabel:disabled {
+    color: #555555;  /* White text color */
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+               </property>
+               <property name="text">
+                <string>Path:</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignBottom|Qt::AlignLeading|Qt::AlignLeft</set>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLineEdit" name="textureSearchCustomPathLineEdit">
+               <property name="enabled">
+                <bool>true</bool>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string/>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">QLineEdit {
+    font-family: 'Segoe UI';
+    font-size: 11px;
+    color: #ffffff;
+    background-color: #333333;  /* Retaining the original background color */
+    border: 2px solid #444444;
+    border-radius: 8px;
+    padding: 2px 5px;
+}
+
+QLineEdit:hover {
+    background-color: #222222;
+}
+
+
+QLineEdit:focus {
+    border: 2px solid #555555;
+    background-color: #4a4a4a;
+}
+
+/* make disabled line edits look greyed-out */
+QLineEdit:disabled {
+    color: #777777;
+    background-color: #555555;
+    border: 2px solid #666666;
+}
+
+QLabel {
+    font-family: 'Segoe UI';
+    font-size: 14px;  /* Same larger font size as QLineEdit */
+    color: #ffffff;
+    background-color: #444444;  /* Matching background color */
+    border: 2px solid #444444;
+    border-radius: 8px;
+    padding: 4px 10px;
+}
+
+QLabel:hover {
+    background-color: #3a3a3a;
+}</string>
+               </property>
+               <property name="text">
+                <string/>
+               </property>
+               <property name="cursorPosition">
+                <number>0</number>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+               </property>
+               <property name="placeholderText">
+                <string>...Maya/TexturesFolder</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="textureSearchCustomPathSetButton">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimumSize">
+                <size>
+                 <width>35</width>
+                 <height>0</height>
+                </size>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>100</width>
+                 <height>16777215</height>
+                </size>
+               </property>
+               <property name="font">
+                <font>
+                 <family>Segoe UI</family>
+                 <pointsize>-1</pointsize>
+                </font>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">QPushButton {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 14px;  /* Adjust the font size as needed */
+    color: #ffffff;  /* White text color */
+    background-color: #666666;  /* Dark background color */
+    border: 2px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 3px 0px;  /* Padding around the text */
+
+}
+
+QPushButton:hover {
+    background-color: #888888;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+               </property>
+               <property name="text">
+                <string>set</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QVBoxLayout" name="verticalLayout_4">
+           <property name="spacing">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QCheckBox" name="textureSearchCustomPathRelativeCheckbox">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';
+    font-size: 11px;              /* Slightly smaller text */
+    color: #f2f2f2;
+    background-color: #444444;
+    border: none;
+    border-radius: 6px;           /* Softer, smaller rounding */
+    padding: 2px 6px;             /* Less padding = tighter fit */
+    margin: 1px 0;                /* Small vertical margin */
+}
+
+QCheckBox::indicator {
+    width: 12px;                  /* Smaller checkbox */
+    height: 12px;
+    border: 1px solid #444444;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 1px solid #2b2b2b;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;
+    border: 1px solid #444444;
+}
+
+QCheckBox::indicator:checked:hover,
+QCheckBox::indicator:unchecked:hover {
+    border: 1px solid #ffffff;
+}
+
+QCheckBox::indicator:checked:pressed,
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;
+    border: 1px solid #ffffff;
+}
+
+/* Disabled state */
+QCheckBox:disabled {
+    color: #666666;
+    background-color: #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+</string>
+             </property>
+             <property name="text">
+              <string>Relative</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="textureSearchAllowRecursiveSearchingCheckbox">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="toolTip">
+              <string>Will check surrounding folders for </string>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';
+    font-size: 11px;              /* Slightly smaller text */
+    color: #f2f2f2;
+    background-color: #444444;
+    border: none;
+    border-radius: 6px;           /* Softer, smaller rounding */
+    padding: 2px 6px;             /* Less padding = tighter fit */
+    margin: 1px 0;                /* Small vertical margin */
+}
+
+QCheckBox::indicator {
+    width: 12px;                  /* Smaller checkbox */
+    height: 12px;
+    border: 1px solid #444444;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 1px solid #2b2b2b;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;
+    border: 1px solid #444444;
+}
+
+QCheckBox::indicator:checked:hover,
+QCheckBox::indicator:unchecked:hover {
+    border: 1px solid #ffffff;
+}
+
+QCheckBox::indicator:checked:pressed,
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;
+    border: 1px solid #ffffff;
+}
+
+/* Disabled state */
+QCheckBox:disabled {
+    color: #666666;
+    background-color: #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+</string>
+             </property>
+             <property name="text">
+              <string>Allow Recursive Searching</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="autoSetLayout_2">
+           <property name="spacing">
+            <number>6</number>
+           </property>
+           <property name="sizeConstraint">
+            <enum>QLayout::SetMinimumSize</enum>
+           </property>
+           <item>
+            <widget class="QPushButton" name="textureImporterSaveSettings">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>-1</pointsize>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QPushButton {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 12px;  /* Adjust the font size as needed */
+    color: #ffffff;  /* White text color */
+    background-color: #666666;  /* Dark background color */
+    border: 2px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 2px 5px;  /* Padding around the text */
+
+}
+
+QPushButton:hover {
+    background-color: #888888;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Save Settings</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+ <buttongroups>
+  <buttongroup name="textureSearchDefaultsButtonGroup">
+   <property name="exclusive">
+    <bool>true</bool>
+   </property>
+  </buttongroup>
+ </buttongroups>
+</ui>
