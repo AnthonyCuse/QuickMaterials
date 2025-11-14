@@ -22,6 +22,12 @@ import random
 import re
 import json
 
+# Import icons resource
+try:
+    from . import icons_rc  # type: ignore
+except ImportError:
+    import icons_rc  # type: ignore
+
 
 # --------------------------------------------------------------------------------
 # Global texture type definitions
@@ -228,52 +234,30 @@ class ImportTxTool(QtWidgets.QWidget):
             else:
                 print(f"[DEBUG] {set_btn_name} not found in ui_elements")
 
-        # Auto Set Button for Texture Types
-        for texture_type in ALL_TEXTURE_TYPES:
-            auto_btn_name = f"{texture_type}AutoButton"
-            auto_btn = self.ui_elements.get(auto_btn_name)
-            if auto_btn:
-                auto_btn.clicked.connect(partial(self.auto_set_texture, texture_type))
-                self._debug_print(f"Connected {auto_btn_name} to auto_set_texture")
-            else:
-                self._debug_print(f"{auto_btn_name} not found")
+        # Auto Set Button for Texture Types - REMOVED (functionality simplified)
+        # for texture_type in ALL_TEXTURE_TYPES:
+        #     auto_btn_name = f"{texture_type}AutoButton"
+        #     auto_btn = self.ui_elements.get(auto_btn_name)
+        #     if auto_btn:
+        #         auto_btn.setVisible(False)  # Hide the button
+        #         self._debug_print(f"Hid {auto_btn_name} (auto-set functionality removed)")
+        #     else:
+        #         self._debug_print(f"{auto_btn_name} not found")
 
 
-        # Search Folder Set Button
-        if "searchFolderSetButton" in self.ui_elements:
-            button = self.ui_elements["searchFolderSetButton"]
-            # Robust across PySide2/6: try to disconnect; ignore if none.
-            try:
-                button.clicked.disconnect()
-            except Exception:
-                pass
-            button.clicked.connect(self.select_search_folder)
-            print("[DEBUG] Connected searchFolderSetButton to select_search_folder")
+        # Search Folder Set Button - REMOVED (functionality simplified)
+        # if "searchFolderSetButton" in self.ui_elements:
+        #     button = self.ui_elements["searchFolderSetButton"]
+        #     button.setVisible(False)  # Hide the button
 
 
         # Texture Importer Settings Button
-        btn = self.ui_elements.get("textureImporterSettingsButton")
-        if btn:
-            try:
-                btn.clicked.disconnect()
-            except Exception:
-                pass
-            btn.clicked.connect(self.open_texture_importer_settings)
-            print("[DEBUG] Connected textureImporterSettingsButton to open_texture_importer_settings")
-        else:
-            print("[DEBUG] textureImporterSettingsButton not found in ui_elements")
+        # Texture importer settings button removed - settings now handled by main quickMaterialsSettingsButton
 
-        # Auto-Find-All Button
-        auto_all_btn = self.ui_elements.get("autoFindAllButton")
-        if auto_all_btn:
-            try:
-                auto_all_btn.clicked.disconnect()
-            except Exception:
-                pass
-            auto_all_btn.clicked.connect(self.auto_find_all)
-            print("[DEBUG] Connected autoFindAllButton to auto_find_all")
-        else:
-            print("[DEBUG] autoFindAllButton not found in ui_elements")
+        # Auto-Find-All Button - REMOVED (functionality simplified)
+        # auto_all_btn = self.ui_elements.get("autoFindAllButton")
+        # if auto_all_btn:
+        #     auto_all_btn.setVisible(False)  # Hide the button
 
         # Select Textures For Import (multi-pick)
         select_btn = (self.ui_elements.get("selectTextureForImportButton")
@@ -827,8 +811,65 @@ class ImportTxTool(QtWidgets.QWidget):
             if rep:
                 self.process_selected_texture(rep, ttype)
 
+        # Handle unmatched textures with dialog
         if unmatched:
-            cmds.warning(f"{len(unmatched)} file(s) did not match any texture type. See script editor for names.")
+            dlg = AssignTexturesDialog(self, unmatched)
+            result = dlg.exec_()
+            if result == QtWidgets.QDialog.Accepted:
+                # Process each assigned texture
+                for texture_path, texture_type in dlg.texture_assignments.items():
+                    rep = self._prefer_representative_udim([texture_path])
+                    if rep:
+                        self.process_selected_texture(rep, texture_type)
+                self._debug_print(f"[SelectImport] Assigned {len(dlg.texture_assignments)} unmatched texture(s)")
+            else:
+                self._debug_print(f"[SelectImport] Cancelled assignment of {len(unmatched)} unmatched texture(s)")
+
+    def _pre_populate_textures(self, texture_files):
+        """
+        Pre-populate the texture importer with selected texture files.
+        This is called when the texture importer is opened with pre-selected textures.
+        """
+        if not texture_files:
+            return
+
+        # Load keyword map & get current material name (safe)
+        kw_map = self._load_keyword_map()
+        mat_combo = self._get_widget("materialComboBox", QtWidgets.QComboBox)
+        material = mat_combo.currentText() if mat_combo else ""
+
+        # Classify each file -> type
+        classified = {}  # type -> [paths...]
+        unmatched = []
+
+        for path in texture_files:
+            ttype, score = self._classify_texture_type_for_file(path, kw_map, material)
+            if ttype:
+                classified.setdefault(ttype, []).append(path)
+                self._debug_print(f"[PrePopulate] '{os.path.basename(path)}' -> {ttype} (score={score})")
+            else:
+                unmatched.append(path)
+                self._debug_print(f"[PrePopulate] '{os.path.basename(path)}' -> (no match)")
+
+        # For each type, pick a representative (prefer 1001), then process like a normal selection
+        for ttype, paths in classified.items():
+            rep = self._prefer_representative_udim(paths)
+            if rep:
+                self.process_selected_texture(rep, ttype)
+
+        # Handle unmatched textures with dialog
+        if unmatched:
+            dlg = AssignTexturesDialog(self, unmatched)
+            result = dlg.exec_()
+            if result == QtWidgets.QDialog.Accepted:
+                # Process each assigned texture
+                for texture_path, texture_type in dlg.texture_assignments.items():
+                    rep = self._prefer_representative_udim([texture_path])
+                    if rep:
+                        self.process_selected_texture(rep, texture_type)
+                self._debug_print(f"[PrePopulate] Assigned {len(dlg.texture_assignments)} unmatched texture(s)")
+            else:
+                self._debug_print(f"[PrePopulate] Cancelled assignment of {len(unmatched)} unmatched texture(s)")
 
     def clear_all_textures(self):
         """
@@ -863,54 +904,8 @@ class ImportTxTool(QtWidgets.QWidget):
           - Still climbs up parent folders and respects recursion bounds.
           - Optional name_predicate to prefilter candidate filenames (e.g., must contain material).
         """
-        if not self.search_folder_path or not os.path.isdir(self.search_folder_path):
-            return None
-
-        tokens = self._build_type_tokens(texture_type, material_name, kw_map)
-        required = self._type_required_keywords(texture_type, kw_map)
-        other_map = self._other_types_keywords(texture_type, kw_map)
-
-        if debug:
-            self._debug_print(f"[AutoFindAll][{texture_type}] required={required}")
-            self._debug_print(f"[AutoFindAll][{texture_type}] tokens   ={tokens}")
-            self._debug_print(f"[AutoFindAll][{texture_type}] recurse={recurse} max_depth={max_depth} max_levels={max_levels}")
-
-        start = self.search_folder_path
-        best_path, best_score = None, -9999
-
-        current = start
-        for level in range(0, max_levels + 1):
-            if not current or not os.path.isdir(current):
-                break
-            if debug:
-                self._debug_print(f"[AutoFindAll][{texture_type}] Scanning root(level {level}): {current}")
-
-            local_scores = []
-            for path in self._iter_candidate_files(current, recurse=recurse, max_depth=max_depth, name_predicate=name_predicate):  # <-- pass predicate
-                # pass material_name so required checks ignore matches inside the material segment
-                sc, passed = self._score_filename(path, tokens, required, other_map, material_name)
-                if not passed:
-                    continue
-                local_scores.append((sc, path))
-                if sc > best_score:
-                    best_score = sc
-                    best_path = path
-
-
-            if debug and local_scores:
-                local_scores.sort(reverse=True, key=lambda x: x[0])
-                preview = ", ".join([f"{os.path.basename(p)}(score={s})" for s, p in local_scores[:3]])
-                self._debug_print(f"[AutoFindAll][{texture_type}] Top in {os.path.basename(current)}: {preview}")
-
-            parent = os.path.dirname(current)
-            if parent == current:
-                break
-            current = parent
-
-        if debug and not best_path:
-            self._debug_print(f"[AutoFindAll][{texture_type}] No valid (required-keyword) matches.")
-
-        return best_path
+        # Search folder functionality removed - this function is no longer used for auto-search
+        return None
 
     # -------- UDIM --------
     def detect_udim_pattern(self, file_base):
@@ -1285,6 +1280,30 @@ class ImportTxTool(QtWidgets.QWidget):
         filtered_materials = sorted([mat for mat in all_materials if mat not in default_materials])
         return filtered_materials
 
+    # def auto_populate_search_folder(self):  # REMOVED (functionality simplified)
+    #     """Auto-populate functionality removed - use file dialog instead."""
+    #     pass
+
+
+
+
+
+
+    # <Helper to get current Maya project root>
+    def _project_root(self):
+        """Return the active project folder with no trailing slash, or '' if unset."""
+        root = cmds.workspace(q=True, rootDirectory=True) or ""
+        return root.rstrip("/\\")
+
+
+    # def select_search_folder(self):  # REMOVED (functionality simplified)
+    #     """Search folder functionality removed - use file dialog instead."""
+    #     pass
+
+    # def auto_set_texture(self, texture_type):  # REMOVED (functionality simplified)
+    #     """Auto-search functionality removed - use file dialog instead."""
+    #     pass
+
     def auto_populate_search_folder(self):
         """
         Populate searchFolderLineEdit based on Settings JSON, with debug output.
@@ -1295,11 +1314,11 @@ class ImportTxTool(QtWidgets.QWidget):
             return
 
         # ---------------- read settings ----------------
-        settings     = self._load_settings()
-        mode         = settings.get("default_mode", "maya_file")
-        custom_path  = settings.get("custom_path", "")
+        settings = self._load_settings()
+        mode = settings.get("default_mode", "maya_file")
+        custom_path = settings.get("custom_path", "")
         use_relative = settings.get("relative", False)
-        proj_root    = self._project_root()
+        proj_root = self._project_root()
 
         self._debug_print(f"[SETTINGS] mode={mode}, custom_path='{custom_path}', relative={use_relative}")
         self._debug_print(f"[PROJECT]  root='{proj_root}'")
@@ -1315,24 +1334,20 @@ class ImportTxTool(QtWidgets.QWidget):
             abs_folder = os.path.join(proj_root, "sourceimages") if proj_root else ""
             self._debug_print(f"[RESOLVE] sourceimages ➜ '{abs_folder}'")
         elif mode == "custom" and custom_path:
-            abs_folder = (os.path.abspath(os.path.join(proj_root, custom_path))
-                          if use_relative else os.path.abspath(custom_path))
+            # Handle key substitution for custom path
+            resolved_path = self._resolve_custom_path_keys(custom_path)
+            abs_folder = resolved_path if resolved_path else ""
             self._debug_print(f"[RESOLVE] custom ➜ '{abs_folder}'")
 
-        # ---------------- choose display vs internal path ----------------
-        display_path = abs_folder
-        if use_relative and proj_root:
-            # normalise both paths for a reliable “is-inside” test
-            norm_root = os.path.normcase(os.path.normpath(proj_root))
-            norm_abs  = os.path.normcase(os.path.normpath(abs_folder))
-
-            if norm_abs.startswith(norm_root):
-                rel_path    = os.path.relpath(abs_folder, proj_root)
-                project_tag = os.path.basename(proj_root)
-                display_path = f"...{os.sep}{project_tag}{os.sep}{rel_path}"
-                self._debug_print(f"[DISPLAY] relative path shown ⇒ '{display_path}'")
-            else:
-                self._debug_print("[DISPLAY] folder outside project; showing absolute path")
+        # ---------------- decide display path ----------------
+        display_path = ""
+        if use_relative and abs_folder and proj_root:
+            try:
+                display_path = os.path.relpath(abs_folder, proj_root)
+                self._debug_print(f"[DISPLAY] relative requested; showing '{display_path}'")
+            except ValueError:
+                display_path = abs_folder
+                self._debug_print(f"[DISPLAY] relpath failed; showing absolute path '{display_path}'")
         else:
             self._debug_print(f"[DISPLAY] relative not requested; showing absolute path '{display_path}'")
 
@@ -1340,207 +1355,10 @@ class ImportTxTool(QtWidgets.QWidget):
         search_line_edit.setText(display_path)
         self.search_folder_path = abs_folder
 
-
-
-
-
-
-    # <Helper to get current Maya project root>
     def _project_root(self):
         """Return the active project folder with no trailing slash, or '' if unset."""
         root = cmds.workspace(q=True, rootDirectory=True) or ""
         return root.rstrip("/\\")
-
-
-    def select_search_folder(self):
-        """Opens a file dialog to select a directory using the current line edit text as the start directory,
-        and updates the searchFolderLineEdit."""
-        options = QtWidgets.QFileDialog.Options()
-        options |= QtWidgets.QFileDialog.ShowDirsOnly
-
-        # Resolve the line edit safely
-        search_line_edit = self._get_widget("searchFolderLineEdit", QtWidgets.QLineEdit)
-
-        # Pick a good starting dir: line edit text -> stored search_folder_path -> project root
-        start_dir = ""
-        if search_line_edit and isValid(search_line_edit):
-            try:
-                start_dir = search_line_edit.text().strip()
-            except RuntimeError:
-                start_dir = ""
-        if not start_dir:
-            start_dir = self.search_folder_path or self._project_root() or ""
-
-        folder_path = QtWidgets.QFileDialog.getExistingDirectory(
-            self, "Select Directory", start_dir, options=options
-        )
-
-        if folder_path:
-            # Update UI line edit (if still alive) and internal state
-            if search_line_edit and isValid(search_line_edit):
-                try:
-                    search_line_edit.setText(folder_path)
-                except RuntimeError:
-                    pass
-            self.search_folder_path = folder_path
-            self.last_texture_dir = folder_path  # handy for future file dialogs
-            print(f"[DEBUG] Search folder path updated to: {folder_path}")
-
-
-    def auto_set_texture(self, texture_type):
-        """
-        Auto-search for a texture file matching the given texture type.
-        The search uses:
-          - The current search folder,
-          - The current material name from materialComboBox,
-          - Keyword list from JSON for the texture type (order-agnostic vs material),
-          - Separator-aware matching (., _, -) around type tokens.
-        """
-        # Ensure we have a search folder
-        if not self.search_folder_path or not os.path.isdir(self.search_folder_path):
-            cmds.warning("Search folder is not valid.")
-            return
-
-        # Get current material safely
-        mat_combo = self._get_widget("materialComboBox", QtWidgets.QComboBox)
-        material = mat_combo.currentText() if mat_combo else ""
-        if not material:
-            cmds.warning("Material not selected.")
-            return
-
-        # Settings for recursion
-        settings = self._load_settings()
-        recurse = settings.get("recursive", True)
-        max_depth = 5 if recurse else 0
-        max_levels = 3
-
-        # Find best candidate with the same logic as bulk search
-        best_path = self._auto_find_single_type(
-            self.search_folder_path, material, texture_type,
-            max_levels=max_levels, max_subdir_depth=max_depth
-        )
-
-        if best_path:
-            self._debug_print(f"[AutoSetOne] {texture_type} -> {best_path}")
-            self.process_selected_texture(best_path, texture_type)
-        else:
-            cmds.warning(f"No matching texture found for '{texture_type}'.")
-
-
-    # --- NEW: bulk auto-find across texture types (and All Materials mode) ---
-    def auto_find_all(self):
-        """
-        When a specific material is selected:
-          - For each texture type, find the best-matching file using keywords and material name,
-            then call process_selected_texture() to fill the slot immediately.
-
-        When "All Materials" is selected:
-          - For every material in the scene (filtered), run the same discovery.
-          - Do NOT import yet. Instead:
-              * Update each LineEdit to display '<N> matches' as a quick summary.
-              * Cache a per-material result dict into self._bulk_match_cache
-                for a later review/import step (used by importTexturesButton).
-        """
-        if not self.search_folder_path or not os.path.isdir(self.search_folder_path):
-            cmds.warning("Search folder is not valid.")
-            return
-
-        # Read settings governing recursion
-        settings = self._load_settings()
-        recurse = settings.get("recursive", True)
-        max_depth = 5 if recurse else 0
-        max_levels = 3  # climb up to 3 parent folders (same spirit as per-type Auto)
-
-        # Load keywords once
-        kw_map = self._load_keyword_map()
-
-        # Determine current selection and materials list (safe)
-        mat_combo = self._get_widget("materialComboBox", QtWidgets.QComboBox)
-        current_mat = mat_combo.currentText() if mat_combo else ""
-
-        # High-level debug:
-        self._debug_print(f"[AutoFindAll] StartFolder='{self.search_folder_path}' recurse={recurse} max_depth={max_depth} max_levels={max_levels}")
-        self._debug_print(f"[AutoFindAll] CurrentMaterial='{current_mat}'")
-
-
-        if not current_mat:
-            cmds.warning("No material selected.")
-            return
-
-
-        # Which types to search depends on Advanced Textures visibility
-        adv_container = self.ui_elements.get("advTexturesContainer")  # <-- correct objectName
-        adv_visible = adv_container.isVisible() if adv_container else True
-        types_to_search = ALL_TEXTURE_TYPES if adv_visible else list(STANDARD_TEXTURE_TYPES)
-        self._debug_print(f"[AutoFindAll] AdvVisible={adv_visible} -> Searching types={types_to_search}")
-
-        if current_mat != "All Materials":
-            # --- SINGLE MATERIAL MODE ---
-            found_any = False
-            for ttype in types_to_search:
-                best = self._find_best_match_for_type(
-                    ttype, current_mat, kw_map, recurse, max_depth, max_levels=max_levels, debug=True
-                )
-                if best:
-                    self._debug_print(f"[AutoFindAll] {ttype} -> {best}")
-                    self.process_selected_texture(best, ttype)
-                    found_any = True
-                else:
-                    self._debug_print(f"[AutoFindAll] {ttype} -> (no match)")
-            if not found_any:
-                self._debug_print(f"[AutoFindAll] No matches for '{current_mat}'. Searched from '{self.search_folder_path}' up {max_levels} level(s).")
-                cmds.warning("Auto-Find-All: no matches found for the selected material.")
-            return
-
-
-
-        # --- ALL MATERIALS MODE ---
-        # Build a cache: { material_name: { texture_type: best_path_or_None, ... }, ... }
-        self._bulk_match_cache = {}
-
-        materials = self.get_all_materials_sorted()
-        # Safety: skip defaults (get_all_materials_sorted() already filters core defaults)
-        if not materials:
-            cmds.warning("No non-default materials found in the scene.")
-            return
-
-        # Accumulate per-type totals for UI summary
-        per_type_counts = {tt: 0 for tt in types_to_search}
-        mat_count_considered = 0
-
-        for mat in materials:
-            per_type_map = {}
-            self._debug_print(f"[AutoFindAll][All Materials] Scanning material: {mat}")
-            mat_pred = self._build_material_name_predicate(mat)  # <-- new
-            for ttype in types_to_search:
-                best = self._find_best_match_for_type(
-                    ttype, mat, kw_map, recurse, max_depth, max_levels=max_levels, debug=True,
-                    name_predicate=mat_pred  # <-- pass prefilter
-                )
-                per_type_map[ttype] = best
-                if best:
-                    per_type_counts[ttype] += 1
-            # Only store if any match exists for this material
-            if any(per_type_map.values()):
-                self._bulk_match_cache[mat] = per_type_map
-                mat_count_considered += 1
-
-        # Update LineEdits to communicate counts (not specific filenames)
-        for ttype in types_to_search:
-            le = self.ui_elements.get(f"{ttype}LineEdit")
-            if not le:
-                continue
-            count = per_type_counts.get(ttype, 0)
-            if count > 0:
-                le.setText(f"{count} matches across {mat_count_considered} material(s)")
-            else:
-                le.setText("")  # clear if none, to avoid stale info
-
-
-        self._debug_print(f"[AutoFindAll] Cached matches for {len(self._bulk_match_cache)} materials.")
-        self._debug_print("[AutoFindAll] In All Materials mode, use importTexturesButton to review/import in bulk (popup UI coming next).")
-
-
 
     def recursive_search_for_texture(self, start_folder, pattern, max_levels=3, max_subdir_depth=1):
         current_folder = start_folder
@@ -1702,11 +1520,7 @@ class ImportTxTool(QtWidgets.QWidget):
         if self.last_texture_dir and os.path.isdir(self.last_texture_dir):
             return self.last_texture_dir
 
-        # 3) Fallback to the configured search folder
-        if self.search_folder_path and os.path.isdir(self.search_folder_path):
-            return self.search_folder_path
-
-        # 4) Let OS decide
+        # 3) Let OS decide (search folder functionality removed)
         return ""
 
     def select_texture_file(self, texture_type):
@@ -1933,25 +1747,37 @@ class ImportTxTool(QtWidgets.QWidget):
         row_layout.addWidget(line_edit)
 
         # 4) Set Button
-        set_button = QtWidgets.QPushButton("Set")
+        set_button = QtWidgets.QPushButton()
         set_button.setObjectName(f"{texture_type}SetButton")
         set_button.setMinimumHeight(20)
-        set_button.setFixedWidth(44)
+        set_button.setFixedWidth(28)  # Narrower width
+        # Set folder icon instead of text
+        folder_icon = QtGui.QIcon(":/icons/folder_icon.png")
+        set_button.setIcon(folder_icon)
+        set_button.setToolTip("Set folder path")
+        # Style: transparent background with 0px border
+        set_button.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: 0px solid white;
+                border-radius: 0px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+            QPushButton:pressed {
+                background-color: rgba(255, 255, 255, 0.2);
+            }
+        """)
         row_layout.addWidget(set_button)
 
-        # 5) Auto Button (new)
-        auto_button = QtWidgets.QPushButton("Auto")
-        auto_button.setObjectName(f"{texture_type}AutoButton")
-        auto_button.setMinimumHeight(20)
-        auto_button.setFixedWidth(48)
-        row_layout.addWidget(auto_button)
+        # 5) Auto Button - REMOVED (functionality simplified)
 
         # Make the line edit take the slack space; keeps label visible without cropping
         row_layout.setStretch(0, 0)  # [+]
         row_layout.setStretch(1, 0)  # label (min-expanding)
         row_layout.setStretch(2, 1)  # line edit expands
         row_layout.setStretch(3, 0)  # [Set]
-        row_layout.setStretch(4, 0)  # [Auto]
 
         # Add this row layout to the vertical container layout
         container_layout.addLayout(row_layout)
@@ -1983,7 +1809,7 @@ class ImportTxTool(QtWidgets.QWidget):
         self.ui_elements[f"{texture_type}Label"] = label
         self.ui_elements[f"{texture_type}LineEdit"] = line_edit
         self.ui_elements[f"{texture_type}SetButton"] = set_button
-        self.ui_elements[f"{texture_type}AutoButton"] = auto_button
+        # self.ui_elements[f"{texture_type}AutoButton"] = auto_button  # REMOVED
         self.ui_elements[f"{texture_type}ChannelsContainer"] = channels_container
 
         return container
@@ -2338,6 +2164,173 @@ class PreviewImportDialog(QtWidgets.QDialog):
         cancel_btn.clicked.connect(self.reject)
 
 
+class AssignTexturesDialog(QtWidgets.QDialog):
+    """
+    Dialog to manually assign unmatched textures to material attributes.
+    Shows a list of textures with comboboxes for selecting the attribute type.
+    """
+    def __init__(self, parent, unmatched_textures):
+        """
+        Initialize the dialog.
+        
+        Args:
+            parent: Parent widget
+            unmatched_textures: List of file paths that couldn't be matched
+        """
+        super(AssignTexturesDialog, self).__init__(parent)
+        self.setWindowTitle("Assign Textures")
+        self.setModal(True)
+        self.resize(600, 500)
+        
+        # Store the mapping: texture_path -> selected_texture_type
+        self.texture_assignments = {}
+        
+        main = QtWidgets.QVBoxLayout(self)
+        main.setContentsMargins(8, 8, 8, 8)
+        main.setSpacing(8)
+        
+        # Title
+        title = QtWidgets.QLabel("Assign Textures")
+        title.setStyleSheet("font-family: 'Segoe UI'; font-size: 18px; font-weight: 600; color: #ffffff;")
+        main.addWidget(title)
+        
+        # Scroll area for texture assignments
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(scroll_area_stylesheet)
+        main.addWidget(scroll, 1)
+        
+        content = QtWidgets.QWidget()
+        scroll.setWidget(content)
+        v = QtWidgets.QVBoxLayout(content)
+        v.setContentsMargins(6, 6, 6, 6)
+        v.setSpacing(8)
+        
+        # Store comboboxes for each texture path
+        self.comboboxes = {}
+        
+        # Helper function to get display name for texture types
+        def get_display_name(texture_type):
+            display_names = {
+                "baseColor": "Base Color",
+                "emissionClr": "Emission Color",
+                "subsurfaceClr": "Subsurface Color",
+                "specularClr": "Specular Color",
+                "transmissionClr": "Transmission Color",
+                "coatRoughness": "Coat Roughness",
+            }
+            if texture_type in display_names:
+                return display_names[texture_type]
+            result = texture_type[0].upper()
+            for char in texture_type[1:]:
+                if char.isupper():
+                    result += " " + char
+                else:
+                    result += char
+            return result
+        
+        # Create a row for each unmatched texture
+        for texture_path in unmatched_textures:
+            texture_name = os.path.basename(texture_path)
+            
+            # Horizontal layout for label + combobox
+            row = QtWidgets.QHBoxLayout()
+            row.setSpacing(10)
+            
+            # Label with texture name
+            label = QtWidgets.QLabel(texture_name)
+            label.setStyleSheet("font-family: 'Segoe UI'; font-size: 13px; color: #d6d6d6; min-width: 200px;")
+            label.setWordWrap(False)
+            row.addWidget(label)
+            
+            # Combobox with all texture types
+            combo = QtWidgets.QComboBox()
+            combo.setStyleSheet("""
+                QComboBox {
+                    font-family: 'Segoe UI';
+                    font-size: 12px;
+                    color: #ffffff;
+                    background-color: #555555;
+                    border: 1px solid #444444;
+                    border-radius: 4px;
+                    padding: 4px;
+                    min-width: 200px;
+                }
+                QComboBox:hover {
+                    background-color: #666666;
+                }
+                QComboBox::drop-down {
+                    border: none;
+                }
+                QComboBox QAbstractItemView {
+                    background-color: #555555;
+                    color: #ffffff;
+                    selection-background-color: #666666;
+                    border: 1px solid #444444;
+                }
+            """)
+            
+            # Add "None" option first (default - user must select)
+            combo.addItem("-- Select Attribute --", None)
+            
+            # Add all texture types with display names
+            for ttype in ALL_TEXTURE_TYPES:
+                display = get_display_name(ttype)
+                combo.addItem(display, ttype)
+            
+            row.addWidget(combo)
+            row.addStretch(1)
+            
+            # Store the combobox reference
+            self.comboboxes[texture_path] = combo
+            
+            # Add row to layout
+            v.addLayout(row)
+        
+        v.addStretch(1)
+        
+        # Buttons
+        btns = QtWidgets.QHBoxLayout()
+        btns.addStretch(1)
+        continue_btn = QtWidgets.QPushButton("Continue")
+        cancel_btn = QtWidgets.QPushButton("Cancel")
+        btns.addWidget(continue_btn)
+        btns.addWidget(cancel_btn)
+        main.addLayout(btns)
+        
+        continue_btn.clicked.connect(self.on_continue)
+        cancel_btn.clicked.connect(self.reject)
+    
+    def on_continue(self):
+        """Called when Continue button is clicked. Validates selections and accepts if valid."""
+        # Check that all textures have been assigned
+        unassigned = []
+        assignments = {}
+        
+        for texture_path, combo in self.comboboxes.items():
+            selected_type = combo.currentData()
+            if selected_type is None:
+                unassigned.append(os.path.basename(texture_path))
+            else:
+                assignments[texture_path] = selected_type
+        
+        # If some textures are unassigned, warn but still allow proceeding with assigned ones
+        if unassigned:
+            response = QtWidgets.QMessageBox.warning(
+                self,
+                "Unassigned Textures",
+                f"The following textures have not been assigned:\n" + 
+                "\n".join(f"• {name}" for name in unassigned) +
+                "\n\nDo you want to continue with only the assigned textures?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No
+            )
+            if response == QtWidgets.QMessageBox.No:
+                return  # User cancelled
+        
+        # Store assignments and accept
+        self.texture_assignments = assignments
+        self.accept()
 
 
 class TextureSearchNamesUI(QtWidgets.QWidget):
@@ -2346,6 +2339,30 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
     for each texture type (label + line edit). Finally, it saves the entered keywords
     into a JSON file under <script_dir>/settings/texture_search_names.json.
     """
+    
+    @staticmethod
+    def get_display_name(texture_type):
+        """Convert texture type key to user-friendly display name."""
+        display_names = {
+            "baseColor": "Base Color",
+            "emissionClr": "Emission Color",
+            "subsurfaceClr": "Subsurface Color",
+            "specularClr": "Specular Color",
+            "transmissionClr": "Transmission Color",
+            "coatRoughness": "Coat Roughness",
+        }
+        # If we have a specific display name, use it
+        if texture_type in display_names:
+            return display_names[texture_type]
+        # Otherwise, capitalize first letter and add spaces before capital letters
+        result = texture_type[0].upper()
+        for char in texture_type[1:]:
+            if char.isupper():
+                result += " " + char
+            else:
+                result += char
+        return result
+    
     def __init__(self, parent=None):
         super(TextureSearchNamesUI, self).__init__(parent)
         self.ui_elements = {}
@@ -2367,6 +2384,9 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
 
         # 4) Connect signals (e.g., Save button)
         self.setup_connections()
+        
+        # 5) Apply stylesheet matching quick_materials tool
+        self._apply_matching_stylesheet()
 
 
     def load_ui_file(self):
@@ -2389,13 +2409,23 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         self.ui_instance = loader.load(ui_file, parentWidget=self)
         ui_file.close()
 
-        # Place the loaded UI into this widget’s layout
+        # Place the loaded UI into this widget's layout
         main_layout = QtWidgets.QVBoxLayout(self)
-        main_layout.setContentsMargins(1, 1, 1, 1)
+        main_layout.setContentsMargins(2, 2, 2, 2)
+        main_layout.setSpacing(2)
         main_layout.addWidget(self.ui_instance)
 
         # Auto-initialize all named child widgets into self.ui_elements
         self.auto_initialize_ui_elements(self.ui_instance)
+        
+        # Ensure title labels are centered
+        title_label = self.ui_elements.get("textureImporterTitleLabel")
+        if title_label:
+            title_label.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
+        desc_label = self.ui_elements.get("textureImporterTitleLabelDesc")
+        if desc_label:
+            desc_label.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
+            desc_label.setText("These strings will be used to auto assign textures to the matching material attribute\n(Separate by commas, not case sensitive)")
 
     def auto_initialize_ui_elements(self, parent_widget):
         """
@@ -2431,26 +2461,63 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         content_widget.setObjectName("texturesNameEditScrollAreaWidgetContents")
         scroll_area.setWidget(content_widget)
         content_layout = QtWidgets.QVBoxLayout(content_widget)
-        content_layout.setContentsMargins(5, 5, 5, 5)
-        content_layout.setSpacing(8)
+        content_layout.setContentsMargins(3, 3, 3, 3)
+        content_layout.setSpacing(4)
+        content_layout.setAlignment(QtCore.Qt.AlignTop | QtCore.Qt.AlignLeft)
 
         # 4) For each texture type, create a row: [Label] [LineEdit]
         for ttype in self.texture_types:
             row_widget = QtWidgets.QWidget()
             row_layout = QtWidgets.QHBoxLayout(row_widget)
             row_layout.setContentsMargins(0, 0, 0, 0)
-            row_layout.setSpacing(10)
+            row_layout.setSpacing(6)
 
-            # 4a) A QLabel: e.g. "Basecolor:"
-            label = QtWidgets.QLabel(f"{ttype.capitalize()}:")
-            label.setFixedWidth(100)
-            label.setStyleSheet("font-size: 12px;")
+            # 4a) A QLabel: e.g. "Base Color:" or "Emission Color:"
+            display_name = self.get_display_name(ttype)
+            label = QtWidgets.QLabel(f"{display_name}:")
+            label.setFixedWidth(140)
+            label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+            label.setStyleSheet("""
+                QLabel {
+                    font-family: 'Segoe UI';
+                    font-size: 12px;
+                    color: #ffffff;
+                    background-color: #444444;
+                    border: 2px solid #444444;
+                    border-radius: 6px;
+                    padding: 2px 6px;
+                }
+            """)
             row_layout.addWidget(label)
 
             # 4b) A QLineEdit with objectName "<textureType>TextureNameLineEdit"
             line_edit = QtWidgets.QLineEdit()
             line_edit.setObjectName(f"{ttype}TextureNameLineEdit")
-            line_edit.setPlaceholderText(f"{ttype.capitalize()}, {ttype[:3].upper()}")
+            line_edit.setPlaceholderText(f"{display_name}, {ttype[:3].upper()}")
+            line_edit.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+            line_edit.setStyleSheet("""
+                QLineEdit {
+                    font-family: 'Segoe UI';
+                    font-size: 11px;
+                    color: #ffffff;
+                    background-color: #333333;
+                    border: 2px solid #444444;
+                    border-radius: 6px;
+                    padding: 2px 4px;
+                }
+                QLineEdit:hover {
+                    background-color: #222222;
+                }
+                QLineEdit:focus {
+                    border: 2px solid #555555;
+                    background-color: #222222;
+                }
+                QLineEdit:disabled {
+                    color: #777777;
+                    background-color: #555555;
+                    border: 2px solid #666666;
+                }
+            """)
             row_layout.addWidget(line_edit, 1)  # stretch = 1
 
             # Store reference for later (saving/loading)
@@ -2512,6 +2579,151 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
             save_btn.clicked.connect(self.save_texture_names)
         else:
             cmds.warning("saveTextureNamesButton not found in UI.")
+    
+    def _apply_matching_stylesheet(self):
+        """
+        Apply stylesheet that matches the quick_materials tool styling.
+        This ensures visual consistency across the UI.
+        """
+        # Main widget background
+        main_stylesheet = """
+        QWidget {
+            background-color: #555555;
+            font-family: 'Segoe UI';
+            font-size: 14px;
+            color: #ffffff;
+        }
+        
+        /* Scroll area styling */
+        QScrollArea {
+            background-color: #444444;
+            border: none;
+            border-radius: 8px;
+        }
+        
+        QScrollArea QWidget {
+            background-color: #444444;
+        }
+        
+        /* Scrollbar styling */
+        QScrollBar:vertical {
+            background-color: #555555;
+            width: 12px;
+            border: none;
+        }
+        
+        QScrollBar::handle:vertical {
+            background-color: #666666;
+            border-radius: 6px;
+            min-height: 20px;
+        }
+        
+        QScrollBar::handle:vertical:hover {
+            background-color: #777777;
+        }
+        
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            height: 0px;
+        }
+        
+        /* Title labels */
+        QLabel#textureImporterTitleLabel {
+            font-family: 'Segoe UI';
+            font-size: 16px;
+            color: #d6d6d6;
+            background-color: transparent;
+            border: none;
+            padding: 2px 0px;
+            text-align: center;
+        }
+        
+        QLabel#textureImporterTitleLabelDesc {
+            font-family: 'Segoe UI';
+            font-size: 11px;
+            color: #d6d6d6;
+            background-color: transparent;
+            border: none;
+            padding: 2px 0px;
+            text-align: center;
+        }
+        
+        /* Ensure all other labels are left-aligned */
+        QLabel:not(#textureImporterTitleLabel):not(#textureImporterTitleLabelDesc) {
+            text-align: left;
+        }
+        
+        /* Buttons */
+        QPushButton {
+            font-family: 'Segoe UI';
+            font-size: 13px;
+            color: #ffffff;
+            background-color: #666666;
+            border: 2px solid #444444;
+            border-radius: 6px;
+            padding: 4px 10px;
+            min-height: 26px;
+        }
+        
+        QPushButton:hover {
+            background-color: #888888;
+        }
+        
+        QPushButton:pressed {
+            background-color: #1a1a1a;
+        }
+        
+        QPushButton:disabled {
+            color: #666666;
+            background-color: #4a4a4a;
+            border: 1px solid #555555;
+        }
+        """
+        
+        self.setStyleSheet(main_stylesheet)
+        
+        # Also apply to the main frame if it exists
+        main_frame = self.ui_elements.get("mainUIFrame")
+        if main_frame:
+            main_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #555555;
+                    border: 0px solid #333333;
+                    border-radius: 8px;
+                    padding: 2px;
+                    margin: 2px;
+                }
+            """)
+        
+        # Apply to inner frame
+        texture_frame = self.ui_elements.get("textureImporterFrame")
+        if texture_frame:
+            texture_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #444444;
+                    border: 0px solid #333333;
+                    border-radius: 8px;
+                    padding: 4px;
+                    margin: 2px;
+                }
+            """)
+        
+        # Apply to scroll area
+        scroll_area = self.ui_elements.get("texturesNameEditScrollArea")
+        if scroll_area:
+            scroll_area.setStyleSheet("""
+                QScrollArea {
+                    background-color: #444444;
+                    border: none;
+                    border-radius: 6px;
+                }
+            """)
+        
+        # Get the vertical layout from the texture frame and reduce spacing
+        if texture_frame:
+            vlayout = texture_frame.findChild(QtWidgets.QVBoxLayout)
+            if vlayout:
+                vlayout.setSpacing(4)
+                vlayout.setContentsMargins(4, 4, 4, 4)
 
     def save_texture_names(self):
         """
@@ -2564,7 +2776,7 @@ class TextureImporterSettingsUI(QtWidgets.QWidget):
         # 1) Load the .ui file
         loader = QtUiTools.QUiLoader()
         script_dir = os.path.dirname(__file__)
-        ui_path = os.path.join(script_dir, "QtDesigner", "textureImporterSettings.ui")
+        ui_path = os.path.join(script_dir, "QtDesigner", "quickMaterialsSettings.ui")
         ui_file = QtCore.QFile(ui_path)
         if not ui_file.open(QtCore.QFile.ReadOnly):
             cmds.warning(f"Cannot open Settings UI: {ui_path}")
@@ -2622,6 +2834,22 @@ class TextureImporterSettingsUI(QtWidgets.QWidget):
 
         # Initial enable/disable pass
         self._update_custom_path_widgets()
+        
+        # Set up tooltip for custom path line edit
+        custom_path_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
+        if custom_path_edit:
+            tooltip_text = (
+                "Custom texture search path with dynamic key substitution.\n\n"
+                "Available keys:\n"
+                "• (scene) - Current Maya file folder\n"
+                "• (project) - Current Maya project folder\n\n"
+                "Add any path after the key:\n"
+                "• (scene)/textures\n"
+                "• (scene)/assets/textures\n"
+                "• (project)/sourceimages\n"
+                "• (project)/sourceimages/materials"
+            )
+            custom_path_edit.setToolTip(tooltip_text)
 
 
         # Save button
@@ -2650,23 +2878,107 @@ class TextureImporterSettingsUI(QtWidgets.QWidget):
         for widget_name in (
             "textureSearchCustomPathLineEdit",
             "textureSearchCustomPathSetButton",
-            "customSearchFolderPathLabel"
+            "customSearchFolderPathLabel",
+            "createIfDoesntExistCheckbox"
         ):
             w = self.ui_elements.get(widget_name)
             if w:
                 w.setEnabled(custom_on)
 
-        # If custom path is off, remove focus so the cursor isn’t blinking
+        # If custom path is off, remove focus so the cursor isn't blinking
         if not custom_on:
             self.ui_elements["textureSearchCustomPathLineEdit"].clearFocus()
 
 
     def _choose_custom_path(self):
-        """Open a folder dialog and drop result into the line-edit."""
-        start_dir = self.ui_elements["textureSearchCustomPathLineEdit"].text() or cmds.workspace(q=True, rootDirectory=True)
-        folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Texture Folder", start_dir)
-        if folder:
-            self.ui_elements["textureSearchCustomPathLineEdit"].setText(folder)
+        """
+        Enhanced custom path handling with key substitution and folder creation.
+        
+        If there's a custom path with keys, resolve it and open/create the folder.
+        If no custom path, open folder dialog to select a new path.
+        """
+        current_path = self.ui_elements["textureSearchCustomPathLineEdit"].text().strip()
+        
+        if current_path:
+            # Resolve the path with key substitution
+            resolved_path = self._resolve_custom_path_keys(current_path)
+            
+            if resolved_path:
+                # Check if path exists
+                if os.path.exists(resolved_path):
+                    # Open existing folder in file explorer
+                    if os.name == 'nt':  # Windows
+                        os.startfile(resolved_path)
+                    elif os.name == 'posix':  # macOS and Linux
+                        os.system(f'open "{resolved_path}"' if os.uname().sysname == 'Darwin' else f'xdg-open "{resolved_path}"')
+                    print(f"[DEBUG] Opened folder: {resolved_path}")
+                else:
+                    # Path doesn't exist - ask if we should create it
+                    create_if_not_exists = self.ui_elements.get("createIfDoesntExistCheckbox")
+                    if create_if_not_exists and create_if_not_exists.isChecked():
+                        try:
+                            os.makedirs(resolved_path, exist_ok=True)
+                            print(f"[DEBUG] Created folder: {resolved_path}")
+                            
+                            # Open the newly created folder
+                            if os.name == 'nt':  # Windows
+                                os.startfile(resolved_path)
+                            elif os.name == 'posix':  # macOS and Linux
+                                os.system(f'open "{resolved_path}"' if os.uname().sysname == 'Darwin' else f'xdg-open "{resolved_path}"')
+                        except Exception as e:
+                            cmds.warning(f"Failed to create folder '{resolved_path}': {e}")
+                    else:
+                        cmds.warning(f"Folder does not exist: {resolved_path}\nEnable 'Create if doesn't exist' to create it automatically.")
+            else:
+                cmds.warning(f"Invalid path template: {current_path}")
+        else:
+            # No custom path set - open folder dialog to select one
+            start_dir = cmds.workspace(q=True, rootDirectory=True) or ""
+            folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Texture Folder", start_dir)
+            if folder:
+                self.ui_elements["textureSearchCustomPathLineEdit"].setText(folder)
+
+    def _resolve_custom_path_keys(self, path_template):
+        """
+        Resolve key substitution in custom path template.
+        
+        Supported keys:
+        - (scene) → current Maya file folder
+        - (project) → current Maya project folder
+        
+        Everything after the key is treated as regular path components.
+        
+        Examples:
+        - (scene)/textures → [maya file folder]/textures
+        - (project)/sourceimages/materials → [project folder]/sourceimages/materials
+        
+        Returns the resolved path or None if invalid.
+        """
+        if not path_template:
+            return None
+            
+        try:
+            # Get current scene path
+            scene_path = cmds.file(q=True, sn=True) or ""
+            scene_dir = os.path.dirname(scene_path) if scene_path else ""
+            
+            # Get current project path
+            project_path = cmds.workspace(q=True, rootDirectory=True) or ""
+            project_dir = project_path.rstrip("/\\") if project_path else ""
+            
+            # Replace keys
+            resolved = path_template
+            resolved = resolved.replace("(scene)", scene_dir)
+            resolved = resolved.replace("(project)", project_dir)
+            
+            # Normalize path separators
+            resolved = os.path.normpath(resolved)
+            
+            return resolved
+            
+        except Exception as e:
+            print(f"[DEBUG] Error resolving path template '{path_template}': {e}")
+            return None
 
     def open_texture_search_names_ui(self):
         """Launch the TextureSearchNamesUI from the Settings window."""
@@ -2681,19 +2993,19 @@ class TextureImporterSettingsUI(QtWidgets.QWidget):
         self._update_custom_path_widgets()
 
     def _load_settings(self):
-        """Read JSON and return dict (or {})."""
-        path = os.path.join(os.path.dirname(__file__), "settings", "texture_importer_settings.json")
+        """Read JSON from main quick materials settings and return texture_importer section."""
+        path = os.path.join(os.path.dirname(__file__), "settings", "quick_materials_settings.json")
         try:
             with open(path, "r") as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                print(f"[DEBUG] Loaded Texture Importer settings from: {path}")
-                return data
+                all_settings = json.load(f)
+            if isinstance(all_settings, dict) and 'texture_importer' in all_settings:
+                print(f"[DEBUG] Loaded Texture Importer settings from main settings: {path}")
+                return all_settings['texture_importer']
             else:
-                print(f"[DEBUG] Settings JSON was not a dict at {path}; using defaults.")
+                print(f"[DEBUG] Main settings JSON missing texture_importer section at {path}; using defaults.")
                 return {}
         except Exception as e:
-            print(f"[DEBUG] Failed to read settings at {path}: {e}")
+            print(f"[DEBUG] Failed to read main settings at {path}: {e}")
             return {}
 
 
@@ -2706,29 +3018,60 @@ class TextureImporterSettingsUI(QtWidgets.QWidget):
         self.ui_elements["textureSearchMayaSourceimagesCheckbox"].setChecked(mode == "sourceimages")
         self.ui_elements["textureSearchCustomPathCheckbox"].setChecked(mode == "custom")
         self.ui_elements["textureSearchCustomPathLineEdit"].setText(s.get("custom_path", ""))
-        self.ui_elements["textureSearchCustomPathRelativeCheckbox"].setChecked(s.get("relative", False))
-        self.ui_elements["textureSearchAllowRecursiveSearchingCheckbox"].setChecked(s.get("recursive", True))
+        
+        # Create if doesn't exist checkbox
+        create_if_not_exists = self.ui_elements.get("createIfDoesntExistCheckbox")
+        if create_if_not_exists:
+            create_if_not_exists.setChecked(s.get("create_if_doesnt_exist", False))
 
 
 
     def _save_settings(self):
-        """Write settings JSON under scripts/QuickMaterials/settings/texture_importer_settings.json"""
+        """Write settings to the main quick materials settings JSON."""
         mode = "maya_file" if self.ui_elements["textureSearchMayaFileCheckbox"].isChecked() else \
             "sourceimages" if self.ui_elements["textureSearchMayaSourceimagesCheckbox"].isChecked() else \
                 "custom"
         data = {
             "default_mode": mode,  # maya_file | sourceimages | custom
             "custom_path": self.ui_elements["textureSearchCustomPathLineEdit"].text(),
-            "relative": self.ui_elements["textureSearchCustomPathRelativeCheckbox"].isChecked(),
-            "recursive": self.ui_elements["textureSearchAllowRecursiveSearchingCheckbox"].isChecked()
+            # Recursive search settings removed - no longer needed without auto texture pathing
         }
-        settings_dir = os.path.join(os.path.dirname(__file__), "settings")
-        os.makedirs(settings_dir, exist_ok=True)
-        settings_path = os.path.join(settings_dir, "texture_importer_settings.json")
+        
+        # Add create if doesn't exist setting
+        create_if_not_exists = self.ui_elements.get("createIfDoesntExistCheckbox")
+        if create_if_not_exists:
+            data["create_if_doesnt_exist"] = create_if_not_exists.isChecked()
+        
+        # Save to main quick materials settings JSON
         try:
+            # Import the main quick materials module to access the settings file path
+            import os
+            script_dir = os.path.dirname(__file__)
+            settings_dir = os.path.join(script_dir, "settings")
+            os.makedirs(settings_dir, exist_ok=True)
+            settings_path = os.path.join(settings_dir, "quick_materials_settings.json")
+            
+            # Load existing settings or create new structure
+            import json
+            if os.path.exists(settings_path):
+                with open(settings_path, "r") as f:
+                    all_settings = json.load(f)
+            else:
+                all_settings = {
+                    'material_creator': {},
+                    'material_list': {},
+                    'texture_importer': {}
+                }
+            
+            # Update texture importer section
+            all_settings['texture_importer'] = data
+            
+            # Save back to file
             with open(settings_path, "w") as f:
-                json.dump(data, f, indent=4)
-            cmds.confirmDialog(title="Saved", message="Settings saved.", button=["OK"])
+                json.dump(all_settings, f, indent=2)
+                
+            # Show yellow notification instead of dialog
+            cmds.inViewMessage(amg="<hl>✔ Quick Materials Settings Saved</hl>", pos="topCenter", fade=True)
         except Exception as e:
             cmds.confirmDialog(title="Error", message=f"Failed to save settings: {e}", button=["OK"])
 

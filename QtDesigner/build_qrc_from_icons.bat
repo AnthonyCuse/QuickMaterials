@@ -78,6 +78,14 @@ if not exist "%OUT_PY_PARENT%" (
 
 if exist "%OUT_PY_PARENT%" (
   for %%A in ("%OUT_PY_PARENT%") do echo [OK] Created "%%~nxA" (%%~zA bytes).
+  echo.
+  echo [STEP 3] Adding PySide6/PySide2 compatibility to "%OUT_PY_PARENT%"...
+  python -c "import re; f=open(r'%OUT_PY_PARENT%', 'r', encoding='utf-8'); c=f.read(); f.close(); c=re.sub(r'^from PySide[26] import QtCore$', '# Qt compatibility for Maya 2024 (PySide2) & Maya 2025/2026 (PySide6)\ntry:\n    # Maya 2025+\n    from PySide6 import QtCore\nexcept ImportError:\n    # Maya 2024-\n    from PySide2 import QtCore', c, flags=re.M); f=open(r'%OUT_PY_PARENT%', 'w', encoding='utf-8'); f.write(c); f.close()"
+  if !errorlevel! EQU 0 (
+    echo [OK] Compatibility code added.
+  ) else (
+    echo [WARN] Failed to add compatibility code. Please manually replace "from PySide2 import QtCore" or "from PySide6 import QtCore" with the compatibility code.
+  )
 ) else (
   echo [ERROR] Failed to create "%OUT_PY_PARENT%".
   echo        Try running manually:

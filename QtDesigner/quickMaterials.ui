@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>310</width>
-    <height>719</height>
+    <width>300</width>
+    <height>980</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -18,7 +18,7 @@
   </property>
   <property name="minimumSize">
    <size>
-    <width>300</width>
+    <width>250</width>
     <height>0</height>
    </size>
   </property>
@@ -31,7 +31,22 @@
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_13">
+  <layout class="QVBoxLayout" name="verticalLayout_20">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
    <item>
     <widget class="QFrame" name="mainUIFrame">
      <property name="sizePolicy">
@@ -49,7 +64,7 @@
      <property name="styleSheet">
       <string notr="true">QFrame {
     /* Background */
-    background-color:#555555;  /* Dark grey background color */ 
+    background-color:#333333;  /* Dark grey background color */ 
     /* background-image: url('background.png');  /* Optional background image */ 
     /* background-repeat: no-repeat;  /* Prevents the background image from repeating */ 
     /* background-position: center;  /* Centers the background image */ 
@@ -60,8 +75,8 @@
     /* border-style: solid;  /* Border style can be solid, dashed, dotted, etc. */ 
 
     /* Padding and Margin */
-    padding: 3px;  /* Inner space between the frame content and its border */ 
-    margin: 3px;  /* Outer space around the frame */ 
+    padding: 2px;  /* Inner space between the frame content and its border */ 
+    margin: 2px;  /* Outer space around the frame */ 
     border-radius: 10px;  /* Rounded corners */
     
     /* Font */
@@ -91,24 +106,24 @@
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_9">
       <property name="spacing">
-       <number>3</number>
+       <number>1</number>
       </property>
       <property name="leftMargin">
-       <number>0</number>
+       <number>3</number>
       </property>
       <property name="topMargin">
-       <number>0</number>
+       <number>3</number>
       </property>
       <property name="rightMargin">
-       <number>0</number>
+       <number>3</number>
       </property>
       <property name="bottomMargin">
-       <number>0</number>
+       <number>3</number>
       </property>
       <item>
        <layout class="QHBoxLayout" name="menuVisibilityLayout">
         <property name="spacing">
-         <number>6</number>
+         <number>4</number>
         </property>
         <property name="leftMargin">
          <number>5</number>
@@ -199,7 +214,7 @@ QPushButton:disabled {
 }
 
 QPushButton:hover {
-    border: 0px solid #ffffff;  /* Optional white border on hover */
+    border: 0px solid #00f7c8;  /* Optional white border on hover */
 }
 
 QPushButton:pressed {
@@ -209,12 +224,13 @@ QPushButton:pressed {
 QPushButton:checked {
     font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
     font-size: 12px;  /* Adjust the font size as needed */
-    color: #ffffff;  /* White text color when checked */
-    background-color: #777777;  /* Dark grey background when checked */
-    border: 0px solid #ffffff;  /* Optional white border */
+    font-weight: bold;  /* Make text bold when checked */
+    color: #ededed;  /* White text color when checked */
+    background-color: #666666;  /* Dark grey background when checked */
+    border: 0px solid #00f7c8;  /* Optional white border */
     border-radius: 8px;  /* Rounded corners */
-
 }
+
 
 QPushButton:unchecked {
     font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
@@ -227,7 +243,7 @@ QPushButton:unchecked {
 }
 
 QPushButton:hover:checked {
-    border: 0px solid #ffffff;  /* Optional white border on hover when checked */
+    border: 0px solid #00f7c8;  /* Optional white border on hover when checked */
 }
 </string>
           </property>
@@ -268,7 +284,7 @@ QPushButton:hover:checked {
 }
 
 QPushButton:hover {
-    border: 0px solid #ffffff;  /* Optional white border on hover */
+    border: 0px solid #00f7c8;  /* Optional white border on hover */
 }
 
 QPushButton:pressed {
@@ -278,12 +294,13 @@ QPushButton:pressed {
 QPushButton:checked {
     font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
     font-size: 12px;  /* Adjust the font size as needed */
-    color: #ffffff;  /* White text color when checked */
-    background-color: #777777;  /* Dark grey background when checked */
-    border: 0px solid #ffffff;  /* Optional white border */
+    font-weight: bold;  /* Make text bold when checked */
+    color: #ededed;  /* White text color when checked */
+    background-color: #666666;  /* Dark grey background when checked */
+    border: 0px solid #00f7c8;  /* Optional white border */
     border-radius: 8px;  /* Rounded corners */
-
 }
+
 
 QPushButton:unchecked {
     font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
@@ -296,7 +313,7 @@ QPushButton:unchecked {
 }
 
 QPushButton:hover:checked {
-    border: 0px solid #ffffff;  /* Optional white border on hover when checked */
+    border: 0px solid #00f7c8;  /* Optional white border on hover when checked */
 }
 </string>
           </property>
@@ -337,7 +354,7 @@ QPushButton:hover:checked {
 }
 
 QPushButton:hover {
-    border: 0px solid #ffffff;  /* Optional white border on hover */
+    border: 0px solid #00f7c8;  /* Optional white border on hover */
 }
 
 QPushButton:pressed {
@@ -347,12 +364,13 @@ QPushButton:pressed {
 QPushButton:checked {
     font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
     font-size: 12px;  /* Adjust the font size as needed */
-    color: #ffffff;  /* White text color when checked */
-    background-color: #777777;  /* Dark grey background when checked */
-    border: 0px solid #ffffff;  /* Optional white border */
+    font-weight: bold;  /* Make text bold when checked */
+    color: #ededed;  /* White text color when checked */
+    background-color: #666666;  /* Dark grey background when checked */
+    border: 0px solid #00f7c8;  /* Optional white border */
     border-radius: 8px;  /* Rounded corners */
-
 }
+
 
 QPushButton:unchecked {
     font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
@@ -365,7 +383,7 @@ QPushButton:unchecked {
 }
 
 QPushButton:hover:checked {
-    border: 0px solid #ffffff;  /* Optional white border on hover when checked */
+    border: 0px solid #00f7c8;  /* Optional white border on hover when checked */
 }
 </string>
           </property>
@@ -373,6 +391,86 @@ QPushButton:hover:checked {
            <string>List</string>
           </property>
           <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="quickMaterialsSettingsButton">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>15</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="font">
+           <font>
+            <family>Segoe UI</family>
+            <pointsize>-1</pointsize>
+           </font>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">QPushButton {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 16px;  /* Adjust the font size as needed */
+    color: #999999;  /* Faded grey text when unchecked */
+    background-color: transparent;  /* Transparent background */
+    border: none;  /* Remove border entirely */
+    border-radius: 8px;
+    padding: 0px;  /* Small padding to center icon */
+    margin: 0px;
+    qproperty-iconSize: 18px 18px;  /* Make icon larger */
+    image: url(&quot;:/icons/settings_icon.png&quot;); /* Default icon */
+}
+
+/* Hover keeps normal icon, optional glow or border */
+QPushButton:hover {
+    border: none;
+    background-color: transparent;
+}
+
+/* Pressed version of the icon */
+QPushButton:pressed {
+    image: url(&quot;:/icons/settings_icon_pressed.png&quot;);
+    background-color: transparent;
+    border: none;
+}
+
+QPushButton:unchecked {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 10px;  /* Adjust the font size as needed */
+    color: #111111;  /* Faded grey text when unchecked */
+    background-color: #3a3a3a;  /* Light grey background when unchecked */
+    border: 0px solid #ffffff;  /* Optional border */
+    border-radius: 8px;  /* Rounded corners */
+
+}
+
+QPushButton:hover:checked {
+    border: 0px solid #00f7c8;  /* Optional white border on hover when checked */
+}
+</string>
+          </property>
+          <property name="text">
+           <string/>
+          </property>
+          <property name="icon">
+           <iconset resource="icons.qrc">
+            <normaloff>:/icons/settings_icon.png</normaloff>:/icons/settings_icon.png</iconset>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+          <property name="checked">
            <bool>true</bool>
           </property>
          </widget>
@@ -444,7 +542,7 @@ QPushButton:hover:checked {
         </property>
         <layout class="QVBoxLayout" name="materialCreatorFrameLayout">
          <property name="spacing">
-          <number>3</number>
+          <number>0</number>
          </property>
          <property name="sizeConstraint">
           <enum>QLayout::SetDefaultConstraint</enum>
@@ -474,7 +572,7 @@ QPushButton:hover:checked {
            <property name="styleSheet">
             <string notr="true">QLabel {
     font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
-    font-size: 16px;  /* Adjust the font size as needed */
+    font-size: 14px;  /* Adjust the font size as needed */
     font-weight: bold;  /* Makes the text bold */
     color: #d6d6d6;  /* White text color */
     /*background-color: #555555;  /* Dark background color */
@@ -502,6 +600,24 @@ QPushButton:disabled {
            </property>
            <property name="alignment">
             <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_3">
+           <property name="styleSheet">
+            <string notr="true">QLabel {
+    background-color: #333333;
+    border: none;
+    margin: 5px 0px;
+    min-height: 1px;
+    max-height: 1px;
+    color: transparent;
+	padding: 0px;
+}</string>
+           </property>
+           <property name="text">
+            <string>TextLabel</string>
            </property>
           </widget>
          </item>
@@ -563,7 +679,7 @@ QPushButton:disabled {
 }</string>
              </property>
              <property name="text">
-              <string>Material Type:</string>
+              <string>Shader:</string>
              </property>
              <property name="alignment">
               <set>Qt::AlignBottom|Qt::AlignRight|Qt::AlignTrailing</set>
@@ -598,21 +714,25 @@ QComboBox:hover {
 }
 
 QComboBox::drop-down {
-    border-left: 0px solid #666666;
-    width: 0px;  /* Adjust the size of the drop-down button */
-    background-color: #333333;
-    border-radius: 2px;
-    padding: 0px 0px;
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 14px;                   /* Match QDoubleSpinBox arrow width area */
+    border: none;
+    background: transparent;       /* Keep clean look */
+    margin-right: 0px;
+    padding: 0;
 }
 
 QComboBox::down-arrow {
-    image: url(:/arrow-down.png);  /* Use your actual image file or a built-in Qt arrow */
-    width: 10px;  /* Set the width of the arrow */
-    height: 10px;  /* Set the height of the arrow */
+    image: url(&quot;:/icons/arrow_combo_box.png&quot;); 
+    width: 10px; 
+    height: 10px; 
+    margin: 0px 5px -2 0;         /* Matches QDoubleSpinBox arrow alignment */
 }
 
-QComboBox::down-arrow:hover {
-    image: url(:/arrow-down-hover.png);  /* Optional: arrow image for hover state */
+/* Optional pressed / hover variants to match QDoubleSpinBox */
+QComboBox::down-arrow:pressed {
+    image: url(&quot;:/icons/arrow_combo_box.png&quot;);
 }
 
 QComboBox QAbstractItemView {
@@ -646,7 +766,7 @@ QComboBox::disabled {
              </property>
              <property name="sizeHint" stdset="0">
               <size>
-               <width>35</width>
+               <width>10</width>
                <height>20</height>
               </size>
              </property>
@@ -1107,7 +1227,7 @@ QSlider::add-page:horizontal {
                    </property>
                    <property name="sizeHint" stdset="0">
                     <size>
-                     <width>35</width>
+                     <width>10</width>
                      <height>20</height>
                     </size>
                    </property>
@@ -1324,7 +1444,7 @@ QDoubleSpinBox::down-arrow:pressed {
     background: #404040;  /* Avoid filling behind groove */
     border-radius: 6px;
     height:15px;
-    width: 50px;   
+    width: 10px;   
 }
 
 QSlider::groove:horizontal {
@@ -1386,7 +1506,7 @@ QSlider::sub-page:horizontal {
                    </property>
                    <property name="sizeHint" stdset="0">
                     <size>
-                     <width>35</width>
+                     <width>10</width>
                      <height>20</height>
                     </size>
                    </property>
@@ -1668,7 +1788,1135 @@ QSlider::sub-page:horizontal {
                    </property>
                    <property name="sizeHint" stdset="0">
                     <size>
-                     <width>35</width>
+                     <width>10</width>
+                     <height>20</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QFrame" name="emissionSliderFrame">
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::StyledPanel</enum>
+              </property>
+              <property name="frameShadow">
+               <enum>QFrame::Raised</enum>
+              </property>
+              <layout class="QVBoxLayout" name="verticalLayout_13">
+               <property name="spacing">
+                <number>0</number>
+               </property>
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <layout class="QHBoxLayout" name="emissionSliderLayout">
+                 <property name="spacing">
+                  <number>0</number>
+                 </property>
+                 <item>
+                  <widget class="QLabel" name="emissionTextLabel">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>100</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>300</width>
+                     <height>16777215</height>
+                    </size>
+                   </property>
+                   <property name="font">
+                    <font>
+                     <family>Segoe UI</family>
+                     <pointsize>-1</pointsize>
+                    </font>
+                   </property>
+                   <property name="autoFillBackground">
+                    <bool>false</bool>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QLabel {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 12px;  /* Adjust the font size as needed */
+    font-weight: regular;  /* Makes the text bold */
+    color: #d6d6d6;  /* White text color */
+    /*background-color: #555555;  /* Dark background color */
+    border: 0px solid #555555;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+	padding: 5px;
+	margin: 0px;
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+                   </property>
+                   <property name="text">
+                    <string>Emission:</string>
+                   </property>
+                   <property name="alignment">
+                    <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QDoubleSpinBox" name="emissionSpinBox">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>39</width>
+                     <height>15</height>
+                    </size>
+                   </property>
+                   <property name="autoFillBackground">
+                    <bool>false</bool>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QDoubleSpinBox {
+    font-family: 'Segoe UI';
+    font-size: 12px;
+    color: #ffffff;
+    background-color: #404040;
+    border: 1px solid #444444;
+    border-radius: 7px;             /* Rounded field */
+    padding: 2px 5px;               /* Text padding (fixed missing colon) */
+    padding-right: 2px;            /* Reserve space for the buttons */
+    min-height: 5px;               /* Avoid vertical clipping */
+    min-width: 30px;
+    margin: 2px 0;
+    selection-background-color: transparent;
+    selection-color: #ffffff;   /* keep text readable */
+
+}
+
+/* Define button sizes/placement so padding-right matches them */
+QDoubleSpinBox::up-button,
+QDoubleSpinBox::down-button {
+    subcontrol-origin: border;
+    width: 12px;                    /* Button width */
+    border: none;
+    background: transparent;        /* Keep your look; arrows are default */
+}
+
+QDoubleSpinBox::up-button {
+    subcontrol-position: top right;
+    margin: 0px 0px 0 0;        /* Tighter to text */
+}
+
+QDoubleSpinBox::down-button {
+    subcontrol-position: bottom right;
+    margin: 0px 0px 0 0;        /* Tighter to text */
+}
+
+QDoubleSpinBox::up-arrow   { 
+    image: url(&quot;:/icons/arrow_up.png&quot;);   
+    width: 10px; height: 10px; 
+    margin: 3px 10px 0 0; 
+}
+
+QDoubleSpinBox::down-arrow { 
+    image: url(&quot;:/icons/arrow_down.png&quot;); 
+    width: 10px; height: 10px; 
+    margin: -3px 10px 0 0; 
+}
+
+/* Alternate icons when pressed */
+QDoubleSpinBox::up-arrow:pressed {
+    image: url(&quot;:/icons/arrow_pressed_up.png&quot;);
+}
+QDoubleSpinBox::down-arrow:pressed {
+    image: url(&quot;:/icons/arrow_pressed_down.png&quot;);
+}
+
+
+/* NOTE: No ::up-arrow / ::down-arrow blocks here, so Qt draws the default arrows */
+</string>
+                   </property>
+                   <property name="maximum">
+                    <double>1.000000000000000</double>
+                   </property>
+                   <property name="singleStep">
+                    <double>0.100000000000000</double>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QSlider" name="emissionSlider">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="acceptDrops">
+                    <bool>false</bool>
+                   </property>
+                   <property name="toolTip">
+                    <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Determines the roughness of the newly created materials.&lt;/p&gt;&lt;p&gt;0 - Shiny&lt;/p&gt;&lt;p&gt;1- Rough&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                   </property>
+                   <property name="autoFillBackground">
+                    <bool>false</bool>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QSlider {
+    padding: 0px;
+    border: #333333;  /* Clean slider background */
+    background: #404040;  /* Avoid filling behind groove */
+    border-radius: 6px;
+    height:15px;
+    width: 10px;   
+}
+
+QSlider::groove:horizontal {
+    border: 0px;
+    height:4px;  /* Groove height (make this smaller for thinner bar) */
+    background: #262626;
+    border-radius: 2px;
+}
+
+
+QSlider::handle:horizontal {
+    background: #e0e0e0;
+    border: 1px solid #555555;
+    width: 10px;        /* Round handle size */
+    height: 10px;
+    margin: -4px 0;     /* Centers the handle on thin groove */
+    border-radius: 5px; /* Fully rounded handle */
+
+}
+
+QSlider::handle:horizontal:hover {
+    background: #ffffff;
+}
+
+QSlider::handle:horizontal:pressed {
+    background: #aaaaaa;
+}
+
+QSlider::add-page:horizontal {
+    background: #222222;
+}
+
+QSlider::sub-page:horizontal {
+    background: #777777;
+}
+</string>
+                   </property>
+                   <property name="maximum">
+                    <number>100</number>
+                   </property>
+                   <property name="value">
+                    <number>50</number>
+                   </property>
+                   <property name="sliderPosition">
+                    <number>50</number>
+                   </property>
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <spacer name="horizontalSpacer_10">
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                   <property name="sizeType">
+                    <enum>QSizePolicy::Minimum</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>10</width>
+                     <height>20</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QFrame" name="opacitySliderFrame">
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::StyledPanel</enum>
+              </property>
+              <property name="frameShadow">
+               <enum>QFrame::Raised</enum>
+              </property>
+              <layout class="QVBoxLayout" name="verticalLayout_16">
+               <property name="spacing">
+                <number>0</number>
+               </property>
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <layout class="QHBoxLayout" name="OpacitySliderLayout">
+                 <property name="spacing">
+                  <number>0</number>
+                 </property>
+                 <item>
+                  <widget class="QLabel" name="OpacityTextLabel">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>100</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>300</width>
+                     <height>16777215</height>
+                    </size>
+                   </property>
+                   <property name="font">
+                    <font>
+                     <family>Segoe UI</family>
+                     <pointsize>-1</pointsize>
+                    </font>
+                   </property>
+                   <property name="autoFillBackground">
+                    <bool>false</bool>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QLabel {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 12px;  /* Adjust the font size as needed */
+    font-weight: regular;  /* Makes the text bold */
+    color: #d6d6d6;  /* White text color */
+    /*background-color: #555555;  /* Dark background color */
+    border: 0px solid #555555;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+	padding: 5px;
+	margin: 0px;
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+                   </property>
+                   <property name="text">
+                    <string>Opacity:</string>
+                   </property>
+                   <property name="alignment">
+                    <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QDoubleSpinBox" name="opacitySpinBox">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>39</width>
+                     <height>15</height>
+                    </size>
+                   </property>
+                   <property name="autoFillBackground">
+                    <bool>false</bool>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QDoubleSpinBox {
+    font-family: 'Segoe UI';
+    font-size: 12px;
+    color: #ffffff;
+    background-color: #404040;
+    border: 1px solid #444444;
+    border-radius: 7px;             /* Rounded field */
+    padding: 2px 5px;               /* Text padding (fixed missing colon) */
+    padding-right: 2px;            /* Reserve space for the buttons */
+    min-height: 5px;               /* Avoid vertical clipping */
+    min-width: 30px;
+    margin: 2px 0;
+    selection-background-color: transparent;
+    selection-color: #ffffff;   /* keep text readable */
+
+}
+
+/* Define button sizes/placement so padding-right matches them */
+QDoubleSpinBox::up-button,
+QDoubleSpinBox::down-button {
+    subcontrol-origin: border;
+    width: 12px;                    /* Button width */
+    border: none;
+    background: transparent;        /* Keep your look; arrows are default */
+}
+
+QDoubleSpinBox::up-button {
+    subcontrol-position: top right;
+    margin: 0px 0px 0 0;        /* Tighter to text */
+}
+
+QDoubleSpinBox::down-button {
+    subcontrol-position: bottom right;
+    margin: 0px 0px 0 0;        /* Tighter to text */
+}
+
+QDoubleSpinBox::up-arrow   { 
+    image: url(&quot;:/icons/arrow_up.png&quot;);   
+    width: 10px; height: 10px; 
+    margin: 3px 10px 0 0; 
+}
+
+QDoubleSpinBox::down-arrow { 
+    image: url(&quot;:/icons/arrow_down.png&quot;); 
+    width: 10px; height: 10px; 
+    margin: -3px 10px 0 0; 
+}
+
+/* Alternate icons when pressed */
+QDoubleSpinBox::up-arrow:pressed {
+    image: url(&quot;:/icons/arrow_pressed_up.png&quot;);
+}
+QDoubleSpinBox::down-arrow:pressed {
+    image: url(&quot;:/icons/arrow_pressed_down.png&quot;);
+}
+
+
+/* NOTE: No ::up-arrow / ::down-arrow blocks here, so Qt draws the default arrows */
+</string>
+                   </property>
+                   <property name="maximum">
+                    <double>1.000000000000000</double>
+                   </property>
+                   <property name="singleStep">
+                    <double>0.100000000000000</double>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QSlider" name="opacitySlider">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="acceptDrops">
+                    <bool>false</bool>
+                   </property>
+                   <property name="toolTip">
+                    <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Determines the roughness of the newly created materials.&lt;/p&gt;&lt;p&gt;0 - Shiny&lt;/p&gt;&lt;p&gt;1- Rough&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                   </property>
+                   <property name="autoFillBackground">
+                    <bool>false</bool>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QSlider {
+    padding: 0px;
+    border: #333333;  /* Clean slider background */
+    background: #404040;  /* Avoid filling behind groove */
+    border-radius: 6px;
+    height:15px;
+    width: 10px;   
+}
+
+QSlider::groove:horizontal {
+    border: 0px;
+    height:4px;  /* Groove height (make this smaller for thinner bar) */
+    background: #262626;
+    border-radius: 2px;
+}
+
+
+QSlider::handle:horizontal {
+    background: #e0e0e0;
+    border: 1px solid #555555;
+    width: 10px;        /* Round handle size */
+    height: 10px;
+    margin: -4px 0;     /* Centers the handle on thin groove */
+    border-radius: 5px; /* Fully rounded handle */
+
+}
+
+QSlider::handle:horizontal:hover {
+    background: #ffffff;
+}
+
+QSlider::handle:horizontal:pressed {
+    background: #aaaaaa;
+}
+
+QSlider::add-page:horizontal {
+    background: #222222;
+}
+
+QSlider::sub-page:horizontal {
+    background: #777777;
+}
+</string>
+                   </property>
+                   <property name="maximum">
+                    <number>100</number>
+                   </property>
+                   <property name="value">
+                    <number>50</number>
+                   </property>
+                   <property name="sliderPosition">
+                    <number>50</number>
+                   </property>
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <spacer name="horizontalSpacer_16">
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                   <property name="sizeType">
+                    <enum>QSizePolicy::Minimum</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>10</width>
+                     <height>20</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QFrame" name="transmissionSliderFrame">
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::StyledPanel</enum>
+              </property>
+              <property name="frameShadow">
+               <enum>QFrame::Raised</enum>
+              </property>
+              <layout class="QVBoxLayout" name="verticalLayout_17">
+               <property name="spacing">
+                <number>0</number>
+               </property>
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <layout class="QHBoxLayout" name="transmissionSliderLayout">
+                 <property name="spacing">
+                  <number>0</number>
+                 </property>
+                 <item>
+                  <widget class="QLabel" name="transmissionTextLabel">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>100</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>300</width>
+                     <height>16777215</height>
+                    </size>
+                   </property>
+                   <property name="font">
+                    <font>
+                     <family>Segoe UI</family>
+                     <pointsize>-1</pointsize>
+                    </font>
+                   </property>
+                   <property name="autoFillBackground">
+                    <bool>false</bool>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QLabel {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 12px;  /* Adjust the font size as needed */
+    font-weight: regular;  /* Makes the text bold */
+    color: #d6d6d6;  /* White text color */
+    /*background-color: #555555;  /* Dark background color */
+    border: 0px solid #555555;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+	padding: 5px;
+	margin: 0px;
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+                   </property>
+                   <property name="text">
+                    <string>Transmission:</string>
+                   </property>
+                   <property name="alignment">
+                    <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QDoubleSpinBox" name="transmissionSpinBox">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>39</width>
+                     <height>15</height>
+                    </size>
+                   </property>
+                   <property name="autoFillBackground">
+                    <bool>false</bool>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QDoubleSpinBox {
+    font-family: 'Segoe UI';
+    font-size: 12px;
+    color: #ffffff;
+    background-color: #404040;
+    border: 1px solid #444444;
+    border-radius: 7px;             /* Rounded field */
+    padding: 2px 5px;               /* Text padding (fixed missing colon) */
+    padding-right: 2px;            /* Reserve space for the buttons */
+    min-height: 5px;               /* Avoid vertical clipping */
+    min-width: 30px;
+    margin: 2px 0;
+    selection-background-color: transparent;
+    selection-color: #ffffff;   /* keep text readable */
+
+}
+
+/* Define button sizes/placement so padding-right matches them */
+QDoubleSpinBox::up-button,
+QDoubleSpinBox::down-button {
+    subcontrol-origin: border;
+    width: 12px;                    /* Button width */
+    border: none;
+    background: transparent;        /* Keep your look; arrows are default */
+}
+
+QDoubleSpinBox::up-button {
+    subcontrol-position: top right;
+    margin: 0px 0px 0 0;        /* Tighter to text */
+}
+
+QDoubleSpinBox::down-button {
+    subcontrol-position: bottom right;
+    margin: 0px 0px 0 0;        /* Tighter to text */
+}
+
+QDoubleSpinBox::up-arrow   { 
+    image: url(&quot;:/icons/arrow_up.png&quot;);   
+    width: 10px; height: 10px; 
+    margin: 3px 10px 0 0; 
+}
+
+QDoubleSpinBox::down-arrow { 
+    image: url(&quot;:/icons/arrow_down.png&quot;); 
+    width: 10px; height: 10px; 
+    margin: -3px 10px 0 0; 
+}
+
+/* Alternate icons when pressed */
+QDoubleSpinBox::up-arrow:pressed {
+    image: url(&quot;:/icons/arrow_pressed_up.png&quot;);
+}
+QDoubleSpinBox::down-arrow:pressed {
+    image: url(&quot;:/icons/arrow_pressed_down.png&quot;);
+}
+
+
+/* NOTE: No ::up-arrow / ::down-arrow blocks here, so Qt draws the default arrows */
+</string>
+                   </property>
+                   <property name="maximum">
+                    <double>1.000000000000000</double>
+                   </property>
+                   <property name="singleStep">
+                    <double>0.100000000000000</double>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QSlider" name="transmissionSlider">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="acceptDrops">
+                    <bool>false</bool>
+                   </property>
+                   <property name="toolTip">
+                    <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Determines the roughness of the newly created materials.&lt;/p&gt;&lt;p&gt;0 - Shiny&lt;/p&gt;&lt;p&gt;1- Rough&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                   </property>
+                   <property name="autoFillBackground">
+                    <bool>false</bool>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QSlider {
+    padding: 0px;
+    border: #333333;  /* Clean slider background */
+    background: #404040;  /* Avoid filling behind groove */
+    border-radius: 6px;
+    height:15px;
+    width: 10px;   
+}
+
+QSlider::groove:horizontal {
+    border: 0px;
+    height:4px;  /* Groove height (make this smaller for thinner bar) */
+    background: #262626;
+    border-radius: 2px;
+}
+
+
+QSlider::handle:horizontal {
+    background: #e0e0e0;
+    border: 1px solid #555555;
+    width: 10px;        /* Round handle size */
+    height: 10px;
+    margin: -4px 0;     /* Centers the handle on thin groove */
+    border-radius: 5px; /* Fully rounded handle */
+
+}
+
+QSlider::handle:horizontal:hover {
+    background: #ffffff;
+}
+
+QSlider::handle:horizontal:pressed {
+    background: #aaaaaa;
+}
+
+QSlider::add-page:horizontal {
+    background: #222222;
+}
+
+QSlider::sub-page:horizontal {
+    background: #777777;
+}
+</string>
+                   </property>
+                   <property name="maximum">
+                    <number>100</number>
+                   </property>
+                   <property name="value">
+                    <number>50</number>
+                   </property>
+                   <property name="sliderPosition">
+                    <number>50</number>
+                   </property>
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <spacer name="horizontalSpacer_17">
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                   <property name="sizeType">
+                    <enum>QSizePolicy::Minimum</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>10</width>
+                     <height>20</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QFrame" name="subsurfaceSliderFrame">
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::StyledPanel</enum>
+              </property>
+              <property name="frameShadow">
+               <enum>QFrame::Raised</enum>
+              </property>
+              <layout class="QVBoxLayout" name="verticalLayout_18">
+               <property name="spacing">
+                <number>0</number>
+               </property>
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <layout class="QHBoxLayout" name="subsurfaceSliderLayout">
+                 <property name="spacing">
+                  <number>0</number>
+                 </property>
+                 <item>
+                  <widget class="QLabel" name="subsurfaceTextLabel">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>100</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>300</width>
+                     <height>16777215</height>
+                    </size>
+                   </property>
+                   <property name="font">
+                    <font>
+                     <family>Segoe UI</family>
+                     <pointsize>-1</pointsize>
+                    </font>
+                   </property>
+                   <property name="autoFillBackground">
+                    <bool>false</bool>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QLabel {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 12px;  /* Adjust the font size as needed */
+    font-weight: regular;  /* Makes the text bold */
+    color: #d6d6d6;  /* White text color */
+    /*background-color: #555555;  /* Dark background color */
+    border: 0px solid #555555;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+	padding: 5px;
+	margin: 0px;
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+                   </property>
+                   <property name="text">
+                    <string>Subsurface:</string>
+                   </property>
+                   <property name="alignment">
+                    <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QDoubleSpinBox" name="subsurfaceSpinBox">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>39</width>
+                     <height>15</height>
+                    </size>
+                   </property>
+                   <property name="autoFillBackground">
+                    <bool>false</bool>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QDoubleSpinBox {
+    font-family: 'Segoe UI';
+    font-size: 12px;
+    color: #ffffff;
+    background-color: #404040;
+    border: 1px solid #444444;
+    border-radius: 7px;             /* Rounded field */
+    padding: 2px 5px;               /* Text padding (fixed missing colon) */
+    padding-right: 2px;            /* Reserve space for the buttons */
+    min-height: 5px;               /* Avoid vertical clipping */
+    min-width: 30px;
+    margin: 2px 0;
+    selection-background-color: transparent;
+    selection-color: #ffffff;   /* keep text readable */
+
+}
+
+/* Define button sizes/placement so padding-right matches them */
+QDoubleSpinBox::up-button,
+QDoubleSpinBox::down-button {
+    subcontrol-origin: border;
+    width: 12px;                    /* Button width */
+    border: none;
+    background: transparent;        /* Keep your look; arrows are default */
+}
+
+QDoubleSpinBox::up-button {
+    subcontrol-position: top right;
+    margin: 0px 0px 0 0;        /* Tighter to text */
+}
+
+QDoubleSpinBox::down-button {
+    subcontrol-position: bottom right;
+    margin: 0px 0px 0 0;        /* Tighter to text */
+}
+
+QDoubleSpinBox::up-arrow   { 
+    image: url(&quot;:/icons/arrow_up.png&quot;);   
+    width: 10px; height: 10px; 
+    margin: 3px 10px 0 0; 
+}
+
+QDoubleSpinBox::down-arrow { 
+    image: url(&quot;:/icons/arrow_down.png&quot;); 
+    width: 10px; height: 10px; 
+    margin: -3px 10px 0 0; 
+}
+
+/* Alternate icons when pressed */
+QDoubleSpinBox::up-arrow:pressed {
+    image: url(&quot;:/icons/arrow_pressed_up.png&quot;);
+}
+QDoubleSpinBox::down-arrow:pressed {
+    image: url(&quot;:/icons/arrow_pressed_down.png&quot;);
+}
+
+
+/* NOTE: No ::up-arrow / ::down-arrow blocks here, so Qt draws the default arrows */
+</string>
+                   </property>
+                   <property name="maximum">
+                    <double>1.000000000000000</double>
+                   </property>
+                   <property name="singleStep">
+                    <double>0.100000000000000</double>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QSlider" name="subsurfaceSlider">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="acceptDrops">
+                    <bool>false</bool>
+                   </property>
+                   <property name="toolTip">
+                    <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Determines the roughness of the newly created materials.&lt;/p&gt;&lt;p&gt;0 - Shiny&lt;/p&gt;&lt;p&gt;1- Rough&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                   </property>
+                   <property name="autoFillBackground">
+                    <bool>false</bool>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QSlider {
+    padding: 0px;
+    border: #333333;  /* Clean slider background */
+    background: #404040;  /* Avoid filling behind groove */
+    border-radius: 6px;
+    height:15px;
+    width: 10px;   
+}
+
+QSlider::groove:horizontal {
+    border: 0px;
+    height:4px;  /* Groove height (make this smaller for thinner bar) */
+    background: #262626;
+    border-radius: 2px;
+}
+
+
+QSlider::handle:horizontal {
+    background: #e0e0e0;
+    border: 1px solid #555555;
+    width: 10px;        /* Round handle size */
+    height: 10px;
+    margin: -4px 0;     /* Centers the handle on thin groove */
+    border-radius: 5px; /* Fully rounded handle */
+
+}
+
+QSlider::handle:horizontal:hover {
+    background: #ffffff;
+}
+
+QSlider::handle:horizontal:pressed {
+    background: #aaaaaa;
+}
+
+QSlider::add-page:horizontal {
+    background: #222222;
+}
+
+QSlider::sub-page:horizontal {
+    background: #777777;
+}
+</string>
+                   </property>
+                   <property name="maximum">
+                    <number>100</number>
+                   </property>
+                   <property name="value">
+                    <number>50</number>
+                   </property>
+                   <property name="sliderPosition">
+                    <number>50</number>
+                   </property>
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <spacer name="horizontalSpacer_18">
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                   <property name="sizeType">
+                    <enum>QSizePolicy::Minimum</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>10</width>
                      <height>20</height>
                     </size>
                    </property>
@@ -1680,6 +2928,24 @@ QSlider::sub-page:horizontal {
              </widget>
             </item>
            </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_4">
+           <property name="styleSheet">
+            <string notr="true">QLabel {
+    background-color: #333333;
+    border: none;
+    margin: 5px 0px;
+    min-height: 1px;
+    max-height: 1px;
+    color: transparent;
+	padding: 0px;
+}</string>
+           </property>
+           <property name="text">
+            <string>TextLabel</string>
+           </property>
           </widget>
          </item>
          <item>
@@ -1767,7 +3033,16 @@ QPushButton:disabled {
               </size>
              </property>
              <property name="toolTip">
-              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Naming Key:&lt;/p&gt;&lt;p&gt;&lt;br/&gt;{mesh} = include name of selected mesh&lt;/p&gt;&lt;p&gt;{mat_type} = material type (standardSurface, blinn, phong, etc.)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+              <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
+&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
+p, li { white-space: pre-wrap; }
+&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'MS Shell Dlg 2'; font-size:8pt; font-weight:400; font-style:normal;&quot;&gt;
+&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;Naming Key:&lt;/p&gt;
+&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;br /&gt;(selection) = include name of selected mesh or group&lt;/p&gt;
+&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;(mat_type) = material type (standardSurface, blinn, phong, etc.)&lt;/p&gt;
+&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;(scene): current Maya scene file name without extension, or &amp;quot;untitled&amp;quot;&lt;/p&gt;
+&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;(project): current Maya project folder name&lt;/p&gt;
+&lt;p style=&quot; margin-top:12px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;(color):  color of the material  (e.g., red, orange, blue)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
              </property>
              <property name="styleSheet">
               <string notr="true">QLineEdit {
@@ -1804,7 +3079,7 @@ QLabel:hover {
 }</string>
              </property>
              <property name="text">
-              <string>M_(mesh)</string>
+              <string>M_(selection)</string>
              </property>
             </widget>
            </item>
@@ -1818,7 +3093,7 @@ QLabel:hover {
              </property>
              <property name="sizeHint" stdset="0">
               <size>
-               <width>35</width>
+               <width>15</width>
                <height>20</height>
               </size>
              </property>
@@ -1883,6 +3158,9 @@ QPushButton:disabled {
                  <horstretch>0</horstretch>
                  <verstretch>0</verstretch>
                 </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Create a new material for each selection. Select meshes to apply a unique material to each, or select a group to apply a material to all meshes within the group. A mesh selected within a group that is selected will get a unique shader. Use 'Random Hue' to assiign a varied hue to each shader for identification. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                </property>
                <property name="styleSheet">
                 <string notr="true">QCheckBox {
@@ -1952,6 +3230,9 @@ QCheckBox:disabled {
                  <horstretch>0</horstretch>
                  <verstretch>0</verstretch>
                 </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Assign a random value hue to the created material(s)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                </property>
                <property name="styleSheet">
                 <string notr="true">QCheckBox {
@@ -2028,6 +3309,9 @@ QCheckBox:disabled {
         </property>
         <property name="bottomMargin">
          <number>0</number>
+        </property>
+        <property name="spacing">
+         <number>6</number>
         </property>
         <item row="0" column="0">
          <widget class="QFrame" name="materialToolsFrame">
@@ -2144,7 +3428,7 @@ QPushButton:disabled {
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="convertMaterialsButton">
+            <widget class="QPushButton" name="materialManagerButton">
              <property name="font">
               <font>
                <family>Segoe UI</family>
@@ -2180,7 +3464,7 @@ QPushButton:disabled {
 }</string>
              </property>
              <property name="text">
-              <string>Convert Materials</string>
+              <string>Material Manager</string>
              </property>
             </widget>
            </item>
@@ -2228,7 +3512,7 @@ QPushButton:disabled {
     /* border-style: solid;  /* Border style can be solid, dashed, dotted, etc. */ 
 
     /* Padding and Margin */
-    padding: 5px;  /* Inner space between the frame content and its border */ 
+    padding: 3px;  /* Inner space between the frame content and its border */ 
     margin: 3px;  /* Outer space around the frame */ 
     border-radius: 10px;  /* Rounded corners */
     
@@ -2265,7 +3549,7 @@ QPushButton:disabled {
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_5">
            <property name="spacing">
-            <number>0</number>
+            <number>10</number>
            </property>
            <property name="leftMargin">
             <number>0</number>
@@ -2423,7 +3707,735 @@ QPushButton:disabled {
                </property>
               </widget>
              </item>
+             <item>
+              <widget class="QPushButton" name="materialListOptionsButton">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="layoutDirection">
+                <enum>Qt::LeftToRight</enum>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">QPushButton {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 12px;  /* Adjust the font size as needed */
+    color: #ffffff;  /* White text color */
+    background-color: #666666;  /* Dark background color */
+    border: 2px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 2px 5px;  /* Padding around the text */
+}
+
+QPushButton:hover {
+    background-color: #888888;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #333333;  /* Darker background when pressed */
+}
+
+QPushButton:checked {
+    background-color: #333333;  /* Darker background when checked */
+    border: 1px solid #00f7c8;  /* Optional border with dark grey color */
+
+}
+
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}
+</string>
+               </property>
+               <property name="text">
+                <string>Options</string>
+               </property>
+               <property name="checkable">
+                <bool>true</bool>
+               </property>
+               <property name="checked">
+                <bool>false</bool>
+               </property>
+              </widget>
+             </item>
             </layout>
+           </item>
+           <item>
+            <widget class="QFrame" name="materialListOptionsFrame">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QFrame {
+    /* Background */
+    background-color:#383838;  /* Dark grey background color */ 
+    /* background-image: url('background.png');  /* Optional background image */ 
+    /* background-repeat: no-repeat;  /* Prevents the background image from repeating */ 
+    /* background-position: center;  /* Centers the background image */ 
+
+    /* Border */
+	border: 0px solid #333333;  /* Solid border with color and thickness */ 
+    border-radius: 0px;  /* Rounded corners with 10px radius */ 
+    /* border-style: solid;  /* Border style can be solid, dashed, dotted, etc. */ 
+
+    /* Padding and Margin */
+    padding: 0px;  /* Inner space between the frame content and its border */ 
+    margin: 0px;  /* Outer space around the frame */ 
+    border-radius: 10px;  /* Rounded corners */
+    
+    /* Font */
+    /*font-family: Arial, Helvetica, sans-serif;  /* Font family */
+    /*font-size: 14px;  /* Font size */
+    /*font-weight: bold;  /* Font weight: normal, bold, bolder, lighter, or numeric values */
+    /*font-style: italic;  /* Font style: normal, italic, or oblique */
+   color: #ffffff;  /* Text color */
+    /*text-align: center;  /* Text alignment: left, right, center, justify */
+    /*text-decoration: underline;  /* Text decoration: underline, overline, line-through, none */
+    /*letter-spacing: 1px;  /* Spacing between letters */
+    
+    /* Shadow */
+    /*box-shadow: 2px 2px 5px #1a1a1a;  /* Adds a shadow with x-offset, y-offset, blur radius, and color */
+    
+    /* Gradient Background (Optional) */
+    /*background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #3e3e3e, stop:1 #2b2b2b);  /* Linear gradient */
+    /*background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #4a4a4a, stop:1 #2b2b2b);  /* Radial gradient */
+    
+    /* Opacity */
+    /*opacity: 0.9;  /* Transparency: 0.0 (fully transparent) to 1.0 (fully opaque) */
+    
+    /* Cursor */
+    /*cursor: pointer;  /* Changes the cursor to a pointer when hovering */
+}
+</string>
+             </property>
+             <property name="frameShape">
+              <enum>QFrame::StyledPanel</enum>
+             </property>
+             <property name="frameShadow">
+              <enum>QFrame::Raised</enum>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_15">
+              <property name="spacing">
+               <number>1</number>
+              </property>
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <widget class="QFrame" name="frame_6">
+                <property name="styleSheet">
+                 <string notr="true">QFrame {
+    /* Background */
+    background-color:#3a3a3a;  /* Dark grey background color */ 
+    /* background-image: url('background.png');  /* Optional background image */ 
+    /* background-repeat: no-repeat;  /* Prevents the background image from repeating */ 
+    /* background-position: center;  /* Centers the background image */ 
+
+    /* Border */
+	border: 1px solid #00f7c8;  /* Solid border with color and thickness */ 
+    border-radius: 10px;  /* Rounded corners with 10px radius */ 
+    /* border-style: solid;  /* Border style can be solid, dashed, dotted, etc. */ 
+
+    /* Padding and Margin */
+    padding: 0px;  /* Inner space between the frame content and its border */ 
+    margin: 0px;  /* Outer space around the frame */ 
+    
+    /* Font */
+    /*font-family: Arial, Helvetica, sans-serif;  /* Font family */
+    /*font-size: 14px;  /* Font size */
+    /*font-weight: bold;  /* Font weight: normal, bold, bolder, lighter, or numeric values */
+    /*font-style: italic;  /* Font style: normal, italic, or oblique */
+   color: #ffffff;  /* Text color */
+    /*text-align: center;  /* Text alignment: left, right, center, justify */
+    /*text-decoration: underline;  /* Text decoration: underline, overline, line-through, none */
+    /*letter-spacing: 1px;  /* Spacing between letters */
+    
+    /* Shadow */
+    /*box-shadow: 2px 2px 5px #1a1a1a;  /* Adds a shadow with x-offset, y-offset, blur radius, and color */
+    
+    /* Gradient Background (Optional) */
+    /*background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #3e3e3e, stop:1 #2b2b2b);  /* Linear gradient */
+    /*background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #4a4a4a, stop:1 #2b2b2b);  /* Radial gradient */
+    
+    /* Opacity */
+    /*opacity: 0.9;  /* Transparency: 0.0 (fully transparent) to 1.0 (fully opaque) */
+    
+    /* Cursor */
+    /*cursor: pointer;  /* Changes the cursor to a pointer when hovering */
+}
+</string>
+                </property>
+                <property name="frameShape">
+                 <enum>QFrame::StyledPanel</enum>
+                </property>
+                <property name="frameShadow">
+                 <enum>QFrame::Raised</enum>
+                </property>
+                <layout class="QVBoxLayout" name="verticalLayout_19">
+                 <property name="spacing">
+                  <number>1</number>
+                 </property>
+                 <property name="leftMargin">
+                  <number>5</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>5</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>5</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>5</number>
+                 </property>
+                 <item>
+                  <widget class="QLabel" name="materialCreatorTitleLabel_2">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>0</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                   <property name="baseSize">
+                    <size>
+                     <width>0</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                   <property name="font">
+                    <font>
+                     <family>Segoe UI</family>
+                     <pointsize>-1</pointsize>
+                    </font>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QLabel {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 13px;  /* Adjust the font size as needed */
+    font-weight: italic;  /* Makes the text bold */
+    color: #d6d6d6;  /* White text color */
+    /*background-color: #555555;  /* Dark background color */
+    border: 0px solid #555555;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 0px 0px 0px 8px;  /* Added left padding */
+
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+                   </property>
+                   <property name="text">
+                    <string>Material List Options</string>
+                   </property>
+                   <property name="alignment">
+                    <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLabel" name="label_6">
+                   <property name="styleSheet">
+                    <string notr="true">QLabel {
+    background-color: #333333;
+    border: none;
+    margin: 2px 0px;
+    min-height: 1px;
+    max-height: 1px;
+    color: transparent;
+}</string>
+                   </property>
+                   <property name="text">
+                    <string>TextLabel</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QCheckBox" name="hideDefaultMaterialsCheckbox">
+                   <property name="enabled">
+                    <bool>true</bool>
+                   </property>
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';
+    font-size: 11px;              /* Slightly smaller text */
+    color: #dddddd;               /* Neutral text when unchecked */
+    background-color: #444444;
+    border: none;
+    border-radius: 6px;           /* Softer, smaller rounding */
+    padding: 2px 6px;             /* Less padding = tighter fit */
+    margin: 1px 0;                /* Small vertical margin */
+}
+
+QCheckBox:checked {
+    color: #00f7c8;               /* Highlight color only when checked */
+}
+
+
+QCheckBox::indicator {
+    width: 12px;                  /* Smaller checkbox */
+    height: 12px;
+    border: 1px solid #444444;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 1px solid #2b2b2b;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;
+    border: 1px solid #444444;
+}
+
+QCheckBox::indicator:checked:hover,
+QCheckBox::indicator:unchecked:hover {
+    border: 1px solid #ffffff;
+}
+
+QCheckBox::indicator:checked:pressed,
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;
+    border: 1px solid #ffffff;
+}
+
+/* Disabled state */
+QCheckBox:disabled {
+    color: #666666;
+    background-color: #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+</string>
+                   </property>
+                   <property name="text">
+                    <string>Hide Default Materials</string>
+                   </property>
+                   <property name="checked">
+                    <bool>false</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QCheckBox" name="hideNamespacesCheckbox">
+                   <property name="enabled">
+                    <bool>true</bool>
+                   </property>
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';
+    font-size: 11px;              /* Slightly smaller text */
+    color: #dddddd;               /* Neutral text when unchecked */
+    background-color: #444444;
+    border: none;
+    border-radius: 6px;           /* Softer, smaller rounding */
+    padding: 2px 6px;             /* Less padding = tighter fit */
+    margin: 1px 0;                /* Small vertical margin */
+}
+
+QCheckBox:checked {
+    color: #00f7c8;               /* Highlight color only when checked */
+}
+
+
+QCheckBox::indicator {
+    width: 12px;                  /* Smaller checkbox */
+    height: 12px;
+    border: 1px solid #444444;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 1px solid #2b2b2b;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;
+    border: 1px solid #444444;
+}
+
+QCheckBox::indicator:checked:hover,
+QCheckBox::indicator:unchecked:hover {
+    border: 1px solid #ffffff;
+}
+
+QCheckBox::indicator:checked:pressed,
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;
+    border: 1px solid #ffffff;
+}
+
+/* Disabled state */
+QCheckBox:disabled {
+    color: #666666;
+    background-color: #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+</string>
+                   </property>
+                   <property name="text">
+                    <string>Hide Namespaces</string>
+                   </property>
+                   <property name="checked">
+                    <bool>false</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QCheckBox" name="showTexturesCheckbox">
+                   <property name="enabled">
+                    <bool>true</bool>
+                   </property>
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';
+    font-size: 11px;              /* Slightly smaller text */
+    color: #dddddd;               /* Neutral text when unchecked */
+    background-color: #444444;
+    border: none;
+    border-radius: 6px;           /* Softer, smaller rounding */
+    padding: 2px 6px;             /* Less padding = tighter fit */
+    margin: 1px 0;                /* Small vertical margin */
+}
+
+QCheckBox:checked {
+    color: #00f7c8;               /* Highlight color only when checked */
+}
+
+
+QCheckBox::indicator {
+    width: 12px;                  /* Smaller checkbox */
+    height: 12px;
+    border: 1px solid #444444;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 1px solid #2b2b2b;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;
+    border: 1px solid #444444;
+}
+
+QCheckBox::indicator:checked:hover,
+QCheckBox::indicator:unchecked:hover {
+    border: 1px solid #ffffff;
+}
+
+QCheckBox::indicator:checked:pressed,
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;
+    border: 1px solid #ffffff;
+}
+
+/* Disabled state */
+QCheckBox:disabled {
+    color: #666666;
+    background-color: #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+</string>
+                   </property>
+                   <property name="text">
+                    <string>Show Textures</string>
+                   </property>
+                   <property name="checked">
+                    <bool>false</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QCheckBox" name="showProceduralTexturesCheckbox">
+                   <property name="enabled">
+                    <bool>true</bool>
+                   </property>
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';
+    font-size: 11px;              /* Slightly smaller text */
+    color: #dddddd;               /* Neutral text when unchecked */
+    background-color: #444444;
+    border: none;
+    border-radius: 6px;           /* Softer, smaller rounding */
+    padding: 2px 6px;             /* Less padding = tighter fit */
+    margin: 1px 0;                /* Small vertical margin */
+}
+
+QCheckBox:checked {
+    color: #00f7c8;               /* Highlight color only when checked */
+}
+
+
+QCheckBox::indicator {
+    width: 12px;                  /* Smaller checkbox */
+    height: 12px;
+    border: 1px solid #444444;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 1px solid #2b2b2b;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;
+    border: 1px solid #444444;
+}
+
+QCheckBox::indicator:checked:hover,
+QCheckBox::indicator:unchecked:hover {
+    border: 1px solid #ffffff;
+}
+
+QCheckBox::indicator:checked:pressed,
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;
+    border: 1px solid #ffffff;
+}
+
+/* Disabled state */
+QCheckBox:disabled {
+    color: #666666;
+    background-color: #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+</string>
+                   </property>
+                   <property name="text">
+                    <string>Show Nodes</string>
+                   </property>
+                   <property name="checked">
+                    <bool>false</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QCheckBox" name="showShadingGroupsCheckbox">
+                   <property name="enabled">
+                    <bool>true</bool>
+                   </property>
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';
+    font-size: 11px;              /* Slightly smaller text */
+    color: #dddddd;               /* Neutral text when unchecked */
+    background-color: #444444;
+    border: none;
+    border-radius: 6px;           /* Softer, smaller rounding */
+    padding: 2px 6px;             /* Less padding = tighter fit */
+    margin: 1px 0;                /* Small vertical margin */
+}
+
+QCheckBox:checked {
+    color: #00f7c8;               /* Highlight color only when checked */
+}
+
+
+QCheckBox::indicator {
+    width: 12px;                  /* Smaller checkbox */
+    height: 12px;
+    border: 1px solid #444444;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 1px solid #2b2b2b;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;
+    border: 1px solid #444444;
+}
+
+QCheckBox::indicator:checked:hover,
+QCheckBox::indicator:unchecked:hover {
+    border: 1px solid #ffffff;
+}
+
+QCheckBox::indicator:checked:pressed,
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;
+    border: 1px solid #ffffff;
+}
+
+/* Disabled state */
+QCheckBox:disabled {
+    color: #666666;
+    background-color: #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+</string>
+                   </property>
+                   <property name="text">
+                    <string>Show Shading Groups</string>
+                   </property>
+                   <property name="checked">
+                    <bool>false</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QCheckBox" name="toggleListButtonsCheckbox">
+                   <property name="enabled">
+                    <bool>true</bool>
+                   </property>
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';
+    font-size: 11px;              /* Slightly smaller text */
+    color: #dddddd;               /* Neutral text when unchecked */
+    background-color: #444444;
+    border: none;
+    border-radius: 6px;           /* Softer, smaller rounding */
+    padding: 2px 6px;             /* Less padding = tighter fit */
+    margin: 1px 0;                /* Small vertical margin */
+}
+
+QCheckBox:checked {
+    color: #00f7c8;               /* Highlight color only when checked */
+}
+
+
+QCheckBox::indicator {
+    width: 12px;                  /* Smaller checkbox */
+    height: 12px;
+    border: 1px solid #444444;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 1px solid #2b2b2b;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;
+    border: 1px solid #444444;
+}
+
+QCheckBox::indicator:checked:hover,
+QCheckBox::indicator:unchecked:hover {
+    border: 1px solid #ffffff;
+}
+
+QCheckBox::indicator:checked:pressed,
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;
+    border: 1px solid #ffffff;
+}
+
+/* Disabled state */
+QCheckBox:disabled {
+    color: #666666;
+    background-color: #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+</string>
+                   </property>
+                   <property name="text">
+                    <string>Toggle List Buttons</string>
+                   </property>
+                   <property name="checked">
+                    <bool>false</bool>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+             </layout>
+            </widget>
            </item>
            <item>
             <widget class="QFrame" name="materialListFiltersFrame">
@@ -2449,12 +4461,12 @@ QPushButton:disabled {
 
     /* Border */
 	border: 0px solid #333333;  /* Solid border with color and thickness */ 
-    border-radius: 10px;  /* Rounded corners with 10px radius */ 
+    border-radius: 0px;  /* Rounded corners with 10px radius */ 
     /* border-style: solid;  /* Border style can be solid, dashed, dotted, etc. */ 
 
     /* Padding and Margin */
-    padding: 3px;  /* Inner space between the frame content and its border */ 
-    margin: 3px;  /* Outer space around the frame */ 
+    padding: 0px;  /* Inner space between the frame content and its border */ 
+    margin: 0px;  /* Outer space around the frame */ 
     border-radius: 10px;  /* Rounded corners */
     
     /* Font */
@@ -2509,20 +4521,19 @@ QPushButton:disabled {
                 <property name="styleSheet">
                  <string notr="true">QFrame {
     /* Background */
-    background-color:#444444;  /* Dark grey background color */ 
+    background-color:#3a3a3a;  /* Dark grey background color */ 
     /* background-image: url('background.png');  /* Optional background image */ 
     /* background-repeat: no-repeat;  /* Prevents the background image from repeating */ 
     /* background-position: center;  /* Centers the background image */ 
 
     /* Border */
-	border: 2px solid #333333;  /* Solid border with color and thickness */ 
+	border: 1px solid #00f7c8;  /* Solid border with color and thickness */ 
     border-radius: 10px;  /* Rounded corners with 10px radius */ 
     /* border-style: solid;  /* Border style can be solid, dashed, dotted, etc. */ 
 
     /* Padding and Margin */
     padding: 0px;  /* Inner space between the frame content and its border */ 
     margin: 0px;  /* Outer space around the frame */ 
-    border-radius: 10px;  /* Rounded corners */
     
     /* Font */
     /*font-family: Arial, Helvetica, sans-serif;  /* Font family */
@@ -2560,19 +4571,19 @@ QPushButton:disabled {
                   <number>1</number>
                  </property>
                  <property name="leftMargin">
-                  <number>3</number>
+                  <number>5</number>
                  </property>
                  <property name="topMargin">
-                  <number>3</number>
+                  <number>5</number>
                  </property>
                  <property name="rightMargin">
-                  <number>3</number>
+                  <number>5</number>
                  </property>
                  <property name="bottomMargin">
-                  <number>3</number>
+                  <number>5</number>
                  </property>
                  <item>
-                  <widget class="QLabel" name="materialCreatorTitleLabel_2">
+                  <widget class="QLabel" name="materialCreatorTitleLabel_3">
                    <property name="font">
                     <font>
                      <family>Segoe UI</family>
@@ -2588,7 +4599,8 @@ QPushButton:disabled {
     /*background-color: #555555;  /* Dark background color */
     border: 0px solid #555555;  /* Optional border with dark grey color */
     border-radius: 8px;  /* Rounded corners */
-    padding: 0px, 0px, 0px, 0px;  /* Padding around the text */
+    padding: 0px 0px 0px 8px;  /* Added left padding */
+
 }
 
 QPushButton:hover {
@@ -2606,97 +4618,29 @@ QPushButton:disabled {
 }</string>
                    </property>
                    <property name="text">
-                    <string>Material Filters</string>
+                    <string>Filters</string>
                    </property>
                    <property name="alignment">
-                    <set>Qt::AlignCenter</set>
+                    <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
                    </property>
                   </widget>
                  </item>
                  <item>
-                  <widget class="QCheckBox" name="hideDefaultMaterialsCheckbox">
-                   <property name="enabled">
-                    <bool>true</bool>
-                   </property>
-                   <property name="sizePolicy">
-                    <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                     <horstretch>0</horstretch>
-                     <verstretch>0</verstretch>
-                    </sizepolicy>
-                   </property>
+                  <widget class="QLabel" name="label_7">
                    <property name="styleSheet">
-                    <string notr="true">QCheckBox {
-    font-family: 'Segoe UI';
-    font-size: 11px;              /* Slightly smaller text */
-    color: #f0f0f0;
-    background-color: #444444;
+                    <string notr="true">QLabel {
+    background-color: #333333;
     border: none;
-    border-radius: 6px;           /* Softer, smaller rounding */
-    padding: 2px 6px;             /* Less padding = tighter fit */
-    margin: 1px 0;                /* Small vertical margin */
-}
-
-QCheckBox::indicator {
-    width: 12px;                  /* Smaller checkbox */
-    height: 12px;
-    border: 1px solid #444444;
-    border-radius: 3px;
-    background-color: #2b2b2b;
-}
-
-QCheckBox::indicator:checked {
-    background-color: #ffffff;
-    border: 1px solid #2b2b2b;
-}
-
-QCheckBox::indicator:unchecked {
-    background-color: #2b2b2b;
-    border: 1px solid #444444;
-}
-
-QCheckBox::indicator:checked:hover,
-QCheckBox::indicator:unchecked:hover {
-    border: 1px solid #ffffff;
-}
-
-QCheckBox::indicator:checked:pressed,
-QCheckBox::indicator:unchecked:pressed {
-    background-color: #ffffff;
-    border: 1px solid #ffffff;
-}
-
-/* Disabled state */
-QCheckBox:disabled {
-    color: #666666;
-    background-color: #3a3a3a;
-    border-radius: 6px;
-    padding: 2px 6px;
-}
-</string>
+    margin: 2px 0px;
+    min-height: 1px;
+    max-height: 1px;
+    color: transparent;
+}</string>
                    </property>
                    <property name="text">
-                    <string>Hide Defaults</string>
-                   </property>
-                   <property name="checked">
-                    <bool>false</bool>
+                    <string>TextLabel</string>
                    </property>
                   </widget>
-                 </item>
-                 <item>
-                  <spacer name="verticalSpacer">
-                   <property name="orientation">
-                    <enum>Qt::Vertical</enum>
-                   </property>
-                   <property name="sizeType">
-                    <enum>QSizePolicy::Fixed</enum>
-                   </property>
-                   <property name="sizeHint" stdset="0">
-                    <size>
-                     <width>20</width>
-                     <height>2</height>
-                    </size>
-                   </property>
-                  </spacer>
                  </item>
                  <item>
                   <layout class="QHBoxLayout" name="horizontalLayout">
@@ -2704,173 +4648,247 @@ QCheckBox:disabled {
                     <number>0</number>
                    </property>
                    <item>
-                    <widget class="QCheckBox" name="referencedFilterCheckbox">
-                     <property name="enabled">
-                      <bool>true</bool>
-                     </property>
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="styleSheet">
-                      <string notr="true">QCheckBox {
-    font-family: 'Segoe UI';
-    font-size: 11px;              /* Slightly smaller text */
-    color: #00f7c8;
-    background-color: #444444;
-    border: none;
-    border-radius: 6px;           /* Softer, smaller rounding */
-    padding: 2px 6px;             /* Less padding = tighter fit */
-    margin: 1px 0;                /* Small vertical margin */
-}
-
-QCheckBox::indicator {
-    width: 12px;                  /* Smaller checkbox */
-    height: 12px;
-    border: 1px solid #444444;
-    border-radius: 3px;
-    background-color: #2b2b2b;
-}
-
-QCheckBox::indicator:checked {
-    background-color: #ffffff;
-    border: 1px solid #2b2b2b;
-}
-
-QCheckBox::indicator:unchecked {
-    background-color: #2b2b2b;
-    border: 1px solid #444444;
-}
-
-QCheckBox::indicator:checked:hover,
-QCheckBox::indicator:unchecked:hover {
-    border: 1px solid #ffffff;
-}
-
-QCheckBox::indicator:checked:pressed,
-QCheckBox::indicator:unchecked:pressed {
-    background-color: #ffffff;
-    border: 1px solid #ffffff;
-}
-
-/* Disabled state */
-QCheckBox:disabled {
-    color: #666666;
-    background-color: #3a3a3a;
-    border-radius: 6px;
-    padding: 2px 6px;
-}
-</string>
-                     </property>
-                     <property name="text">
-                      <string>Referenced</string>
-                     </property>
-                     <property name="checked">
-                      <bool>false</bool>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QCheckBox" name="nonReferencedFilterCheckbox">
-                     <property name="enabled">
-                      <bool>true</bool>
-                     </property>
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="styleSheet">
-                      <string notr="true">QCheckBox {
-    font-family: 'Segoe UI';
-    font-size: 11px;              /* Slightly smaller text */
-    color: #00f7c8;
-    background-color: #444444;
-    border: none;
-    border-radius: 6px;           /* Softer, smaller rounding */
-    padding: 2px 6px;             /* Less padding = tighter fit */
-    margin: 1px 0;                /* Small vertical margin */
-}
-
-QCheckBox::indicator {
-    width: 12px;                  /* Smaller checkbox */
-    height: 12px;
-    border: 1px solid #444444;
-    border-radius: 3px;
-    background-color: #2b2b2b;
-}
-
-QCheckBox::indicator:checked {
-    background-color: #ffffff;
-    border: 1px solid #2b2b2b;
-}
-
-QCheckBox::indicator:unchecked {
-    background-color: #2b2b2b;
-    border: 1px solid #444444;
-}
-
-QCheckBox::indicator:checked:hover,
-QCheckBox::indicator:unchecked:hover {
-    border: 1px solid #ffffff;
-}
-
-QCheckBox::indicator:checked:pressed,
-QCheckBox::indicator:unchecked:pressed {
-    background-color: #ffffff;
-    border: 1px solid #ffffff;
-}
-
-/* Disabled state */
-QCheckBox:disabled {
-    color: #666666;
-    background-color: #3a3a3a;
-    border-radius: 6px;
-    padding: 2px 6px;
-}
-</string>
-                     </property>
-                     <property name="text">
-                      <string>Non-Referenced</string>
-                     </property>
-                     <property name="checked">
-                      <bool>false</bool>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <spacer name="horizontalSpacer_7">
-                     <property name="orientation">
-                      <enum>Qt::Horizontal</enum>
-                     </property>
-                     <property name="sizeHint" stdset="0">
+                    <widget class="QFrame" name="frame">
+                     <property name="minimumSize">
                       <size>
-                       <width>40</width>
-                       <height>20</height>
+                       <width>0</width>
+                       <height>0</height>
                       </size>
                      </property>
-                    </spacer>
+                     <property name="font">
+                      <font>
+                       <kerning>true</kerning>
+                      </font>
+                     </property>
+                     <property name="styleSheet">
+                      <string notr="true">QFrame {
+    /* Background */
+    background-color:#444444;  /* Dark grey background color */ 
+    /* background-image: url('background.png');  /* Optional background image */ 
+    /* background-repeat: no-repeat;  /* Prevents the background image from repeating */ 
+    /* background-position: center;  /* Centers the background image */ 
+
+    /* Border */
+	border: 1px solid #3a3a3a;  /* Solid border with color and thickness */ 
+    border-radius: 10px;  /* Rounded corners with 10px radius */ 
+    /* border-style: solid;  /* Border style can be solid, dashed, dotted, etc. */ 
+
+    /* Padding and Margin */
+    padding: 0px;  /* Inner space between the frame content and its border */ 
+    margin: 0px;  /* Outer space around the frame */ 
+    
+    /* Font */
+    /*font-family: Arial, Helvetica, sans-serif;  /* Font family */
+    /*font-size: 14px;  /* Font size */
+    /*font-weight: bold;  /* Font weight: normal, bold, bolder, lighter, or numeric values */
+    /*font-style: italic;  /* Font style: normal, italic, or oblique */
+   color: #ffffff;  /* Text color */
+    /*text-align: center;  /* Text alignment: left, right, center, justify */
+    /*text-decoration: underline;  /* Text decoration: underline, overline, line-through, none */
+    /*letter-spacing: 1px;  /* Spacing between letters */
+    
+    /* Shadow */
+    /*box-shadow: 2px 2px 5px #1a1a1a;  /* Adds a shadow with x-offset, y-offset, blur radius, and color */
+    
+    /* Gradient Background (Optional) */
+    /*background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #3e3e3e, stop:1 #2b2b2b);  /* Linear gradient */
+    /*background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #4a4a4a, stop:1 #2b2b2b);  /* Radial gradient */
+    
+    /* Opacity */
+    /*opacity: 0.9;  /* Transparency: 0.0 (fully transparent) to 1.0 (fully opaque) */
+    
+    /* Cursor */
+    /*cursor: pointer;  /* Changes the cursor to a pointer when hovering */
+}
+</string>
+                     </property>
+                     <property name="frameShape">
+                      <enum>QFrame::Box</enum>
+                     </property>
+                     <property name="frameShadow">
+                      <enum>QFrame::Plain</enum>
+                     </property>
+                     <layout class="QHBoxLayout" name="horizontalLayout_4">
+                      <property name="spacing">
+                       <number>0</number>
+                      </property>
+                      <property name="leftMargin">
+                       <number>0</number>
+                      </property>
+                      <property name="topMargin">
+                       <number>0</number>
+                      </property>
+                      <property name="rightMargin">
+                       <number>0</number>
+                      </property>
+                      <property name="bottomMargin">
+                       <number>0</number>
+                      </property>
+                      <item>
+                       <widget class="QCheckBox" name="referencedFilterCheckbox">
+                        <property name="enabled">
+                         <bool>true</bool>
+                        </property>
+                        <property name="sizePolicy">
+                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                          <horstretch>0</horstretch>
+                          <verstretch>0</verstretch>
+                         </sizepolicy>
+                        </property>
+                        <property name="styleSheet">
+                         <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';
+    font-size: 11px;              /* Slightly smaller text */
+    color: #dddddd;               /* Neutral text when unchecked */
+    background-color: #444444;
+    border: none;
+    border-radius: 6px;           /* Softer, smaller rounding */
+    padding: 2px 6px;             /* Less padding = tighter fit */
+    margin: 1px 0;                /* Small vertical margin */
+}
+
+QCheckBox:checked {
+    color: #00f7c8;               /* Highlight color only when checked */
+}
+
+
+QCheckBox::indicator {
+    width: 12px;                  /* Smaller checkbox */
+    height: 12px;
+    border: 1px solid #444444;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 1px solid #2b2b2b;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;
+    border: 1px solid #444444;
+}
+
+QCheckBox::indicator:checked:hover,
+QCheckBox::indicator:unchecked:hover {
+    border: 1px solid #ffffff;
+}
+
+QCheckBox::indicator:checked:pressed,
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;
+    border: 1px solid #ffffff;
+}
+
+/* Disabled state */
+QCheckBox:disabled {
+    color: #666666;
+    background-color: #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+</string>
+                        </property>
+                        <property name="text">
+                         <string>Referenced</string>
+                        </property>
+                        <property name="checked">
+                         <bool>false</bool>
+                        </property>
+                       </widget>
+                      </item>
+                      <item>
+                       <widget class="QCheckBox" name="nonReferencedFilterCheckbox">
+                        <property name="enabled">
+                         <bool>true</bool>
+                        </property>
+                        <property name="sizePolicy">
+                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                          <horstretch>0</horstretch>
+                          <verstretch>0</verstretch>
+                         </sizepolicy>
+                        </property>
+                        <property name="styleSheet">
+                         <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';
+    font-size: 11px;              /* Slightly smaller text */
+    color: #dddddd;               /* Neutral text when unchecked */
+    background-color: #444444;
+    border: none;
+    border-radius: 6px;           /* Softer, smaller rounding */
+    padding: 2px 6px;             /* Less padding = tighter fit */
+    margin: 1px 0;                /* Small vertical margin */
+}
+
+QCheckBox:checked {
+    color: #00f7c8;               /* Highlight color only when checked */
+}
+
+
+QCheckBox::indicator {
+    width: 12px;                  /* Smaller checkbox */
+    height: 12px;
+    border: 1px solid #444444;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 1px solid #2b2b2b;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;
+    border: 1px solid #444444;
+}
+
+QCheckBox::indicator:checked:hover,
+QCheckBox::indicator:unchecked:hover {
+    border: 1px solid #ffffff;
+}
+
+QCheckBox::indicator:checked:pressed,
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;
+    border: 1px solid #ffffff;
+}
+
+/* Disabled state */
+QCheckBox:disabled {
+    color: #666666;
+    background-color: #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+</string>
+                        </property>
+                        <property name="text">
+                         <string>Non-Referenced</string>
+                        </property>
+                        <property name="checked">
+                         <bool>false</bool>
+                        </property>
+                       </widget>
+                      </item>
+                      <item>
+                       <spacer name="horizontalSpacer_7">
+                        <property name="orientation">
+                         <enum>Qt::Horizontal</enum>
+                        </property>
+                        <property name="sizeHint" stdset="0">
+                         <size>
+                          <width>40</width>
+                          <height>20</height>
+                         </size>
+                        </property>
+                       </spacer>
+                      </item>
+                     </layout>
+                    </widget>
                    </item>
                   </layout>
-                 </item>
-                 <item>
-                  <spacer name="verticalSpacer_2">
-                   <property name="orientation">
-                    <enum>Qt::Vertical</enum>
-                   </property>
-                   <property name="sizeType">
-                    <enum>QSizePolicy::Fixed</enum>
-                   </property>
-                   <property name="sizeHint" stdset="0">
-                    <size>
-                     <width>20</width>
-                     <height>2</height>
-                    </size>
-                   </property>
-                  </spacer>
                  </item>
                  <item>
                   <layout class="QHBoxLayout" name="horizontalLayout_2">
@@ -2878,33 +4896,110 @@ QCheckBox:disabled {
                     <number>0</number>
                    </property>
                    <item>
-                    <widget class="QCheckBox" name="selectedOnlyFilterCheckbox">
-                     <property name="enabled">
-                      <bool>true</bool>
-                     </property>
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
+                    <widget class="QFrame" name="frame_3">
                      <property name="minimumSize">
                       <size>
-                       <width>90</width>
+                       <width>0</width>
                        <height>0</height>
                       </size>
                      </property>
                      <property name="styleSheet">
-                      <string notr="true">QCheckBox {
+                      <string notr="true">QFrame {
+    /* Background */
+    background-color:#444444;  /* Dark grey background color */ 
+    /* background-image: url('background.png');  /* Optional background image */ 
+    /* background-repeat: no-repeat;  /* Prevents the background image from repeating */ 
+    /* background-position: center;  /* Centers the background image */ 
+
+    /* Border */
+	border: 1px solid #3a3a3a;  /* Solid border with color and thickness */ 
+    border-radius: 10px;  /* Rounded corners with 10px radius */ 
+    /* border-style: solid;  /* Border style can be solid, dashed, dotted, etc. */ 
+
+    /* Padding and Margin */
+    padding: 0px;  /* Inner space between the frame content and its border */ 
+    margin: 0px;  /* Outer space around the frame */ 
+    
+    /* Font */
+    /*font-family: Arial, Helvetica, sans-serif;  /* Font family */
+    /*font-size: 14px;  /* Font size */
+    /*font-weight: bold;  /* Font weight: normal, bold, bolder, lighter, or numeric values */
+    /*font-style: italic;  /* Font style: normal, italic, or oblique */
+   color: #ffffff;  /* Text color */
+    /*text-align: center;  /* Text alignment: left, right, center, justify */
+    /*text-decoration: underline;  /* Text decoration: underline, overline, line-through, none */
+    /*letter-spacing: 1px;  /* Spacing between letters */
+    
+    /* Shadow */
+    /*box-shadow: 2px 2px 5px #1a1a1a;  /* Adds a shadow with x-offset, y-offset, blur radius, and color */
+    
+    /* Gradient Background (Optional) */
+    /*background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #3e3e3e, stop:1 #2b2b2b);  /* Linear gradient */
+    /*background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #4a4a4a, stop:1 #2b2b2b);  /* Radial gradient */
+    
+    /* Opacity */
+    /*opacity: 0.9;  /* Transparency: 0.0 (fully transparent) to 1.0 (fully opaque) */
+    
+    /* Cursor */
+    /*cursor: pointer;  /* Changes the cursor to a pointer when hovering */
+}
+</string>
+                     </property>
+                     <property name="frameShape">
+                      <enum>QFrame::StyledPanel</enum>
+                     </property>
+                     <property name="frameShadow">
+                      <enum>QFrame::Raised</enum>
+                     </property>
+                     <layout class="QHBoxLayout" name="horizontalLayout_5">
+                      <property name="spacing">
+                       <number>0</number>
+                      </property>
+                      <property name="leftMargin">
+                       <number>0</number>
+                      </property>
+                      <property name="topMargin">
+                       <number>0</number>
+                      </property>
+                      <property name="rightMargin">
+                       <number>0</number>
+                      </property>
+                      <property name="bottomMargin">
+                       <number>0</number>
+                      </property>
+                      <item>
+                       <widget class="QCheckBox" name="selectedOnlyFilterCheckbox">
+                        <property name="enabled">
+                         <bool>true</bool>
+                        </property>
+                        <property name="sizePolicy">
+                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                          <horstretch>0</horstretch>
+                          <verstretch>0</verstretch>
+                         </sizepolicy>
+                        </property>
+                        <property name="minimumSize">
+                         <size>
+                          <width>90</width>
+                          <height>0</height>
+                         </size>
+                        </property>
+                        <property name="styleSheet">
+                         <string notr="true">QCheckBox {
     font-family: 'Segoe UI';
     font-size: 11px;              /* Slightly smaller text */
-    color: #00f7c8;
+    color: #dddddd;               /* Neutral text when unchecked */
     background-color: #444444;
     border: none;
     border-radius: 6px;           /* Softer, smaller rounding */
     padding: 2px 6px;             /* Less padding = tighter fit */
     margin: 1px 0;                /* Small vertical margin */
 }
+
+QCheckBox:checked {
+    color: #00f7c8;               /* Highlight color only when checked */
+}
+
 
 QCheckBox::indicator {
     width: 12px;                  /* Smaller checkbox */
@@ -2943,37 +5038,42 @@ QCheckBox:disabled {
     padding: 2px 6px;
 }
 </string>
-                     </property>
-                     <property name="text">
-                      <string>Selected</string>
-                     </property>
-                     <property name="checked">
-                      <bool>false</bool>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QCheckBox" name="nonSelectedOnlyFilterCheckbox">
-                     <property name="enabled">
-                      <bool>true</bool>
-                     </property>
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="styleSheet">
-                      <string notr="true">QCheckBox {
+                        </property>
+                        <property name="text">
+                         <string>Selected</string>
+                        </property>
+                        <property name="checked">
+                         <bool>false</bool>
+                        </property>
+                       </widget>
+                      </item>
+                      <item>
+                       <widget class="QCheckBox" name="nonSelectedOnlyFilterCheckbox">
+                        <property name="enabled">
+                         <bool>true</bool>
+                        </property>
+                        <property name="sizePolicy">
+                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                          <horstretch>0</horstretch>
+                          <verstretch>0</verstretch>
+                         </sizepolicy>
+                        </property>
+                        <property name="styleSheet">
+                         <string notr="true">QCheckBox {
     font-family: 'Segoe UI';
     font-size: 11px;              /* Slightly smaller text */
-    color: #00f7c8;
+    color: #dddddd;               /* Neutral text when unchecked */
     background-color: #444444;
     border: none;
     border-radius: 6px;           /* Softer, smaller rounding */
     padding: 2px 6px;             /* Less padding = tighter fit */
     margin: 1px 0;                /* Small vertical margin */
 }
+
+QCheckBox:checked {
+    color: #00f7c8;               /* Highlight color only when checked */
+}
+
 
 QCheckBox::indicator {
     width: 12px;                  /* Smaller checkbox */
@@ -3012,45 +5112,32 @@ QCheckBox:disabled {
     padding: 2px 6px;
 }
 </string>
-                     </property>
-                     <property name="text">
-                      <string>Non-selected</string>
-                     </property>
-                     <property name="checked">
-                      <bool>false</bool>
-                     </property>
+                        </property>
+                        <property name="text">
+                         <string>Non-selected</string>
+                        </property>
+                        <property name="checked">
+                         <bool>false</bool>
+                        </property>
+                       </widget>
+                      </item>
+                      <item>
+                       <spacer name="horizontalSpacer_11">
+                        <property name="orientation">
+                         <enum>Qt::Horizontal</enum>
+                        </property>
+                        <property name="sizeHint" stdset="0">
+                         <size>
+                          <width>40</width>
+                          <height>20</height>
+                         </size>
+                        </property>
+                       </spacer>
+                      </item>
+                     </layout>
                     </widget>
-                   </item>
-                   <item>
-                    <spacer name="horizontalSpacer_9">
-                     <property name="orientation">
-                      <enum>Qt::Horizontal</enum>
-                     </property>
-                     <property name="sizeHint" stdset="0">
-                      <size>
-                       <width>40</width>
-                       <height>20</height>
-                      </size>
-                     </property>
-                    </spacer>
                    </item>
                   </layout>
-                 </item>
-                 <item>
-                  <spacer name="verticalSpacer_3">
-                   <property name="orientation">
-                    <enum>Qt::Vertical</enum>
-                   </property>
-                   <property name="sizeType">
-                    <enum>QSizePolicy::Fixed</enum>
-                   </property>
-                   <property name="sizeHint" stdset="0">
-                    <size>
-                     <width>20</width>
-                     <height>2</height>
-                    </size>
-                   </property>
-                  </spacer>
                  </item>
                  <item>
                   <layout class="QHBoxLayout" name="horizontalLayout_3">
@@ -3058,33 +5145,110 @@ QCheckBox:disabled {
                     <number>0</number>
                    </property>
                    <item>
-                    <widget class="QCheckBox" name="unUsedFilterCheckbox">
-                     <property name="enabled">
-                      <bool>true</bool>
-                     </property>
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
+                    <widget class="QFrame" name="frame_4">
                      <property name="minimumSize">
                       <size>
-                       <width>90</width>
+                       <width>0</width>
                        <height>0</height>
                       </size>
                      </property>
                      <property name="styleSheet">
-                      <string notr="true">QCheckBox {
+                      <string notr="true">QFrame {
+    /* Background */
+    background-color:#444444;  /* Dark grey background color */ 
+    /* background-image: url('background.png');  /* Optional background image */ 
+    /* background-repeat: no-repeat;  /* Prevents the background image from repeating */ 
+    /* background-position: center;  /* Centers the background image */ 
+
+    /* Border */
+	border: 1px solid #3a3a3a;  /* Solid border with color and thickness */ 
+    border-radius: 10px;  /* Rounded corners with 10px radius */ 
+    /* border-style: solid;  /* Border style can be solid, dashed, dotted, etc. */ 
+
+    /* Padding and Margin */
+    padding: 0px;  /* Inner space between the frame content and its border */ 
+    margin: 0px;  /* Outer space around the frame */ 
+    
+    /* Font */
+    /*font-family: Arial, Helvetica, sans-serif;  /* Font family */
+    /*font-size: 14px;  /* Font size */
+    /*font-weight: bold;  /* Font weight: normal, bold, bolder, lighter, or numeric values */
+    /*font-style: italic;  /* Font style: normal, italic, or oblique */
+   color: #ffffff;  /* Text color */
+    /*text-align: center;  /* Text alignment: left, right, center, justify */
+    /*text-decoration: underline;  /* Text decoration: underline, overline, line-through, none */
+    /*letter-spacing: 1px;  /* Spacing between letters */
+    
+    /* Shadow */
+    /*box-shadow: 2px 2px 5px #1a1a1a;  /* Adds a shadow with x-offset, y-offset, blur radius, and color */
+    
+    /* Gradient Background (Optional) */
+    /*background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #3e3e3e, stop:1 #2b2b2b);  /* Linear gradient */
+    /*background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #4a4a4a, stop:1 #2b2b2b);  /* Radial gradient */
+    
+    /* Opacity */
+    /*opacity: 0.9;  /* Transparency: 0.0 (fully transparent) to 1.0 (fully opaque) */
+    
+    /* Cursor */
+    /*cursor: pointer;  /* Changes the cursor to a pointer when hovering */
+}
+</string>
+                     </property>
+                     <property name="frameShape">
+                      <enum>QFrame::StyledPanel</enum>
+                     </property>
+                     <property name="frameShadow">
+                      <enum>QFrame::Raised</enum>
+                     </property>
+                     <layout class="QHBoxLayout" name="horizontalLayout_6">
+                      <property name="spacing">
+                       <number>0</number>
+                      </property>
+                      <property name="leftMargin">
+                       <number>0</number>
+                      </property>
+                      <property name="topMargin">
+                       <number>0</number>
+                      </property>
+                      <property name="rightMargin">
+                       <number>0</number>
+                      </property>
+                      <property name="bottomMargin">
+                       <number>0</number>
+                      </property>
+                      <item>
+                       <widget class="QCheckBox" name="usedFilterCheckbox">
+                        <property name="enabled">
+                         <bool>true</bool>
+                        </property>
+                        <property name="sizePolicy">
+                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                          <horstretch>0</horstretch>
+                          <verstretch>0</verstretch>
+                         </sizepolicy>
+                        </property>
+                        <property name="minimumSize">
+                         <size>
+                          <width>90</width>
+                          <height>0</height>
+                         </size>
+                        </property>
+                        <property name="styleSheet">
+                         <string notr="true">QCheckBox {
     font-family: 'Segoe UI';
     font-size: 11px;              /* Slightly smaller text */
-    color: #00f7c8;
+    color: #dddddd;               /* Neutral text when unchecked */
     background-color: #444444;
     border: none;
     border-radius: 6px;           /* Softer, smaller rounding */
     padding: 2px 6px;             /* Less padding = tighter fit */
     margin: 1px 0;                /* Small vertical margin */
 }
+
+QCheckBox:checked {
+    color: #00f7c8;               /* Highlight color only when checked */
+}
+
 
 QCheckBox::indicator {
     width: 12px;                  /* Smaller checkbox */
@@ -3123,40 +5287,51 @@ QCheckBox:disabled {
     padding: 2px 6px;
 }
 </string>
-                     </property>
-                     <property name="text">
-                      <string>Unused</string>
-                     </property>
-                     <property name="checked">
-                      <bool>false</bool>
-                     </property>
-                     <attribute name="buttonGroup">
-                      <string notr="true">usedButtonGroup</string>
-                     </attribute>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QCheckBox" name="usedFilterCheckbox">
-                     <property name="enabled">
-                      <bool>true</bool>
-                     </property>
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                       <horstretch>0</horstretch>
-                       <verstretch>0</verstretch>
-                      </sizepolicy>
-                     </property>
-                     <property name="styleSheet">
-                      <string notr="true">QCheckBox {
+                        </property>
+                        <property name="text">
+                         <string>Used</string>
+                        </property>
+                        <property name="checked">
+                         <bool>false</bool>
+                        </property>
+                        <attribute name="buttonGroup">
+                         <string notr="true">usedButtonGroup</string>
+                        </attribute>
+                       </widget>
+                      </item>
+                      <item>
+                       <widget class="QCheckBox" name="unUsedFilterCheckbox">
+                        <property name="enabled">
+                         <bool>true</bool>
+                        </property>
+                        <property name="sizePolicy">
+                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                          <horstretch>0</horstretch>
+                          <verstretch>0</verstretch>
+                         </sizepolicy>
+                        </property>
+                        <property name="minimumSize">
+                         <size>
+                          <width>90</width>
+                          <height>0</height>
+                         </size>
+                        </property>
+                        <property name="styleSheet">
+                         <string notr="true">QCheckBox {
     font-family: 'Segoe UI';
     font-size: 11px;              /* Slightly smaller text */
-    color: #00f7c8;
+    color: #dddddd;               /* Neutral text when unchecked */
     background-color: #444444;
     border: none;
     border-radius: 6px;           /* Softer, smaller rounding */
     padding: 2px 6px;             /* Less padding = tighter fit */
     margin: 1px 0;                /* Small vertical margin */
 }
+
+QCheckBox:checked {
+    color: #00f7c8;               /* Highlight color only when checked */
+}
+
 
 QCheckBox::indicator {
     width: 12px;                  /* Smaller checkbox */
@@ -3194,34 +5369,289 @@ QCheckBox:disabled {
     border-radius: 6px;
     padding: 2px 6px;
 }
-rder-radius: 6px;
-    padding: 2px 6px;
-}
 </string>
-                     </property>
-                     <property name="text">
-                      <string>Used</string>
-                     </property>
-                     <property name="checked">
-                      <bool>false</bool>
-                     </property>
-                     <attribute name="buttonGroup">
-                      <string notr="true">usedButtonGroup</string>
-                     </attribute>
+                        </property>
+                        <property name="text">
+                         <string>Unused</string>
+                        </property>
+                        <property name="checked">
+                         <bool>false</bool>
+                        </property>
+                        <attribute name="buttonGroup">
+                         <string notr="true">usedButtonGroup</string>
+                        </attribute>
+                       </widget>
+                      </item>
+                      <item>
+                       <spacer name="horizontalSpacer_12">
+                        <property name="orientation">
+                         <enum>Qt::Horizontal</enum>
+                        </property>
+                        <property name="sizeHint" stdset="0">
+                         <size>
+                          <width>40</width>
+                          <height>20</height>
+                         </size>
+                        </property>
+                       </spacer>
+                      </item>
+                     </layout>
                     </widget>
                    </item>
+                  </layout>
+                 </item>
+                 <item>
+                  <layout class="QHBoxLayout" name="horizontalLayout_13">
+                   <property name="spacing">
+                    <number>0</number>
+                   </property>
                    <item>
-                    <spacer name="horizontalSpacer_10">
-                     <property name="orientation">
-                      <enum>Qt::Horizontal</enum>
-                     </property>
-                     <property name="sizeHint" stdset="0">
+                    <widget class="QFrame" name="frame_5">
+                     <property name="minimumSize">
                       <size>
-                       <width>40</width>
-                       <height>20</height>
+                       <width>0</width>
+                       <height>0</height>
                       </size>
                      </property>
-                    </spacer>
+                     <property name="styleSheet">
+                      <string notr="true">QFrame {
+    /* Background */
+    background-color:#444444;  /* Dark grey background color */ 
+    /* background-image: url('background.png');  /* Optional background image */ 
+    /* background-repeat: no-repeat;  /* Prevents the background image from repeating */ 
+    /* background-position: center;  /* Centers the background image */ 
+
+    /* Border */
+	border: 1px solid #3a3a3a;  /* Solid border with color and thickness */ 
+    border-radius: 10px;  /* Rounded corners with 10px radius */ 
+    /* border-style: solid;  /* Border style can be solid, dashed, dotted, etc. */ 
+
+    /* Padding and Margin */
+    padding: 0px;  /* Inner space between the frame content and its border */ 
+    margin: 0px;  /* Outer space around the frame */ 
+    
+    /* Font */
+    /*font-family: Arial, Helvetica, sans-serif;  /* Font family */
+    /*font-size: 14px;  /* Font size */
+    /*font-weight: bold;  /* Font weight: normal, bold, bolder, lighter, or numeric values */
+    /*font-style: italic;  /* Font style: normal, italic, or oblique */
+   color: #ffffff;  /* Text color */
+    /*text-align: center;  /* Text alignment: left, right, center, justify */
+    /*text-decoration: underline;  /* Text decoration: underline, overline, line-through, none */
+    /*letter-spacing: 1px;  /* Spacing between letters */
+    
+    /* Shadow */
+    /*box-shadow: 2px 2px 5px #1a1a1a;  /* Adds a shadow with x-offset, y-offset, blur radius, and color */
+    
+    /* Gradient Background (Optional) */
+    /*background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #3e3e3e, stop:1 #2b2b2b);  /* Linear gradient */
+    /*background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #4a4a4a, stop:1 #2b2b2b);  /* Radial gradient */
+    
+    /* Opacity */
+    /*opacity: 0.9;  /* Transparency: 0.0 (fully transparent) to 1.0 (fully opaque) */
+    
+    /* Cursor */
+    /*cursor: pointer;  /* Changes the cursor to a pointer when hovering */
+}
+</string>
+                     </property>
+                     <property name="frameShape">
+                      <enum>QFrame::StyledPanel</enum>
+                     </property>
+                     <property name="frameShadow">
+                      <enum>QFrame::Raised</enum>
+                     </property>
+                     <layout class="QHBoxLayout" name="horizontalLayout_14">
+                      <property name="spacing">
+                       <number>0</number>
+                      </property>
+                      <property name="leftMargin">
+                       <number>0</number>
+                      </property>
+                      <property name="topMargin">
+                       <number>0</number>
+                      </property>
+                      <property name="rightMargin">
+                       <number>0</number>
+                      </property>
+                      <property name="bottomMargin">
+                       <number>0</number>
+                      </property>
+                      <item>
+                       <widget class="QCheckBox" name="texturesFilterCheckbox">
+                        <property name="enabled">
+                         <bool>true</bool>
+                        </property>
+                        <property name="sizePolicy">
+                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                          <horstretch>0</horstretch>
+                          <verstretch>0</verstretch>
+                         </sizepolicy>
+                        </property>
+                        <property name="minimumSize">
+                         <size>
+                          <width>90</width>
+                          <height>0</height>
+                         </size>
+                        </property>
+                        <property name="styleSheet">
+                         <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';
+    font-size: 11px;              /* Slightly smaller text */
+    color: #dddddd;               /* Neutral text when unchecked */
+    background-color: #444444;
+    border: none;
+    border-radius: 6px;           /* Softer, smaller rounding */
+    padding: 2px 6px;             /* Less padding = tighter fit */
+    margin: 1px 0;                /* Small vertical margin */
+}
+
+QCheckBox:checked {
+    color: #00f7c8;               /* Highlight color only when checked */
+}
+
+
+QCheckBox::indicator {
+    width: 12px;                  /* Smaller checkbox */
+    height: 12px;
+    border: 1px solid #444444;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 1px solid #2b2b2b;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;
+    border: 1px solid #444444;
+}
+
+QCheckBox::indicator:checked:hover,
+QCheckBox::indicator:unchecked:hover {
+    border: 1px solid #ffffff;
+}
+
+QCheckBox::indicator:checked:pressed,
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;
+    border: 1px solid #ffffff;
+}
+
+/* Disabled state */
+QCheckBox:disabled {
+    color: #666666;
+    background-color: #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+</string>
+                        </property>
+                        <property name="text">
+                         <string>Textures</string>
+                        </property>
+                        <property name="checked">
+                         <bool>false</bool>
+                        </property>
+                       </widget>
+                      </item>
+                      <item>
+                       <widget class="QCheckBox" name="shadingGroupsFilterCheckbox">
+                        <property name="enabled">
+                         <bool>true</bool>
+                        </property>
+                        <property name="sizePolicy">
+                         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                          <horstretch>0</horstretch>
+                          <verstretch>0</verstretch>
+                         </sizepolicy>
+                        </property>
+                        <property name="minimumSize">
+                         <size>
+                          <width>90</width>
+                          <height>0</height>
+                         </size>
+                        </property>
+                        <property name="styleSheet">
+                         <string notr="true">QCheckBox {
+    font-family: 'Segoe UI';
+    font-size: 11px;              /* Slightly smaller text */
+    color: #dddddd;               /* Neutral text when unchecked */
+    background-color: #444444;
+    border: none;
+    border-radius: 6px;           /* Softer, smaller rounding */
+    padding: 2px 6px;             /* Less padding = tighter fit */
+    margin: 1px 0;                /* Small vertical margin */
+}
+
+QCheckBox:checked {
+    color: #00f7c8;               /* Highlight color only when checked */
+}
+
+
+QCheckBox::indicator {
+    width: 12px;                  /* Smaller checkbox */
+    height: 12px;
+    border: 1px solid #444444;
+    border-radius: 3px;
+    background-color: #2b2b2b;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #ffffff;
+    border: 1px solid #2b2b2b;
+}
+
+QCheckBox::indicator:unchecked {
+    background-color: #2b2b2b;
+    border: 1px solid #444444;
+}
+
+QCheckBox::indicator:checked:hover,
+QCheckBox::indicator:unchecked:hover {
+    border: 1px solid #ffffff;
+}
+
+QCheckBox::indicator:checked:pressed,
+QCheckBox::indicator:unchecked:pressed {
+    background-color: #ffffff;
+    border: 1px solid #ffffff;
+}
+
+/* Disabled state */
+QCheckBox:disabled {
+    color: #666666;
+    background-color: #3a3a3a;
+    border-radius: 6px;
+    padding: 2px 6px;
+}
+</string>
+                        </property>
+                        <property name="text">
+                         <string>Shading grps</string>
+                        </property>
+                        <property name="checked">
+                         <bool>false</bool>
+                        </property>
+                       </widget>
+                      </item>
+                      <item>
+                       <spacer name="horizontalSpacer_15">
+                        <property name="orientation">
+                         <enum>Qt::Horizontal</enum>
+                        </property>
+                        <property name="sizeHint" stdset="0">
+                         <size>
+                          <width>0</width>
+                          <height>20</height>
+                         </size>
+                        </property>
+                       </spacer>
+                      </item>
+                     </layout>
+                    </widget>
                    </item>
                   </layout>
                  </item>
@@ -3230,107 +5660,6 @@ rder-radius: 6px;
               </item>
              </layout>
             </widget>
-           </item>
-           <item>
-            <layout class="QHBoxLayout" name="materialListButtonLayout">
-             <property name="spacing">
-              <number>1</number>
-             </property>
-             <item>
-              <widget class="QPushButton" name="toggleListButtonsButton">
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                 <horstretch>0</horstretch>
-                 <verstretch>0</verstretch>
-                </sizepolicy>
-               </property>
-               <property name="styleSheet">
-                <string notr="true">QPushButton {
-    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
-    font-size: 12px;  /* Adjust the font size as needed */
-    color: #ffffff;  /* White text color */
-    background-color: #666666;  /* Dark background color */
-    border: 2px solid #444444;  /* Optional border with dark grey color */
-    border-radius: 8px;  /* Rounded corners */
-    padding: 2px 5px;  /* Padding around the text */
-
-}
-
-QPushButton:hover {
-    background-color: #888888;  /* Slightly lighter background on hover */
-}
-
-QPushButton:pressed {
-    background-color: #1a1a1a;  /* Darker background when pressed */
-}
-QPushButton:disabled {
-    color: #cccccc;  /* Light grey text color to indicate disabled */
-    border: 1px solid #555555;  /* Optional border with dark grey color */
-    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
-    color: #666666;  /* White text color */
-}</string>
-               </property>
-               <property name="text">
-                <string>Toggle Buttons</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="filterMaterialListButton">
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                 <horstretch>0</horstretch>
-                 <verstretch>0</verstretch>
-                </sizepolicy>
-               </property>
-               <property name="layoutDirection">
-                <enum>Qt::LeftToRight</enum>
-               </property>
-               <property name="styleSheet">
-                <string notr="true">QPushButton {
-    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
-    font-size: 12px;  /* Adjust the font size as needed */
-    color: #ffffff;  /* White text color */
-    background-color: #666666;  /* Dark background color */
-    border: 2px solid #444444;  /* Optional border with dark grey color */
-    border-radius: 8px;  /* Rounded corners */
-    padding: 2px 5px;  /* Padding around the text */
-
-}
-
-QPushButton:hover {
-    background-color: #888888;  /* Slightly lighter background on hover */
-}
-
-QPushButton:pressed {
-    background-color: #1a1a1a;  /* Darker background when pressed */
-}
-QPushButton:disabled {
-    color: #cccccc;  /* Light grey text color to indicate disabled */
-    border: 1px solid #555555;  /* Optional border with dark grey color */
-    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
-    color: #666666;  /* White text color */
-}</string>
-               </property>
-               <property name="text">
-                <string>Filter Menu</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <spacer name="horizontalSpacer">
-               <property name="orientation">
-                <enum>Qt::Horizontal</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>0</width>
-                 <height>20</height>
-                </size>
-               </property>
-              </spacer>
-             </item>
-            </layout>
            </item>
            <item>
             <widget class="QScrollArea" name="materialsListScrollArea">
@@ -3351,20 +5680,20 @@ QPushButton:disabled {
              </property>
              <property name="styleSheet">
               <string notr="true">QScrollArea#materialsListScrollArea {
-    border: 2px solid #444444;               /* Border around the scroll area */
+    border: 0px solid #444444;               /* Border around the scroll area */
     border-radius: 10px;                     /* Rounded corners */
-    background-color: #383838;               /* Background color of the scroll area */
+    background-color: #333333;               /* Background color of the scroll area */
 }
 
 QScrollArea::viewport {
     border: none;                            /* Remove border inside the viewport */
-    background-color: #383838;               /* Background of the viewport */
+    background-color: #333333;               /* Background of the viewport */
     border-radius: 0px;                     /* Match the parent scroll area rounded corners */
 }
 
 QScrollBar:vertical {
     border: 1px solid #666666;               /* Border for vertical scrollbar */
-    background: #444444;                     /* Background color for vertical scrollbar */
+    background: #333333;                     /* Background color for vertical scrollbar */
     width: 12px;                             /* Set the width of the vertical scrollbar */
     margin: 0px 0 0px 0;                     /* Margin between the scrollbar and the scroll area */
     border-radius: 6px;                      /* Rounded corners for the scrollbar */
@@ -3425,7 +5754,7 @@ QScrollBar::sub-line:horizontal, QScrollBar::add-line:horizontal {
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>242</width>
+                <width>260</width>
                 <height>60</height>
                </rect>
               </property>
@@ -3480,51 +5809,6 @@ QPushButton:disabled {
                </property>
                <property name="text">
                 <string>Select All</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="duplicateSelectedMaterialsButton">
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                 <horstretch>0</horstretch>
-                 <verstretch>0</verstretch>
-                </sizepolicy>
-               </property>
-               <property name="font">
-                <font>
-                 <family>Segoe UI</family>
-                 <pointsize>-1</pointsize>
-                </font>
-               </property>
-               <property name="styleSheet">
-                <string notr="true">QPushButton {
-    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
-    font-size: 12px;  /* Adjust the font size as needed */
-    color: #ffffff;  /* White text color */
-    background-color: #666666;  /* Dark background color */
-    border: 2px solid #444444;  /* Optional border with dark grey color */
-    border-radius: 8px;  /* Rounded corners */
-    padding: 2px 5px;  /* Padding around the text */
-
-}
-
-QPushButton:hover {
-    background-color: #888888;  /* Slightly lighter background on hover */
-}
-
-QPushButton:pressed {
-    background-color: #1a1a1a;  /* Darker background when pressed */
-}
-QPushButton:disabled {
-    color: #cccccc;  /* Light grey text color to indicate disabled */
-    border: 1px solid #555555;  /* Optional border with dark grey color */
-    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
-    color: #666666;  /* White text color */
-}</string>
-               </property>
-               <property name="text">
-                <string>Duplicate Sel</string>
                </property>
               </widget>
              </item>
@@ -3591,7 +5875,7 @@ QPushButton:disabled {
         <property name="styleSheet">
          <string notr="true">QFrame {
     /* Background */
-    background-color:#555555;  /* Dark grey background color */ 
+    background-color:#333333;  /* Dark grey background color */ 
     /* background-image: url('background.png');  /* Optional background image */ 
     /* background-repeat: no-repeat;  /* Prevents the background image from repeating */ 
     /* background-position: center;  /* Centers the background image */ 
@@ -3675,6 +5959,7 @@ QPushButton:disabled {
   </layout>
  </widget>
  <resources>
+  <include location="../../../scripts/maya-python/QuickMaterials/QtDesigner/icons.qrc"/>
   <include location="icons.qrc"/>
  </resources>
  <connections/>

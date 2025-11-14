@@ -1,6 +1,7 @@
 <RCC>
   <qresource prefix="/icons">
     <file alias="arrow.png">icons/arrow.png</file>
+    <file alias="arrow_combo_box.png">icons/arrow_combo_box.png</file>
     <file alias="arrow_down.png">icons/arrow_down.png</file>
     <file alias="arrow_left.png">icons/arrow_left.png</file>
     <file alias="arrow_pressed.png">icons/arrow_pressed.png</file>
@@ -10,5 +11,8 @@
     <file alias="arrow_pressed_up.png">icons/arrow_pressed_up.png</file>
     <file alias="arrow_right.png">icons/arrow_right.png</file>
     <file alias="arrow_up.png">icons/arrow_up.png</file>
+    <file alias="folder_icon.png">icons/folder_icon.png</file>
+    <file alias="settings_icon.png">icons/settings_icon.png</file>
+    <file alias="settings_icon_pressed.png">icons/settings_icon_pressed.png</file>
   </qresource>
 </RCC>
