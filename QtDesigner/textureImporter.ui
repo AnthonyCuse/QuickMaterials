@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>218</width>
+    <width>331</width>
     <height>205</height>
    </rect>
   </property>
@@ -550,7 +550,7 @@ QPushButton:disabled {
              <rect>
               <x>0</x>
               <y>0</y>
-              <width>185</width>
+              <width>298</width>
               <height>69</height>
              </rect>
             </property>

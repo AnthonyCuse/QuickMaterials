@@ -263,6 +263,31 @@ def _is_referenced(node):
         return False
 
 
+def _material_has_texture(material):
+    """Check if a material has any textures connected to its color/texture attributes."""
+    texture_attrs = []
+    node_type = cmds.nodeType(material)
+    
+    # Common texture attributes by material type
+    if node_type == "standardSurface":
+        texture_attrs = ["baseColor", "emissionColor", "transmissionColor"]
+    elif node_type == "aiStandardSurface":
+        texture_attrs = ["baseColor", "emissionColor", "transmissionColor"]
+    else:
+        # Legacy materials
+        texture_attrs = ["color", "diffuseColor", "ambientColor", "incandescence", "transparency"]
+    
+    for attr in texture_attrs:
+        try:
+            if cmds.attributeQuery(attr, node=material, exists=True):
+                connections = cmds.listConnections(f"{material}.{attr}", s=True, d=False) or []
+                if connections:
+                    return True
+        except Exception:
+            continue
+    return False
+
+
 def _has_reverse_node(plug):
     try:
         conn = cmds.listConnections(plug, s=True, d=False, p=True) or []
@@ -1062,8 +1087,8 @@ def _attr_val(node, attr):
 def _format_attr_entry(node, attr):
     connections = cmds.listConnections(f"{node}.{attr}", s=True, d=False) or []
     if connections:
-        node_type = cmds.nodeType(connections[0])
-        return f"{attr} <- ({node_type})"
+        connected_node = connections[0]
+        return f"{attr}: {connected_node}"
     val = _attr_val(node, attr)
     if val is None:
         return None
@@ -1331,7 +1356,7 @@ class MaterialManagerDialog(QtWidgets.QDialog):
             line.setFrameShadow(QtWidgets.QFrame.Plain)
             line.setLineWidth(1)
             line.setFixedHeight(height)
-            line.setStyleSheet("background-color:#454545; border:none;")
+            line.setStyleSheet("background-color:#333333; border:none;")
             return line
 
         process_row = QtWidgets.QHBoxLayout()
@@ -1508,7 +1533,7 @@ class MaterialManagerDialog(QtWidgets.QDialog):
         convert_frame.setFrameShape(QtWidgets.QFrame.NoFrame)
         convert_frame.setObjectName("convertFrame")
         convert_frame.setStyleSheet(
-            "QFrame#convertFrame { background-color: #333333; border-radius: 6px; border: 1px solid #444444; }"
+            "QFrame#convertFrame { background-color: #444444; border-radius: 6px; border: 1px solid #444444; }"
         )
         convert_group = QtWidgets.QVBoxLayout(convert_frame)
         convert_group.setContentsMargins(10, 8, 10, 10)
@@ -1524,7 +1549,7 @@ class MaterialManagerDialog(QtWidgets.QDialog):
         merge_frame.setFrameShape(QtWidgets.QFrame.NoFrame)
         merge_frame.setObjectName("mergeFrame")
         merge_frame.setStyleSheet(
-            "QFrame#mergeFrame { background-color: #333333; border-radius: 6px; border: 1px solid #444444; }"
+            "QFrame#mergeFrame { background-color: #444444; border-radius: 6px; border: 1px solid #444444; }"
         )
         merge_group = QtWidgets.QVBoxLayout(merge_frame)
         merge_group.setContentsMargins(10, 8, 10, 10)
@@ -1538,7 +1563,7 @@ class MaterialManagerDialog(QtWidgets.QDialog):
         rename_frame.setFrameShape(QtWidgets.QFrame.NoFrame)
         rename_frame.setObjectName("renameFrame")
         rename_frame.setStyleSheet(
-            "QFrame#renameFrame { background-color: #333333; border-radius: 6px; border: 1px solid #444444; }"
+            "QFrame#renameFrame { background-color: #444444; border-radius: 6px; border: 1px solid #444444; }"
         )
         rename_group = QtWidgets.QVBoxLayout(rename_frame)
         rename_group.setContentsMargins(10, 8, 10, 10)
@@ -1680,8 +1705,11 @@ class MaterialManagerDialog(QtWidgets.QDialog):
         self.log.clear()
         self._last_preview = None
 
-    def _set_preview_state(self, kind, data, summary=None):
-        self._last_preview = {"type": kind, "data": data, "summary": summary}
+    def _set_preview_state(self, kind, data, summary=None, preview_only=None):
+        # Store preview_only state if provided, otherwise infer from data
+        if preview_only is None:
+            preview_only = data.get("preview_only", True)
+        self._last_preview = {"type": kind, "data": data, "summary": summary, "preview_only": preview_only}
 
     def _refresh_log_display(self):
         if not self._last_preview:
@@ -1690,23 +1718,28 @@ class MaterialManagerDialog(QtWidgets.QDialog):
         previous_value = scrollbar.value()
         kind = self._last_preview["type"]
         data = self._last_preview["data"]
+        preview_only = self._last_preview.get("preview_only", True)
         self.log.clear()
         if kind == "list":
             self._log_material_list(data)
         elif kind == "convert":
-            self._log_conversion_preview(data)
+            self._log_conversion_preview(data, preview_only=preview_only)
         elif kind == "merge":
-            self._log_merge_preview(data)
+            self._log_merge_preview(data, preview_only=preview_only)
         elif kind == "rename":
-            self._log_rename_preview(data, preview_only=data.get("preview_only", True))
+            self._log_rename_preview(data, preview_only=preview_only)
         summary = self._last_preview.get("summary")
         if summary:
             if isinstance(summary, str):
                 summary = [summary]
             if summary:
-                self._append_log("")
+                self._append_log("<div style='height:2px;'></div>")
                 for line in summary:
-                    self._append_log(line)
+                    # Check if it's an undo message (should be white and italic)
+                    if "Use Maya's undo" in line:
+                        self._append_log(f"<i><font color='#ffffff'>{line}</font></i>")
+                    else:
+                        self._append_log(f"<font color='#00ff00'>{line}</font>")
         QtCore.QTimer.singleShot(0, lambda: scrollbar.setValue(min(previous_value, scrollbar.maximum())))
 
     def _current_process_key(self):
@@ -1903,11 +1936,22 @@ class MaterialManagerDialog(QtWidgets.QDialog):
             else:
                 summary_lines.append("No *_old materials to delete.")
         summary_lines.append("Use Maya's undo to revert the entire conversion.")
-        self._append_log("")
+        self._append_log("<div style='height:2px;'></div>")
         for line in summary_lines:
-            self._append_log(f"<font color='#00ff00'>{line}</font>")
-        self._set_preview_state("convert", preview, summary_lines)
+            if "Use Maya's undo" in line:
+                self._append_log(f"<i><font color='#ffffff'>{line}</font></i>")
+            else:
+                self._append_log(f"<font color='#00ff00'>{line}</font>")
+        self._set_preview_state("convert", preview, summary_lines, preview_only=False)
         self._save_settings()
+        
+        # Refresh Quick Materials UI to update shader type display
+        try:
+            import quick_materials
+            if quick_materials.quick_materials_ui_instance:
+                quick_materials.quick_materials_ui_instance.populate_materials_scroll_area()
+        except Exception:
+            pass
 
     def _delete_old_materials(self):
         deleted_materials = 0
@@ -1987,9 +2031,13 @@ class MaterialManagerDialog(QtWidgets.QDialog):
             rep = group["representative"]
             if _is_referenced(rep):
                 errors[rep] = "Can't merge referenced materials"
+            elif _material_has_texture(rep):
+                errors[rep] = "Can't merge materials with textures"
             for dup in group["duplicates"]:
                 if _is_referenced(dup):
                     errors[dup] = "Can't merge referenced materials"
+                elif _material_has_texture(dup):
+                    errors[dup] = "Can't merge materials with textures"
         return {
             "mode": mode_text,
             "tolerance": tol,
@@ -2022,7 +2070,7 @@ class MaterialManagerDialog(QtWidgets.QDialog):
             if dupes:
                 self._append_log("  <font color='#ffffff'>Merges:</font>")
                 for dup in dupes:
-                    self._append_log(f"    • {dup}")
+                    self._append_log(f"    • <font color='#ffffff'>{dup}</font>")
                     if dup in errors:
                         self._append_log(f"      <font color='#ff5555'>{errors[dup]}</font>")
                 if detailed:
@@ -2039,12 +2087,12 @@ class MaterialManagerDialog(QtWidgets.QDialog):
                             else:
                                 formatted_values.append(f"({value_html})")
                         self._append_log(f"    <font color='#bbbbbb'>{attr}:</font> {' '.join(formatted_values)}")
-                self._append_log("")
             else:
                 # Only show "No merge candidates" in preview, not after execution
                 if preview_only:
                     self._append_log("  <font color='#888888'>No merge candidates</font>")
-                    self._append_log("")
+            # Add spacing after each material group
+            self._append_log("<div style='height:4px;'></div>")
         if preview_only:
             self._append_log("<i>Click 'Merge Materials' to apply merges.</i>")
 
@@ -2083,6 +2131,12 @@ class MaterialManagerDialog(QtWidgets.QDialog):
                         if _is_referenced(dup):
                             errors[dup] = "Can't merge referenced materials"
                     continue
+                if _material_has_texture(rep):
+                    errors[rep] = "Can't merge materials with textures"
+                    for dup in dupes:
+                        if _material_has_texture(dup):
+                            errors[dup] = "Can't merge materials with textures"
+                    continue
                 base_groups += 1
                 rep_sgs = cmds.listConnections(rep, type="shadingEngine") or []
                 if rep_sgs:
@@ -2094,6 +2148,9 @@ class MaterialManagerDialog(QtWidgets.QDialog):
                 for dup in dupes:
                     if _is_referenced(dup):
                         errors[dup] = "Can't merge referenced materials"
+                        continue
+                    if _material_has_texture(dup):
+                        errors[dup] = "Can't merge materials with textures"
                         continue
                     for sg in cmds.listConnections(dup, type="shadingEngine") or []:
                         members = cmds.sets(sg, q=True) or []
@@ -2124,10 +2181,13 @@ class MaterialManagerDialog(QtWidgets.QDialog):
         else:
             summary_lines.append("No materials required merging.")
         summary_lines.append("Use Maya's undo to restore merged materials if needed.")
-        self._append_log("")
+        self._append_log("<div style='height:2px;'></div>")
         for line in summary_lines:
-            self._append_log(f"<font color='#00ff00'>{line}</font>")
-        self._set_preview_state("merge", preview, summary_lines)
+            if "Use Maya's undo" in line:
+                self._append_log(f"<i><font color='#ffffff'>{line}</font></i>")
+            else:
+                self._append_log(f"<font color='#00ff00'>{line}</font>")
+        self._set_preview_state("merge", preview, summary_lines, preview_only=False)
         self._save_settings()
 
     # ---------------- rename ----------------
@@ -2179,7 +2239,8 @@ class MaterialManagerDialog(QtWidgets.QDialog):
         for entry in data["plan"]:
             mat = entry["material"]
             final_name = entry["final"]
-            self._append_log(f"• {mat} → <b><font color='#00f7c8'>{final_name}</font></b>")
+            final_color = "#00ff00" if not preview_only else "#00f7c8"  # Green when executing, cyan in preview
+            self._append_log(f"• {mat} → <b><font color='{final_color}'>{final_name}</font></b>")
             if mat in errors:
                 self._append_log(f"    <font color='#ff5555'>{errors[mat]}</font>")
             if detailed:
@@ -2237,10 +2298,13 @@ class MaterialManagerDialog(QtWidgets.QDialog):
             f"{rename_count} material(s) renamed!" if rename_count else "No materials required renaming.",
             "Use Maya's undo to restore original names if needed.",
         ]
-        self._append_log("")
+        self._append_log("<div style='height:2px;'></div>")
         for line in summary_lines:
-            self._append_log(f"<font color='#00ff00'>{line}</font>")
-        self._set_preview_state("rename", plan, summary_lines)
+            if "Use Maya's undo" in line:
+                self._append_log(f"<i><font color='#ffffff'>{line}</font></i>")
+            else:
+                self._append_log(f"<font color='#00ff00'>{line}</font>")
+        self._set_preview_state("rename", plan, summary_lines, preview_only=False)
         self._save_settings()
 
 

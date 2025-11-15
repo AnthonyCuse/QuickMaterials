@@ -50,6 +50,28 @@ import weakref  # guarded owner refs when QPointer is unavailable
 import QuickMaterials.material_manager
 importlib.reload(QuickMaterials.material_manager)
 
+# Import Material Swatch Icon
+try:
+    from . import material_swatch_icon
+except Exception:
+    import sys
+    import importlib.util
+    MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+    _swatch_path = os.path.join(MODULE_DIR, "material_swatch_icon.py")
+    _spec = importlib.util.spec_from_file_location("QuickMaterials.material_swatch_icon", _swatch_path)
+    if _spec is not None and _spec.loader is not None:
+        material_swatch_icon = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(material_swatch_icon)
+        sys.modules.setdefault("material_swatch_icon", material_swatch_icon)
+        sys.modules.setdefault("QuickMaterials.material_swatch_icon", material_swatch_icon)
+    else:
+        material_swatch_icon = None
+if material_swatch_icon:
+    importlib.reload(material_swatch_icon)
+    MaterialSwatchIcon = material_swatch_icon.MaterialSwatchIcon
+else:
+    MaterialSwatchIcon = None
+
 # Texture Importer import (package-relative with robust fallback)
 try:
     # Prefer package-relative import when available
@@ -211,6 +233,617 @@ class ClickableColorSwatch(QtWidgets.QWidget):
         QtWidgets.QWidget.mousePressEvent(self, e)  # let QWidget handle base behavior
 
 
+class TextureIcon(QtWidgets.QLabel):
+    """Simple black and white checker icon for file textures."""
+    
+    def __init__(self, texture_name, icon_size=14, parent=None):
+        """Create a checker pattern icon for a file texture.
+        
+        Args:
+            texture_name: Name of the texture node
+            icon_size: Size of the icon in pixels (default 14, smaller for better alignment)
+            parent: Parent widget
+        """
+        super(TextureIcon, self).__init__(parent)
+        self.texture_name = texture_name
+        self.icon_size = icon_size
+        
+        # Set fixed size to match list entry height
+        self.setFixedSize(icon_size, icon_size)
+        self.setAlignment(QtCore.Qt.AlignCenter)
+        self.setScaledContents(False)
+        
+        # Material list background color
+        self._bg_color = "#3a3a3a"
+        self.setStyleSheet(f"""
+            QLabel {{
+                background-color: {self._bg_color};
+                border: none;
+            }}
+        """)
+        
+        # Create checker pattern pixmap
+        self._checker_pixmap = self._create_checker_pattern(icon_size)
+        if self._checker_pixmap:
+            self.setPixmap(self._checker_pixmap)
+        
+        # Selection handler support (for clicking to select texture)
+        self._owner_ref = None
+        self._handler_name = None
+        self._bound_handler = None
+        self._qm_material_name = texture_name
+        
+        # Make it clickable
+        self.setCursor(QtCore.Qt.PointingHandCursor)
+    
+    def _create_checker_pattern(self, size):
+        """Create a black and white checker pattern pixmap."""
+        try:
+            # Create image with transparent background
+            image = QtGui.QImage(size, size, QtGui.QImage.Format_ARGB32)
+            image.fill(QtCore.Qt.transparent)
+            
+            # Create painter
+            painter = QtGui.QPainter(image)
+            painter.setRenderHint(QtGui.QPainter.Antialiasing, False)
+            
+            # Checker pattern: 4x4 grid
+            checker_size = size // 4
+            
+            # Colors
+            white = QtGui.QColor(255, 255, 255)
+            black = QtGui.QColor(0, 0, 0)
+            
+            # Draw checker pattern
+            for y in range(4):
+                for x in range(4):
+                    rect = QtCore.QRect(
+                        x * checker_size,
+                        y * checker_size,
+                        checker_size,
+                        checker_size
+                    )
+                    # Alternate colors based on position
+                    if (x + y) % 2 == 0:
+                        painter.fillRect(rect, white)
+                    else:
+                        painter.fillRect(rect, black)
+            
+            painter.end()
+            
+            # Convert to pixmap
+            pixmap = QtGui.QPixmap.fromImage(image)
+            return pixmap
+        except Exception as e:
+            print(f"[TextureIcon] Failed to create checker pattern: {e}")
+            return None
+    
+    def paintEvent(self, event):
+        """Override paintEvent to draw the checker pattern as a square."""
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, False)
+        
+        # Draw background square
+        bg_color = QtGui.QColor(self._bg_color)
+        painter.setBrush(QtGui.QBrush(bg_color))
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.drawRect(0, 0, self.icon_size, self.icon_size)
+        
+        # Draw the checker pattern if available
+        if self._checker_pixmap and not self._checker_pixmap.isNull():
+            # Draw the pixmap to fill the entire square
+            painter.drawPixmap(0, 0, self._checker_pixmap)
+        
+        painter.end()
+    
+    def setSelectionHandler(self, owner_or_callable, handler_name_or_material, maybe_material=None):
+        """Set the selection handler for click events.
+        Compatible with the same API as LeftClipLineEdit and MaterialSwatchIcon."""
+        if isinstance(handler_name_or_material, str) and maybe_material is not None:
+            # New signature: (owner, "handle_item_click", material)
+            owner = owner_or_callable
+            self._owner_ref = weakref.ref(owner) if owner is not None else None
+            self._handler_name = handler_name_or_material
+            self._bound_handler = None
+            self._qm_material_name = maybe_material
+            return
+        
+        # Back-compat: (callable, material_name)
+        callable_handler = owner_or_callable
+        material_name = handler_name_or_material
+        self._owner_ref = None
+        self._handler_name = None
+        self._bound_handler = callable_handler
+        self._qm_material_name = material_name
+    
+    def mousePressEvent(self, e):
+        """Handle mouse clicks to select the texture."""
+        try:
+            if e.button() == QtCore.Qt.RightButton:
+                super(TextureIcon, self).mousePressEvent(e)
+                return
+            
+            mods = e.modifiers()
+            shift = bool(mods & QtCore.Qt.ShiftModifier)
+            ctrl = bool(mods & (QtCore.Qt.ControlModifier | QtCore.Qt.MetaModifier))
+            
+            # Try owner + handler name pattern first
+            if self._owner_ref is not None and self._handler_name and self._qm_material_name:
+                owner = self._owner_ref() if callable(self._owner_ref) else None
+                _is_valid = None
+                try:
+                    from shiboken6 import isValid as _is_valid
+                except Exception:
+                    try:
+                        from shiboken2 import isValid as _is_valid
+                    except Exception:
+                        _is_valid = lambda obj: bool(obj)
+                
+                if owner is not None and _is_valid(owner):
+                    handler = getattr(owner, self._handler_name, None)
+                    if callable(handler):
+                        handler(self._qm_material_name, source='texture_icon', shift=shift, ctrl=ctrl)
+                        super(TextureIcon, self).mousePressEvent(e)
+                        return
+            
+            # Try bound handler pattern
+            if self._bound_handler and self._qm_material_name:
+                try:
+                    self._bound_handler(self._qm_material_name, source='texture_icon', shift=shift, ctrl=ctrl)
+                    super(TextureIcon, self).mousePressEvent(e)
+                    return
+                except Exception:
+                    pass
+            
+            # Default behavior
+            super(TextureIcon, self).mousePressEvent(e)
+        except Exception:
+            super(TextureIcon, self).mousePressEvent(e)
+
+
+class ProceduralTextureIcon(QtWidgets.QLabel):
+    """Icon that renders a sample of a procedural texture."""
+    
+    def __init__(self, texture_name, icon_size=14, parent=None):
+        """Create a procedural texture preview icon.
+        
+        Args:
+            texture_name: Name of the procedural texture node
+            icon_size: Size of the icon in pixels (default 14, matching file texture icon size)
+            parent: Parent widget
+        """
+        super(ProceduralTextureIcon, self).__init__(parent)
+        self.texture_name = texture_name
+        self.icon_size = icon_size
+        
+        # Set fixed size
+        self.setFixedSize(icon_size, icon_size)
+        self.setAlignment(QtCore.Qt.AlignCenter)
+        self.setScaledContents(False)
+        
+        # Material list background color
+        self._bg_color = "#3a3a3a"
+        self.setStyleSheet(f"""
+            QLabel {{
+                background-color: {self._bg_color};
+                border: none;
+            }}
+        """)
+        
+        # Texture preview pixmap (will be loaded asynchronously)
+        self._texture_pixmap = None
+        self._texture_loaded = False
+        
+        # Show loading placeholder
+        self.setText("...")
+        self.setStyleSheet(f"""
+            QLabel {{
+                background-color: {self._bg_color};
+                border: none;
+                color: #888888;
+                font-size: 8px;
+            }}
+        """)
+        
+        # Selection handler support (for clicking to select texture)
+        self._owner_ref = None
+        self._handler_name = None
+        self._bound_handler = None
+        self._qm_material_name = texture_name
+        
+        # Make it clickable
+        self.setCursor(QtCore.Qt.PointingHandCursor)
+        
+        # Load texture preview asynchronously to avoid blocking UI
+        QtCore.QTimer.singleShot(50, self.load_texture_preview)
+    
+    def load_texture_preview(self):
+        """Load and display the procedural texture preview."""
+        if not cmds.objExists(self.texture_name):
+            self.clear()
+            self._texture_loaded = True
+            return
+        
+        try:
+            pixmap = self._create_texture_preview(self.texture_name, self.icon_size)
+            if pixmap and not pixmap.isNull():
+                self._texture_pixmap = pixmap
+                self.clear()  # Clear text
+                self.update()
+                self._texture_loaded = True
+            else:
+                self.clear()
+                self._texture_loaded = True
+        except Exception as e:
+            self.clear()
+            self._texture_loaded = True
+            print(f"[ProceduralTextureIcon] Failed to load preview for {self.texture_name}: {e}")
+    
+    def _create_texture_preview(self, texture_node, size):
+        """Create a preview image by sampling the procedural texture at multiple UV coordinates."""
+        try:
+            if not cmds.objExists(texture_node):
+                return None
+            
+            node_type = cmds.nodeType(texture_node)
+            
+            # Create image
+            image = QtGui.QImage(size, size, QtGui.QImage.Format_ARGB32)
+            image.fill(QtCore.Qt.transparent)
+            
+            # Sample grid - use 4x4 grid for 14px icon (3-4px per sample)
+            sample_count = 4
+            sample_size = size // sample_count
+            
+            # Try to sample the texture at different UV coordinates
+            # We'll create a temporary place2dTexture to control UV sampling
+            temp_place2d = None
+            try:
+                # Check if texture has a place2dTexture connected
+                place2d_connections = cmds.listConnections(f"{texture_node}.uvCoord", source=True, destination=False)
+                if place2d_connections:
+                    place2d_node = place2d_connections[0]
+                else:
+                    # Create temporary place2dTexture for sampling
+                    temp_place2d = cmds.shadingNode("place2dTexture", asUtility=True)
+                    try:
+                        cmds.connectAttr(f"{temp_place2d}.outUV", f"{texture_node}.uvCoord", force=True)
+                    except:
+                        # Some textures might not use uvCoord
+                        pass
+                
+                # Sample the texture at grid points
+                for y_idx in range(sample_count):
+                    for x_idx in range(sample_count):
+                        # Calculate UV coordinates (0-1 range)
+                        u = (x_idx + 0.5) / sample_count
+                        v = 1.0 - (y_idx + 0.5) / sample_count  # Flip V for image coordinates
+                        
+                        # Try to get color at this UV coordinate
+                        color = self._sample_texture_at_uv(texture_node, u, v)
+                        
+                        if color:
+                            r, g, b = color
+                            # Clamp to 0-255 range
+                            r = max(0, min(255, int(r * 255)))
+                            g = max(0, min(255, int(g * 255)))
+                            b = max(0, min(255, int(b * 255)))
+                            
+                            # Fill the sample area
+                            for py in range(sample_size):
+                                for px in range(sample_size):
+                                    x = x_idx * sample_size + px
+                                    y = y_idx * sample_size + py
+                                    if x < size and y < size:
+                                        image.setPixel(x, y, QtGui.QColor(r, g, b).rgba())
+                        else:
+                            # Fallback: use average color
+                            avg_color = self._get_texture_average_color(texture_node)
+                            if avg_color:
+                                r, g, b = avg_color
+                                r = max(0, min(255, int(r * 255)))
+                                g = max(0, min(255, int(g * 255)))
+                                b = max(0, min(255, int(b * 255)))
+                                for py in range(sample_size):
+                                    for px in range(sample_size):
+                                        x = x_idx * sample_size + px
+                                        y = y_idx * sample_size + py
+                                        if x < size and y < size:
+                                            image.setPixel(x, y, QtGui.QColor(r, g, b).rgba())
+                
+                # Clean up temporary place2dTexture
+                if temp_place2d and cmds.objExists(temp_place2d):
+                    try:
+                        cmds.delete(temp_place2d)
+                    except:
+                        pass
+                
+            except Exception as e:
+                # Fallback: use average color as solid fill
+                avg_color = self._get_texture_average_color(texture_node)
+                if avg_color:
+                    r, g, b = avg_color
+                    r = max(0, min(255, int(r * 255)))
+                    g = max(0, min(255, int(g * 255)))
+                    b = max(0, min(255, int(b * 255)))
+                    image.fill(QtGui.QColor(r, g, b).rgba())
+                else:
+                    # Final fallback: grey
+                    image.fill(QtGui.QColor(128, 128, 128).rgba())
+            
+            # Convert to pixmap
+            pixmap = QtGui.QPixmap.fromImage(image)
+            return pixmap
+            
+        except Exception as e:
+            print(f"[ProceduralTextureIcon] Error creating preview for {texture_node}: {e}")
+            return None
+    
+    def _sample_texture_at_uv(self, texture_node, u, v):
+        """Sample texture color at specific UV coordinates."""
+        try:
+            # Try using colorAtPoint if available (Maya 2016+)
+            try:
+                result = cmds.colorAtPoint(texture_node, u=u, v=v)
+                if result and len(result) >= 3:
+                    return tuple(float(x) for x in result[:3])
+            except:
+                pass
+            
+            # Fallback: try to evaluate the texture by setting place2dTexture UV
+            # This is a simplified approach - we'll use the average color method
+            return None
+        except:
+            return None
+    
+    def _get_texture_average_color(self, texture_node):
+        """Get average color from procedural texture (fallback method)."""
+        try:
+            if cmds.attributeQuery("outColor", node=texture_node, exists=True):
+                try:
+                    color_value = cmds.getAttr(f"{texture_node}.outColor")[0]
+                    if isinstance(color_value, (list, tuple)) and len(color_value) >= 3:
+                        return tuple(float(x) for x in color_value[:3])
+                except:
+                    pass
+            return None
+        except:
+            return None
+    
+    def paintEvent(self, event):
+        """Override paintEvent to draw the texture preview as a square."""
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, False)
+        
+        # Draw background square
+        bg_color = QtGui.QColor(self._bg_color)
+        painter.setBrush(QtGui.QBrush(bg_color))
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.drawRect(0, 0, self.icon_size, self.icon_size)
+        
+        # Draw the texture preview if available
+        if self._texture_pixmap and not self._texture_pixmap.isNull():
+            painter.drawPixmap(0, 0, self._texture_pixmap)
+        else:
+            # Draw text if no pixmap
+            painter.setPen(QtGui.QColor("#888888"))
+            painter.setFont(self.font())
+            painter.drawText(self.rect(), QtCore.Qt.AlignCenter, self.text())
+        
+        painter.end()
+    
+    def setSelectionHandler(self, owner_or_callable, handler_name_or_material, maybe_material=None):
+        """Set the selection handler for click events.
+        Compatible with the same API as LeftClipLineEdit and MaterialSwatchIcon."""
+        if isinstance(handler_name_or_material, str) and maybe_material is not None:
+            owner = owner_or_callable
+            self._owner_ref = weakref.ref(owner) if owner is not None else None
+            self._handler_name = handler_name_or_material
+            self._bound_handler = None
+            self._qm_material_name = maybe_material
+            return
+        
+        callable_handler = owner_or_callable
+        material_name = handler_name_or_material
+        self._owner_ref = None
+        self._handler_name = None
+        self._bound_handler = callable_handler
+        self._qm_material_name = material_name
+    
+    def mousePressEvent(self, e):
+        """Handle mouse clicks to select the texture."""
+        try:
+            if e.button() == QtCore.Qt.RightButton:
+                super(ProceduralTextureIcon, self).mousePressEvent(e)
+                return
+            
+            mods = e.modifiers()
+            shift = bool(mods & QtCore.Qt.ShiftModifier)
+            ctrl = bool(mods & (QtCore.Qt.ControlModifier | QtCore.Qt.MetaModifier))
+            
+            if self._owner_ref is not None and self._handler_name and self._qm_material_name:
+                owner = self._owner_ref() if callable(self._owner_ref) else None
+                _is_valid = None
+                try:
+                    from shiboken6 import isValid as _is_valid
+                except Exception:
+                    try:
+                        from shiboken2 import isValid as _is_valid
+                    except Exception:
+                        _is_valid = lambda obj: bool(obj)
+                
+                if owner is not None and _is_valid(owner):
+                    handler = getattr(owner, self._handler_name, None)
+                    if callable(handler):
+                        handler(self._qm_material_name, source='procedural_texture_icon', shift=shift, ctrl=ctrl)
+                        super(ProceduralTextureIcon, self).mousePressEvent(e)
+                        return
+            
+            if self._bound_handler and self._qm_material_name:
+                try:
+                    self._bound_handler(self._qm_material_name, source='procedural_texture_icon', shift=shift, ctrl=ctrl)
+                    super(ProceduralTextureIcon, self).mousePressEvent(e)
+                    return
+                except Exception:
+                    pass
+            
+            super(ProceduralTextureIcon, self).mousePressEvent(e)
+        except Exception:
+            super(ProceduralTextureIcon, self).mousePressEvent(e)
+
+
+class ShadingGroupIcon(QtWidgets.QLabel):
+    """Simple blue rounded square icon for shading groups."""
+    
+    def __init__(self, shading_group_name, icon_size=12, parent=None):
+        """Create a blue rounded square icon for a shading group.
+        
+        Args:
+            shading_group_name: Name of the shading group node
+            icon_size: Size of the icon in pixels (default 12, smaller than texture icons)
+            parent: Parent widget
+        """
+        super(ShadingGroupIcon, self).__init__(parent)
+        self.shading_group_name = shading_group_name
+        self.icon_size = icon_size
+        
+        # Set fixed size
+        self.setFixedSize(icon_size, icon_size)
+        self.setAlignment(QtCore.Qt.AlignCenter)
+        self.setScaledContents(False)
+        
+        # Material list background color
+        self._bg_color = "#3a3a3a"
+        self._blue_color = "#2a3a4a"  # Deeper blue matching base shading group styling
+        
+        # Create blue rounded square pixmap
+        self._icon_pixmap = self._create_blue_rounded_square(icon_size)
+        if self._icon_pixmap:
+            self.setPixmap(self._icon_pixmap)
+        
+        # Selection handler support (for clicking to select shading group)
+        self._owner_ref = None
+        self._handler_name = None
+        self._bound_handler = None
+        self._qm_material_name = shading_group_name
+        
+        # Make it clickable
+        self.setCursor(QtCore.Qt.PointingHandCursor)
+    
+    def _create_blue_rounded_square(self, size):
+        """Create a blue rounded square pixmap."""
+        try:
+            # Create image with transparent background
+            image = QtGui.QImage(size, size, QtGui.QImage.Format_ARGB32)
+            image.fill(QtCore.Qt.transparent)
+            
+            # Create painter
+            painter = QtGui.QPainter(image)
+            painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+            
+            # Blue color with maximum saturation
+            blue = QtGui.QColor(self._blue_color)
+            # Convert to HSV, set saturation to maximum, convert back to RGB
+            h, s, v, a = blue.getHsv()
+            if h >= 0:  # Valid hue
+                blue.setHsv(h, 255, v, a)  # Max saturation (255)
+            else:
+                # If color has no hue (grayscale), use a vibrant blue
+                blue = QtGui.QColor("#0066ff")  # Vibrant blue fallback
+            
+            # Draw rounded rectangle (square with rounded corners)
+            corner_radius = max(2, size // 6)  # Small rounded corners
+            rect = QtCore.QRect(0, 0, size, size)
+            painter.setBrush(QtGui.QBrush(blue))
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.drawRoundedRect(rect, corner_radius, corner_radius)
+            
+            painter.end()
+            
+            # Convert to pixmap
+            pixmap = QtGui.QPixmap.fromImage(image)
+            return pixmap
+        except Exception as e:
+            print(f"[ShadingGroupIcon] Failed to create blue rounded square: {e}")
+            return None
+    
+    def paintEvent(self, event):
+        """Override paintEvent to draw the blue rounded square."""
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        
+        # Draw background square
+        bg_color = QtGui.QColor(self._bg_color)
+        painter.setBrush(QtGui.QBrush(bg_color))
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.drawRect(0, 0, self.icon_size, self.icon_size)
+        
+        # Draw the blue rounded square if available
+        if self._icon_pixmap and not self._icon_pixmap.isNull():
+            painter.drawPixmap(0, 0, self._icon_pixmap)
+        
+        painter.end()
+    
+    def setSelectionHandler(self, owner_or_callable, handler_name_or_material, maybe_material=None):
+        """Set the selection handler for click events.
+        Compatible with the same API as LeftClipLineEdit and MaterialSwatchIcon."""
+        if isinstance(handler_name_or_material, str) and maybe_material is not None:
+            owner = owner_or_callable
+            self._owner_ref = weakref.ref(owner) if owner is not None else None
+            self._handler_name = handler_name_or_material
+            self._bound_handler = None
+            self._qm_material_name = maybe_material
+            return
+        
+        callable_handler = owner_or_callable
+        material_name = handler_name_or_material
+        self._owner_ref = None
+        self._handler_name = None
+        self._bound_handler = callable_handler
+        self._qm_material_name = material_name
+    
+    def mousePressEvent(self, e):
+        """Handle mouse clicks to select the shading group."""
+        try:
+            if e.button() == QtCore.Qt.RightButton:
+                super(ShadingGroupIcon, self).mousePressEvent(e)
+                return
+            
+            mods = e.modifiers()
+            shift = bool(mods & QtCore.Qt.ShiftModifier)
+            ctrl = bool(mods & (QtCore.Qt.ControlModifier | QtCore.Qt.MetaModifier))
+            
+            if self._owner_ref is not None and self._handler_name and self._qm_material_name:
+                owner = self._owner_ref() if callable(self._owner_ref) else None
+                _is_valid = None
+                try:
+                    from shiboken6 import isValid as _is_valid
+                except Exception:
+                    try:
+                        from shiboken2 import isValid as _is_valid
+                    except Exception:
+                        _is_valid = lambda obj: bool(obj)
+                
+                if owner is not None and _is_valid(owner):
+                    handler = getattr(owner, self._handler_name, None)
+                    if callable(handler):
+                        handler(self._qm_material_name, source='shading_group_icon', shift=shift, ctrl=ctrl)
+                        super(ShadingGroupIcon, self).mousePressEvent(e)
+                        return
+            
+            if self._bound_handler and self._qm_material_name:
+                try:
+                    self._bound_handler(self._qm_material_name, source='shading_group_icon', shift=shift, ctrl=ctrl)
+                    super(ShadingGroupIcon, self).mousePressEvent(e)
+                    return
+                except Exception:
+                    pass
+            
+            super(ShadingGroupIcon, self).mousePressEvent(e)
+        except Exception:
+            super(ShadingGroupIcon, self).mousePressEvent(e)
+
+
 class QHLine(QtWidgets.QFrame):
     """Custom horizontal line widget that works reliably in Maya."""
     def __init__(self, parent=None):
@@ -347,6 +980,7 @@ class TextureDisplayLabel(QtWidgets.QLabel):
         is_texture = is_file_texture or is_procedural_texture  # Legacy check
         
         menu = QtWidgets.QMenu(self)
+        menu.setStyleSheet(context_menu_style)
         
         def _safe_call(fn_name, *args, **kwargs):
             try:
@@ -363,6 +997,7 @@ class TextureDisplayLabel(QtWidgets.QLabel):
             menu.addSeparator()
             
             cs_menu = menu.addMenu("Colorspace")
+            cs_menu.setStyleSheet(context_menu_style)
             try:
                 current_cs = owner._get_file_texture_colorspace(mat)
                 colorspaces = ['sRGB', 'Raw', 'ACEScg']
@@ -442,6 +1077,7 @@ class LeftClipLineEdit(QtWidgets.QLineEdit):
 
         # Build the menu
         menu = QtWidgets.QMenu(self)
+        menu.setStyleSheet(context_menu_style)
         
         # Wire actions to existing QuickMaterialsUI methods
         def _safe_call(fn_name, *args, **kwargs):
@@ -461,6 +1097,7 @@ class LeftClipLineEdit(QtWidgets.QLineEdit):
             
             # Colorspace submenu
             cs_menu = menu.addMenu("Colorspace")
+            cs_menu.setStyleSheet(context_menu_style)
             try:
                 current_cs = owner._get_file_texture_colorspace(mat)
                 colorspaces = ['sRGB', 'Raw', 'ACEScg']
@@ -849,9 +1486,28 @@ QLineEdit {
     selection-color: #ffffff;
 }
 
+/* Hover highlighting for general material entries */
+/* More specific rules for default, unused, and selected override this */
+QLineEdit:hover {
+    background-color: #4d4d4d;
+    border: 1px solid #5d5d5d;
+}
+
+QLineEdit[nodeType="material"]:hover {
+    background-color: #4d4d4d;
+    border: 1px solid #5d5d5d;
+}
+
+/* Disable hover highlighting when in edit mode */
+QLineEdit[qmEditMode="true"]:hover {
+    background-color: #333333 !important;
+    border: 1px solid #777777 !important;
+}
+
 /* Show text highlighting when in edit mode */
 QLineEdit[qmEditMode="true"] {
     selection-background-color: #0078d4;
+    
     selection-color: #ffffff;
 }
 
@@ -885,6 +1541,13 @@ QLineEdit[qmSelected="true"] {
     border: 1px solid #ccdbe6;
 }
 
+/* Selected state must override hover - keep selected styling even when hovering */
+QLineEdit[qmSelected="true"]:hover {
+    background-color: #3e637a !important;
+    color: #ffffff !important;
+    border: 1px solid #ccdbe6 !important;
+}
+
 /* ===================================================================
    Node Type Styling - File Textures (Yellow), Procedural (Orange), Shading Groups (Blue)
    =================================================================== */
@@ -901,9 +1564,17 @@ QLabel[nodeType="file_texture"] {
     font-weight: bold;
 }
 
-QLineEdit[nodeType="file_texture"]:hover {
+QLineEdit[nodeType="file_texture"]:hover,
+QLabel[nodeType="file_texture"]:hover {
     background-color: #565646;
     color: #ffffff;
+}
+
+/* Disable hover highlighting for file textures when in edit mode */
+QLineEdit[nodeType="file_texture"][qmEditMode="true"]:hover,
+QLabel[nodeType="file_texture"][qmEditMode="true"]:hover {
+    background-color: #333333 !important;
+    border: 1px solid #777777 !important;
 }
 
 QLineEdit[nodeType="file_texture"][qmSelected="true"],
@@ -911,6 +1582,14 @@ QLabel[nodeType="file_texture"][qmSelected="true"] {
     background-color: #6a6a3a;
     color: #ffffff;
     border: 1px solid #b8b86a;
+}
+
+/* File texture selected state must override hover */
+QLineEdit[nodeType="file_texture"][qmSelected="true"]:hover,
+QLabel[nodeType="file_texture"][qmSelected="true"]:hover {
+    background-color: #6a6a3a !important;
+    color: #ffffff !important;
+    border: 1px solid #b8b86a !important;
 }
 
 QLineEdit[nodeType="file_texture"][readOnly="false"][editing="true"] { 
@@ -941,10 +1620,23 @@ QLineEdit[nodeType="procedural_texture"]:hover {
     color: #ffffff;
 }
 
+/* Disable hover highlighting for procedural textures when in edit mode */
+QLineEdit[nodeType="procedural_texture"][qmEditMode="true"]:hover {
+    background-color: #333333 !important;
+    border: 1px solid #777777 !important;
+}
+
 QLineEdit[nodeType="procedural_texture"][qmSelected="true"] {
     background-color: #6a4a2a;
     color: #ffffff;
     border: 1px solid #b86a4a;
+}
+
+/* Procedural texture selected state must override hover */
+QLineEdit[nodeType="procedural_texture"][qmSelected="true"]:hover {
+    background-color: #6a4a2a !important;
+    color: #ffffff !important;
+    border: 1px solid #b86a4a !important;
 }
 
 QLineEdit[nodeType="procedural_texture"][readOnly="false"][editing="true"] { 
@@ -967,10 +1659,23 @@ QLineEdit[nodeType="shading_group"]:hover {
     color: #ffffff;
 }
 
+/* Disable hover highlighting for shading groups when in edit mode */
+QLineEdit[nodeType="shading_group"][qmEditMode="true"]:hover {
+    background-color: #333333 !important;
+    border: 1px solid #777777 !important;
+}
+
 QLineEdit[nodeType="shading_group"][qmSelected="true"] {
     background-color: #3a4a6a;
     color: #ffffff;
     border: 1px solid #4a6a8a;
+}
+
+/* Shading group selected state must override hover */
+QLineEdit[nodeType="shading_group"][qmSelected="true"]:hover {
+    background-color: #3a4a6a !important;
+    color: #ffffff !important;
+    border: 1px solid #4a6a8a !important;
 }
 
 QLineEdit[nodeType="shading_group"][readOnly="false"][editing="true"] { 
@@ -985,6 +1690,103 @@ QLineEdit[materialType="default"]:focus {
     background-color: #444444;   /* normal default background */
     border: 1px solid #3d3d3d;   /* same muted border */
 }
+
+/* Unused materials/textures - light red highlight (only when checkbox is checked) */
+QLineEdit[qmUnused="true"],
+QLabel[qmUnused="true"] {
+    background-color: #4a3a3a !important;  /* light red tint */
+    border: 1px solid #5a4a4a !important;
+    color: #ffffff !important;
+}
+
+QLineEdit[qmUnused="true"]:hover,
+QLabel[qmUnused="true"]:hover {
+    background-color: #563a3a !important;
+    color: #ffffff !important;
+    border: 1px solid #5a4a4a !important;
+}
+
+/* Disable hover highlighting for unused materials when in edit mode */
+QLineEdit[qmUnused="true"][qmEditMode="true"]:hover,
+QLabel[qmUnused="true"][qmEditMode="true"]:hover {
+    background-color: #333333 !important;
+    border: 1px solid #777777 !important;
+}
+
+QLineEdit[qmUnused="true"][qmSelected="true"],
+QLabel[qmUnused="true"][qmSelected="true"] {
+    background-color: #6a4a4a !important;  /* slightly darker red when selected */
+    color: #ffffff !important;
+    border: 1px solid #8a5a5a !important;
+}
+
+/* Override unused styling for default materials */
+QLineEdit[materialType="default"][qmUnused="true"] {
+    background-color: #444444;
+    color: #aaaaaa;
+    border: 1px solid #3d3d3d;
+}
+
+/* Unused file textures - override nodeType styling when unused */
+/* Need higher specificity to override the yellow file texture styling */
+QLineEdit[nodeType="file_texture"][qmUnused="true"],
+QLabel[nodeType="file_texture"][qmUnused="true"] {
+    background-color: #4a3a3a !important;  /* light red tint (overrides yellow) */
+    border: 1px solid #5a4a4a !important;
+    color: #ffffff !important;
+}
+
+QLineEdit[nodeType="file_texture"][qmUnused="true"]:hover,
+QLabel[nodeType="file_texture"][qmUnused="true"]:hover {
+    background-color: #563a3a !important;
+    color: #ffffff !important;
+    border: 1px solid #5a4a4a !important;
+}
+
+QLineEdit[nodeType="file_texture"][qmUnused="true"][qmSelected="true"],
+QLabel[nodeType="file_texture"][qmUnused="true"][qmSelected="true"] {
+    background-color: #6a4a4a !important;
+    color: #ffffff !important;
+    border: 1px solid #8a5a5a !important;
+}
+
+/* Unused procedural textures - override nodeType styling when unused */
+QLineEdit[nodeType="procedural_texture"][qmUnused="true"] {
+    background-color: #4a3a3a !important;  /* light red tint (overrides orange) */
+    border: 1px solid #5a4a4a !important;
+    color: #ffffff !important;
+}
+
+QLineEdit[nodeType="procedural_texture"][qmUnused="true"]:hover {
+    background-color: #563a3a !important;
+    color: #ffffff !important;
+    border: 1px solid #5a4a4a !important;
+}
+
+QLineEdit[nodeType="procedural_texture"][qmUnused="true"][qmSelected="true"] {
+    background-color: #6a4a4a !important;
+    color: #ffffff !important;
+    border: 1px solid #8a5a5a !important;
+}
+
+/* Unused shading groups - override nodeType styling when unused */
+QLineEdit[nodeType="shading_group"][qmUnused="true"] {
+    background-color: #4a3a3a !important;  /* light red tint (overrides blue) */
+    border: 1px solid #5a4a4a !important;
+    color: #ffffff !important;
+}
+
+QLineEdit[nodeType="shading_group"][qmUnused="true"]:hover {
+    background-color: #563a3a !important;
+    color: #ffffff !important;
+    border: 1px solid #5a4a4a !important;
+}
+
+QLineEdit[nodeType="shading_group"][qmUnused="true"][qmSelected="true"] {
+    background-color: #6a4a4a !important;
+    color: #ffffff !important;
+    border: 1px solid #8a5a5a !important;
+}
 /* ---------------------------------------------
    Labels
    --------------------------------------------- */
@@ -995,6 +1797,16 @@ QLabel {
     padding: 0px;
 }
 QLabel[materialType="default"] { color: #aaaaaa; }
+
+/* Unused QLabels (textures) - ensure background is visible */
+QLabel[qmUnused="true"] {
+    background-color: #4a3a3a !important;
+    border: 1px solid #5a4a4a !important;
+    border-radius: 6px !important;
+    padding: 1px 1px !important;
+    min-height: 22px !important;
+    max-height: 22px !important;
+}
 
 /* ---------------------------------------------
    Checkboxes
@@ -1056,6 +1868,68 @@ QFrame[frameShape="4"] {  /* HLine */
     border-top: 1px solid #666666;
     min-height: 1px;
     max-height: 1px;
+}
+
+/* ---------------------------------------------
+   Context Menu (Right-click menu)
+   --------------------------------------------- */
+QMenu {
+    background-color: #3a3a3a;
+    color: #ffffff;
+    border: 1px solid #555555;
+}
+
+QMenu::item {
+    background-color: transparent;
+    color: #ffffff;
+    padding: 4px 20px 4px 20px;
+}
+
+QMenu::item:selected {
+    background-color: #444444;
+    color: #ffffff;
+}
+
+QMenu::item:hover {
+    background-color: #444444;
+    color: #ffffff;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #555555;
+    margin: 2px 0px;
+}
+"""
+
+# Stylesheet for context menus (right-click menus)
+context_menu_style = """
+QMenu {
+    background-color: #3a3a3a;
+    color: #ffffff;
+    border: 1px solid #555555;
+}
+
+QMenu::item {
+    background-color: transparent;
+    color: #ffffff;
+    padding: 4px 20px 4px 20px;
+}
+
+QMenu::item:selected {
+    background-color: #444444;
+    color: #ffffff;
+}
+
+QMenu::item:hover {
+    background-color: #444444;
+    color: #ffffff;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #555555;
+    margin: 2px 0px;
 }
 """
 
@@ -1686,8 +2560,8 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         'materials': {
             'show_checkbox': None,  # Always shown
             'filter_checkbox': None,
-            'header_text': None,  # No header for materials (they're the default)
-            'header_color': None,
+            'header_text': 'Shaders',  # Header text for materials section
+            'header_color': '#ffffff',  # White header color
             'entry_color': '#444444',  # Default material color
             'selected_color': '#3e637a',  # Blue selection
             'supports_rename': True,
@@ -2692,6 +3566,21 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         # Connect delete selected materials button to delete_selected_materials function
         if self.ui_elements.get('deleteSelectedMaterialsButton'):
             self.ui_elements['deleteSelectedMaterialsButton'].clicked.connect(self.delete_selected_materials)
+
+        # Connect highlight unused checkbox to refresh list
+        highlight_unused_cb = self._get_widget('highlightUnusedCheckbox', QtWidgets.QCheckBox)
+        if highlight_unused_cb:
+            highlight_unused_cb.toggled.connect(self.refresh_materials_list)
+        
+        # Connect show shader swatches checkbox
+        show_swatches_cb = self._get_widget('showShaderSwatchesCheckbox', QtWidgets.QCheckBox)
+        if show_swatches_cb:
+            show_swatches_cb.toggled.connect(self.refresh_materials_list)
+        
+        # Connect show other icons checkbox (file texture, procedural texture, shading group icons)
+        show_other_icons_cb = self._get_widget('showOtherIconsCheckbox', QtWidgets.QCheckBox)
+        if show_other_icons_cb:
+            show_other_icons_cb.toggled.connect(self.refresh_materials_list)
 
         # --- install auto-refresh watchers for the material list ---
         self._install_material_watchers()  # ensures list refreshes on scene/material changes
@@ -4667,6 +5556,11 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         except Exception:
             return
 
+        # Clear material type cache to ensure shader types are re-queried
+        # This is important after material conversion when shader types change
+        if hasattr(self, "_material_type_cache"):
+            self._material_type_cache.clear()
+
         start_time = time.perf_counter()
         
         # Reset selection & per-build registries
@@ -4814,11 +5708,11 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         scroll_layout.setHorizontalSpacing(3)
         self._last_type_header = None  # reset type chunking per rebuild
 
-        # Start at row 0 inside the scroll; the sticky sort bar is outside the scroll area
+        # Note: Sort bar is installed as sticky header above scroll area (see _install_sort_bar)
+        # Starting row for content inside scroll
         row = 0
 
         # Chips row (only if any filters active)
-        row = 0
         consumed = self._add_active_filters_bar(scroll_layout, row)
         row += consumed
 
@@ -4858,22 +5752,16 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             procedural_textures_only = self._sort_materials(procedural_textures_only, all_nodes)
             shading_groups_only = self._sort_materials(shading_groups_only, all_nodes)
 
+        # --- Add SHADERS section header ---
+        if materials_only:
+            self._add_node_type_header(scroll_layout, row, 'materials')
+            row += 1
+        
         # Populate materials entries (+ action rows)
         for material in materials_only:
             is_default = material in DEFAULT_MATERIALS
-            # --- TYPE HEADER (only when sorting by type) ---
-            if getattr(self, "_sort_mode", "name") == "type":
-                try:
-                    _t = (cmds.nodeType(material) or "").strip()
-                except Exception:
-                    _t = ""
-                if not hasattr(self, "_last_type_header"):
-                    self._last_type_header = None
-                if _t != self._last_type_header:
-                    self._add_type_header(scroll_layout, row, _t or "Unknown")
-                    row += 1
-                    self._last_type_header = _t
-            self.add_material_entry_optimized(material, row, scroll_layout, DEFAULT_MATERIALS, saved_selection)
+            # Type headers are removed - just use the general 'Shaders:' header at the top
+            self.add_material_entry_optimized(material, row, scroll_layout, DEFAULT_MATERIALS, saved_selection, material_properties)
             self.add_material_buttons(material, row, scroll_layout, is_default)
             row += 2
 
@@ -4884,7 +5772,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             
             # Populate file texture entries
             for texture in file_textures_only:
-                self.add_material_entry_optimized(texture, row, scroll_layout, DEFAULT_MATERIALS, saved_selection)
+                self.add_material_entry_optimized(texture, row, scroll_layout, DEFAULT_MATERIALS, saved_selection, material_properties)
                 self.add_material_buttons(texture, row, scroll_layout, False)
                 row += 2
 
@@ -4895,7 +5783,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             
             # Populate procedural texture entries
             for texture in procedural_textures_only:
-                self.add_material_entry_optimized(texture, row, scroll_layout, DEFAULT_MATERIALS, saved_selection)
+                self.add_material_entry_optimized(texture, row, scroll_layout, DEFAULT_MATERIALS, saved_selection, material_properties)
                 self.add_material_buttons(texture, row, scroll_layout, False)
                 row += 2
 
@@ -4906,9 +5794,9 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             
             # Populate shading group entries
             for sg in shading_groups_only:
-                self.add_material_entry_optimized(sg, row, scroll_layout, DEFAULT_MATERIALS, saved_selection)
+                self.add_material_entry_optimized(sg, row, scroll_layout, DEFAULT_MATERIALS, saved_selection, material_properties)
                 self.add_material_buttons(sg, row, scroll_layout, False)
-            row += 2
+                row += 2
 
 
         # Bottom spacer
@@ -5027,6 +5915,20 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                 break
         line_edit = None
         if container is not None:
+            # Clean up any existing swatch icons when reusing containers
+            layout = container.layout()
+            if layout:
+                # Remove any MaterialSwatchIcon widgets
+                if MaterialSwatchIcon is not None:
+                    for i in range(layout.count() - 1, -1, -1):  # Iterate backwards to safely remove
+                        item = layout.itemAt(i)
+                        if item and item.widget():
+                            widget = item.widget()
+                            if isinstance(widget, MaterialSwatchIcon):
+                                layout.removeWidget(widget)
+                                widget.setParent(None)
+                                widget.deleteLater()
+            
             line_edit = getattr(container, "_qm_line_edit", None)
             if line_edit is None:
                 line_edit = container.findChild(QtWidgets.QLineEdit)
@@ -5040,8 +5942,8 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         else:
             container = QtWidgets.QWidget()
             layout = QtWidgets.QHBoxLayout(container)
-            layout.setContentsMargins(2, 0, 2, 0)
-            layout.setSpacing(3)
+            layout.setContentsMargins(1, 0, 2, 0)  # Reduced left margin for less padding around swatch
+            layout.setSpacing(2)  # Reduced spacing for tighter layout
             line_edit = MaterialDisplayLineEdit("")
             line_edit.setObjectName("qmMaterialLineEdit")
             try:
@@ -5056,7 +5958,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             container.setParent(None)
         return container, line_edit
 
-    def add_material_entry_optimized(self, material, row, scroll_layout, default_materials, saved_selection=None):
+    def add_material_entry_optimized(self, material, row, scroll_layout, default_materials, saved_selection=None, material_properties=None):
         """
         OPTIMIZED VERSION: Create material entry using pre-computed colors to avoid Maya API calls.
         """
@@ -5106,16 +6008,100 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             material_widget.setText(display_name)
             if isinstance(material_widget, MaterialDisplayLineEdit):
                 material_widget.setSecondaryText(shader_type)
+            
+            # Add swatch icon to the left of material entries (if checkbox is enabled)
+            if MaterialSwatchIcon is not None:
+                # Check if show shader swatches checkbox is enabled
+                show_swatches_cb = self._get_widget('showShaderSwatchesCheckbox', QtWidgets.QCheckBox)
+                show_swatches = show_swatches_cb.isChecked() if show_swatches_cb else True  # Default to True if checkbox doesn't exist
+                
+                if show_swatches:
+                    try:
+                        swatch_icon = MaterialSwatchIcon(material, icon_size=20, parent=container)
+                        swatch_icon.setFixedSize(20, 20)  # Slightly smaller than list entry height
+                        # Make swatch icon clickable to select material
+                        swatch_icon.setSelectionHandler(self, "handle_item_click", material)
+                        # Store the actual material name for operations
+                        swatch_icon._actual_material_name = material
+                        # Insert at the beginning of the layout (left side)
+                        material_layout.insertWidget(0, swatch_icon)
+                        # Load swatch asynchronously after a short delay to avoid blocking UI
+                        QtCore.QTimer.singleShot(10, swatch_icon.load_swatch)
+                    except Exception as e:
+                        print(f"[QuickMaterials] Failed to create swatch icon for {material}: {e}")
         else:
             container = QtWidgets.QWidget()
             material_layout = QtWidgets.QHBoxLayout()
-            material_layout.setContentsMargins(2, 0, 2, 0)
+            material_layout.setContentsMargins(1, 0, 2, 0)  # Match material entry left margin for alignment
             material_layout.setSpacing(3)
             container.setLayout(material_layout)
             if use_rich_text_label:
                 material_widget = TextureDisplayLabel(display_text)
             else:
                 material_widget = LeftClipLineEdit(display_text)
+            
+            # Check if show other icons checkbox is enabled
+            show_other_icons_cb = self._get_widget('showOtherIconsCheckbox', QtWidgets.QCheckBox)
+            show_other_icons = show_other_icons_cb.isChecked() if show_other_icons_cb else True  # Default to True if checkbox doesn't exist
+            
+            # Add texture icon to the left of file texture entries
+            if is_file_texture and show_other_icons:
+                try:
+                    # Reduced left spacer to move icon and entry closer to the left
+                    spacer = QtWidgets.QSpacerItem(2, 1, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum)
+                    material_layout.addItem(spacer)
+                    
+                    texture_icon = TextureIcon(material, icon_size=14, parent=container)
+                    texture_icon.setFixedSize(14, 14)  # Smaller icon, spacing kept same for alignment
+                    # Make texture icon clickable to select texture
+                    texture_icon.setSelectionHandler(self, "handle_item_click", material)
+                    # Store the actual material name for operations
+                    texture_icon._actual_material_name = material
+                    # Add the icon after the spacer
+                    material_layout.addWidget(texture_icon)
+                except Exception as e:
+                    print(f"[QuickMaterials] Failed to create texture icon for {material}: {e}")
+            
+            # Add procedural texture icon to the left of procedural texture entries
+            if is_procedural_texture and show_other_icons:
+                try:
+                    # Reduced left spacer to move icon and entry closer to the left
+                    spacer = QtWidgets.QSpacerItem(2, 1, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum)
+                    material_layout.addItem(spacer)
+                    
+                    proc_texture_icon = ProceduralTextureIcon(material, icon_size=14, parent=container)
+                    proc_texture_icon.setFixedSize(14, 14)  # Same size as file texture icon, smaller for alignment
+                    # Make procedural texture icon clickable to select texture
+                    proc_texture_icon.setSelectionHandler(self, "handle_item_click", material)
+                    # Store the actual material name for operations
+                    proc_texture_icon._actual_material_name = material
+                    # Add the icon after the spacer
+                    material_layout.addWidget(proc_texture_icon)
+                except Exception as e:
+                    print(f"[QuickMaterials] Failed to create procedural texture icon for {material}: {e}")
+            
+            # Add shading group icon to the left of shading group entries
+            if is_shading_group and show_other_icons:
+                try:
+                    # Reduced left spacer to move icon and entry closer to the left
+                    spacer = QtWidgets.QSpacerItem(2, 1, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum)
+                    material_layout.addItem(spacer)
+                    
+                    sg_icon = ShadingGroupIcon(material, icon_size=12, parent=container)
+                    sg_icon.setFixedSize(12, 12)  # Smaller than texture icons
+                    # Make shading group icon clickable to select shading group
+                    sg_icon.setSelectionHandler(self, "handle_item_click", material)
+                    # Store the actual material name for operations
+                    sg_icon._actual_material_name = material
+                    # Add the icon after the spacer
+                    material_layout.addWidget(sg_icon)
+                    
+                    # Add extra spacing between icon and text
+                    icon_spacer = QtWidgets.QSpacerItem(1, 1, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum)
+                    material_layout.addItem(icon_spacer)
+                except Exception as e:
+                    print(f"[QuickMaterials] Failed to create shading group icon for {material}: {e}")
+            
             material_layout.addWidget(material_widget)
             container.setContentsMargins(0, 0, 0, 0)
         
@@ -5138,7 +6124,27 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         else:
             material_widget.setProperty("nodeType", "material")
 
-        material_widget.style().unpolish(material_widget); material_widget.style().polish(material_widget)
+        # Check if unused materials/textures should be highlighted
+        is_unused = False
+        if material_properties:
+            props = material_properties.get(material, {})
+            is_unused = not props.get('used', True)  # If 'used' is False or missing, it's unused
+        
+        # Check if highlight unused checkbox is checked
+        highlight_unused_cb = self._get_widget('highlightUnusedCheckbox', QtWidgets.QCheckBox)
+        should_highlight_unused = highlight_unused_cb and highlight_unused_cb.isChecked() if highlight_unused_cb else False
+        
+        # Set unused property for CSS styling (only if checkbox is checked)
+        # Applies to materials, textures, and shading groups
+        if should_highlight_unused and is_unused:
+            material_widget.setProperty("qmUnused", "true")
+        else:
+            material_widget.setProperty("qmUnused", "false")
+
+        # Force style update - especially important for QLabel (TextureDisplayLabel)
+        material_widget.style().unpolish(material_widget)
+        material_widget.style().polish(material_widget)
+        material_widget.update()  # Force repaint
 
         # Register this row for ordered selection behavior
         self._register_material_entry(material, None, material_widget, is_default=(material in default_materials), container=container)
@@ -5413,14 +6419,49 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             # Fallback: if hyperShade doesn't work, mark all as used
             pass
         
+        # Build a map of shading groups to their usage status for quick lookup
+        sg_usage_map = {}
+        for sg in shading_groups_only:
+            try:
+                members = cmds.sets(sg, q=True) or []
+                sg_usage_map[sg] = len(members) > 0
+            except Exception:
+                sg_usage_map[sg] = False
+        
         for tex in textures_only:
             is_ref = False
             is_used = False
             try:
                 # Check if referenced
                 is_ref = self._is_referenced(tex)
+                
                 # Check if used - if NOT in unused_nodes, it's being used
                 is_used = tex not in unused_nodes
+                
+                # Special handling for displacement shaders and similar utility shaders
+                # If they're connected to a used shading group, mark them as used
+                if not is_used:
+                    node_type = cmds.nodeType(tex)
+                    # Check if this is a displacement shader or similar utility shader
+                    if node_type in ('displacementShader', 'volumeShader'):
+                        # Check if connected to any shading group's displacementShader/volumeShader attribute
+                        connected_sgs = cmds.listConnections(tex, type="shadingEngine", d=True, s=False) or []
+                        for sg in connected_sgs:
+                            # Check if this SG is connected via displacementShader or volumeShader
+                            try:
+                                if node_type == 'displacementShader':
+                                    conns = cmds.listConnections(f"{sg}.displacementShader", s=True, d=False) or []
+                                elif node_type == 'volumeShader':
+                                    conns = cmds.listConnections(f"{sg}.volumeShader", s=True, d=False) or []
+                                else:
+                                    conns = []
+                                
+                                if tex in conns and sg in sg_usage_map and sg_usage_map[sg]:
+                                    # This shader is connected to a used shading group
+                                    is_used = True
+                                    break
+                            except Exception:
+                                pass
             except Exception:
                 pass
             properties[tex] = {'referenced': is_ref, 'used': is_used, 'affects_selection': False}
@@ -5452,6 +6493,35 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         for mat in materials_only:
             sgs = material_to_sgs[mat]
             is_used = any(sg in sgs_with_members for sg in sgs)
+            
+            # Special handling for displacement shaders and similar utility shaders
+            # If they're connected to a used shading group, mark them as used
+            if not is_used:
+                try:
+                    node_type = cmds.nodeType(mat)
+                    # Check if this is a displacement shader or similar utility shader
+                    if node_type in ('displacementShader', 'volumeShader'):
+                        # Check if connected to any shading group's displacementShader/volumeShader attribute
+                        connected_sgs = cmds.listConnections(mat, type="shadingEngine", d=True, s=False) or []
+                        for sg in connected_sgs:
+                            # Check if this SG is connected via displacementShader or volumeShader
+                            try:
+                                if node_type == 'displacementShader':
+                                    conns = cmds.listConnections(f"{sg}.displacementShader", s=True, d=False) or []
+                                elif node_type == 'volumeShader':
+                                    conns = cmds.listConnections(f"{sg}.volumeShader", s=True, d=False) or []
+                                else:
+                                    conns = []
+                                
+                                if mat in conns and sg in sgs_with_members:
+                                    # This shader is connected to a used shading group
+                                    is_used = True
+                                    break
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+            
             properties[mat]['used'] = is_used
         
         # Batch compute selection relationship (both materials and textures)
@@ -5551,6 +6621,9 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         OPTIMIZED VERSION: Uses pre-computed material properties to avoid expensive API calls.
         Handles filtering for materials, file textures, procedural textures, and shading groups.
         """
+        # Default shading groups that should be hidden when hideDefaults is checked
+        DEFAULT_SHADING_GROUPS = {'initialShadingGroup', 'initialParticleSE'}
+        
         # Classify the node type
         node_type_category = self._classify_node_type(mat)
         is_file_texture = (node_type_category == 'file_textures')
@@ -5570,9 +6643,14 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             if not is_shading_group:
                 return False
         
-        # Hide defaults (optionally) - only applies to materials
-        if is_material and flags.get("hideDefaults", False) and mat in default_materials:
-            return False
+        # Hide defaults (optionally) - applies to materials and shading groups
+        if flags.get("hideDefaults", False):
+            # Check if it's a default material
+            if is_material and mat in default_materials:
+                return False
+            # Check if it's a default shading group
+            if is_shading_group and mat in DEFAULT_SHADING_GROUPS:
+                return False
 
         # Search text
         if search_text and search_text.lower() not in mat.lower():
@@ -5889,72 +6967,118 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
     def _install_sort_bar(self):
         """
-        Create a small sorting toolbar (Name/Type/Time) above the materials scroll area
-        so it remains visible while the list scrolls.
+        Install sort bar as a sticky header above the scroll area.
+        The bar stays visible when scrolling the material list.
         """
-        # Find the frame/layout that contains the scroll area
-        parent_layout_widget = self.findChild(QtWidgets.QWidget, 'materialListFrame') or self.findChild(QtWidgets.QWidget, 'materialListLayout')
+        # Connect buttons from Qt Designer (they stay in their original location)
+        self._connect_sort_bar_buttons()
+        
+        # Find the material list frame/layout that contains the scroll area
+        material_list_widget = self.findChild(QtWidgets.QWidget, 'materialListFrame') or self.findChild(QtWidgets.QWidget, 'materialListLayout')
         scroll = self.ui_elements.get('materialsListScrollArea')
-        if not (parent_layout_widget and scroll):
+        if not (material_list_widget and scroll):
             return
 
-        # Fetch the parent layout that holds the scroll area
-        parent_layout = parent_layout_widget.layout() or self.findChild(QtWidgets.QLayout, 'materialListLayout')
-        if not parent_layout:
-            parent_layout = self.findChild(QtWidgets.QLayout, 'materialListFrame')
-
-        if not parent_layout:
-            return
-
-        # If already created, just ensure it's inserted above the scroll area
+        # Get or create sort bar widget
         sort_bar = self.ui_elements.get('materialListSortBar')
         if not sort_bar:
             sort_bar = self._create_sort_bar_widget()
             sort_bar.setObjectName('materialListSortBar')
             self.ui_elements['materialListSortBar'] = sort_bar
 
-        # Insert the bar just before the scroll area widget
-        # Remove existing reference first to avoid duplicates on rebuild
+        # Get the parent layout that holds the scroll area
+        parent_layout = material_list_widget.layout()
+        if not parent_layout:
+            return
+
+        # Remove sort bar from any previous parent (in case it was in scroll content)
+        if sort_bar.parent():
+            sort_bar.setParent(None)
+        
+        # Style sort bar to match scroll content background for seamless appearance
+        sort_bar.setStyleSheet(f"""
+            QWidget#materialListSortBar {{
+                background-color: #444444;
+            }}
+        """)
+        
+        # Find the scroll area in the layout and insert sort bar right before it
         idx_scroll = parent_layout.indexOf(scroll)
         if idx_scroll == -1:
-            # Fall back: put at top
+            # Fallback: put at top
             idx_scroll = 0
-        # Avoid re-inserting if it's already placed
+        
+        # Only insert if not already in layout (avoid duplicates)
         if parent_layout.indexOf(sort_bar) == -1:
             parent_layout.insertWidget(max(0, idx_scroll), sort_bar)
 
         # Keep visuals fresh
         sort_bar.setVisible(True)
         sort_bar.update()
+    
+    def _connect_sort_bar_buttons(self):
+        """Connect filters and refresh buttons from Qt Designer without moving them."""
+        # Connect refresh button from Qt Designer if it exists (stays in original location)
+        refresh_btn = self._get_widget('materialListRefreshButton', QtWidgets.QPushButton)
+        if refresh_btn:
+            # Disconnect any existing connections to avoid duplicates
+            try:
+                if refresh_btn.receivers(refresh_btn.clicked) > 0:
+                    refresh_btn.clicked.disconnect()
+            except (TypeError, RuntimeError, AttributeError):
+                pass
+            refresh_btn.clicked.connect(self.refresh_materials_list)
+            # Store in ui_elements
+            self.ui_elements['materialListRefreshButton'] = refresh_btn
+        
+        # Connect filters button from Qt Designer if it exists (stays in original location)
+        filters_btn = self._get_widget('materialListFiltersButton', QtWidgets.QPushButton)
+        if not filters_btn:
+            filters_btn = self._get_widget('materialFiltersButton', QtWidgets.QPushButton)
+        if filters_btn:
+            # Ensure it's checkable
+            if not filters_btn.isCheckable():
+                filters_btn.setCheckable(True)
+            # Disconnect any existing connections
+            try:
+                if filters_btn.receivers(filters_btn.toggled) > 0:
+                    filters_btn.toggled.disconnect()
+            except (TypeError, RuntimeError, AttributeError):
+                pass
+            filters_btn.toggled.connect(self.toggle_material_filters)
+            filters_btn.toggled.connect(self._save_ui_state)
+            # Store in ui_elements for backward compatibility
+            self.ui_elements['materialFiltersButton'] = filters_btn
+            self.ui_elements['materialListFiltersButton'] = filters_btn
 
 
     def _create_sort_bar_widget(self):
-        """Create the sticky sort toolbar (Name / Type / Time)."""
+        """Create the sort toolbar (Name / Type / Time) - no frame, sticky header above scroll."""
+        # Simple horizontal layout without frame - will be styled to match scroll content
         bar = QtWidgets.QWidget(self)
+        bar.setObjectName('materialListSortBar')
         lay = QtWidgets.QHBoxLayout(bar)
-        lay.setContentsMargins(3, 3, 3, 3)
-        lay.setSpacing(6)
+        lay.setContentsMargins(3, 0, 3, 0)  # Top and bottom padding set to 0
+        lay.setSpacing(3)  # Reduced spacing between elements
+
+        # Small "Sort:" label next to the buttons
+        title = QtWidgets.QLabel("Sort:")
+        title.setStyleSheet("font-size: 10px; color: #aaaaaa; margin: 0px; padding: 0px;")  # Smaller, muted text, no margins/padding
+        title.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        title.setContentsMargins(0, 0, 0, 0)  # Remove any default margins
 
         name_btn = QtWidgets.QPushButton()
         type_btn = QtWidgets.QPushButton()
         time_btn = QtWidgets.QPushButton()
-        filters_btn = QtWidgets.QPushButton("Filters")
-        filters_btn.setObjectName('materialFiltersButton')
-        filters_btn.setCheckable(True)
 
+        # Use same styling as filters/refresh buttons for sort buttons
         for b in (name_btn, type_btn, time_btn):
             b.setCursor(QtCore.Qt.PointingHandCursor)
             b.setFixedHeight(22)
             b.setMinimumWidth(0)
             b.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
-            b.setStyleSheet(self.material_list_widget_style)
-
-        filters_btn.setCursor(QtCore.Qt.PointingHandCursor)
-        filters_btn.setFixedHeight(22)
-        filters_btn.setMinimumWidth(0)
-        filters_btn.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
-        filters_btn.setStyleSheet(self.material_filters_button_style)
-
+            b.setStyleSheet(self.material_filters_button_style)
+        
         # Apply initial labels/bolding
         self._apply_sort_button_styles(name_btn, type_btn, time_btn)
 
@@ -5975,17 +7099,13 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         type_btn.clicked.connect(lambda: on_click('type'))
         time_btn.clicked.connect(lambda: on_click('time'))
 
-        title = QtWidgets.QLabel("Sort:")
+        # Add label and buttons to the layout (no frame)
         lay.addWidget(title)
+        lay.addSpacing(2)  # Small spacing between label and buttons
         lay.addWidget(name_btn)
         lay.addWidget(type_btn)
         lay.addWidget(time_btn)
-        lay.addStretch(1)
-        lay.addWidget(filters_btn)
-
-        filters_btn.toggled.connect(self.toggle_material_filters)
-        filters_btn.toggled.connect(self._save_ui_state)
-        self.ui_elements['materialFiltersButton'] = filters_btn
+        lay.addStretch(1)  # Push everything to the left
 
         return bar
 
@@ -6008,9 +7128,46 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         tf.setBold(self._sort_mode == 'type');  type_btn.setFont(tf)
         tif.setBold(self._sort_mode == 'time'); time_btn.setFont(tif)
 
-        self._style_sort_button(name_btn, active=(self._sort_mode == 'name'))
-        self._style_sort_button(type_btn, active=(self._sort_mode == 'type'))
-        self._style_sort_button(time_btn, active=(self._sort_mode == 'time'))
+        # Apply active styling - use chip-blue text for active buttons, matching filters/refresh button style
+        txt_color_name = "#00f7c8" if self._sort_mode == 'name' else "#ffffff"
+        txt_color_type = "#00f7c8" if self._sort_mode == 'type' else "#ffffff"
+        txt_color_time = "#00f7c8" if self._sort_mode == 'time' else "#ffffff"
+        
+        name_btn.setStyleSheet(f"""
+            QPushButton {{
+                color: {txt_color_name};
+                background-color: #666666;
+                border: 2px solid #444444;
+                border-radius: 8px;
+                padding: 2px 5px;
+            }}
+            QPushButton:hover   {{ background-color: #888888; }}
+            QPushButton:pressed {{ background-color: #333333; }}
+        """)
+        
+        type_btn.setStyleSheet(f"""
+            QPushButton {{
+                color: {txt_color_type};
+                background-color: #666666;
+                border: 2px solid #444444;
+                border-radius: 8px;
+                padding: 2px 5px;
+            }}
+            QPushButton:hover   {{ background-color: #888888; }}
+            QPushButton:pressed {{ background-color: #333333; }}
+        """)
+        
+        time_btn.setStyleSheet(f"""
+            QPushButton {{
+                color: {txt_color_time};
+                background-color: #666666;
+                border: 2px solid #444444;
+                border-radius: 8px;
+                padding: 2px 5px;
+            }}
+            QPushButton:hover   {{ background-color: #888888; }}
+            QPushButton:pressed {{ background-color: #333333; }}
+        """)
 
     def _update_sort_buttons_after_state_load(self):
         """
@@ -7224,10 +8381,18 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         Uses Maya's returned name (handles duplicate -> name1) and updates maps.
         """
         import time as _t
-        prev_name = getattr(material_name_edit, "_pre_edit_text", None) or material_name_edit.text()
+        # Get the actual material name (with namespace) if available, otherwise use display name
+        actual_prev_name = getattr(material_name_edit, "_actual_material_name", None)
+        if actual_prev_name:
+            prev_name = actual_prev_name
+        else:
+            prev_name = getattr(material_name_edit, "_pre_edit_text", None) or material_name_edit.text()
+        
         new_name = (material_name_edit.text() or "").strip()
-
-        if new_name == prev_name:
+        
+        # Compare display names (not actual names) to avoid false positives when namespaces are hidden
+        display_prev_name = self._strip_namespace(prev_name)
+        if new_name == display_prev_name:
             return
 
         # Silence auto-refreshers briefly so no rebuild occurs during rename
@@ -7289,10 +8454,17 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             # Perform Maya rename; this returns the ACTUAL final name (handles duplicates -> name1)
             actual_new = cmds.rename(prev_name, new_name)
 
-            # Update the widget text to the real new name and baseline for next edit
-            material_name_edit.setText(actual_new)
+            # Update _actual_material_name to the new name
             try:
-                material_name_edit._pre_edit_text = actual_new
+                material_name_edit._actual_material_name = actual_new
+            except Exception:
+                pass
+
+            # Update the widget text to the display name (may have namespace stripped)
+            display_name = self._strip_namespace(actual_new)
+            material_name_edit.setText(display_name)
+            try:
+                material_name_edit._pre_edit_text = display_name
             except Exception:
                 pass
 
@@ -7321,9 +8493,11 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
         except Exception as e:
             # On failure, revert visible text; keep maps untouched
-            material_name_edit.setText(prev_name)
+            # Use display name for the text (may have namespace stripped)
+            display_prev_name = self._strip_namespace(prev_name)
+            material_name_edit.setText(display_prev_name)
             try:
-                material_name_edit._pre_edit_text = prev_name
+                material_name_edit._pre_edit_text = display_prev_name
             except Exception:
                 pass
             cmds.warning(f"Failed to rename material: {e}")
@@ -8226,6 +9400,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             current_colorspace = self._get_file_texture_colorspace(file_node)
             
             menu = QtWidgets.QMenu(button)
+            menu.setStyleSheet(context_menu_style)
             
             # Common colorspaces
             colorspaces = ['sRGB', 'Raw', 'ACEScg']
