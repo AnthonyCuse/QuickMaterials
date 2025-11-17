@@ -11,8 +11,21 @@
     <file alias="arrow_pressed_up.png">icons/arrow_pressed_up.png</file>
     <file alias="arrow_right.png">icons/arrow_right.png</file>
     <file alias="arrow_up.png">icons/arrow_up.png</file>
+    <file alias="filters_icon.png">icons/filters_icon.png</file>
+    <file alias="filters_icon_checked.png">icons/filters_icon_checked.png</file>
     <file alias="folder_icon.png">icons/folder_icon.png</file>
+    <file alias="refresh_icon.png">icons/refresh_icon.png</file>
+    <file alias="refresh_icon_pressed.png">icons/refresh_icon_pressed.png</file>
     <file alias="settings_icon.png">icons/settings_icon.png</file>
+    <file alias="settings_icon_checked.png">icons/settings_icon_checked.png</file>
     <file alias="settings_icon_pressed.png">icons/settings_icon_pressed.png</file>
+    <file alias="shaders_icon.png">icons/shaders_icon.png</file>
+    <file alias="shaders_icon_checked.png">icons/shaders_icon_checked.png</file>
+    <file alias="shading_groups_icon.png">icons/shading_groups_icon.png</file>
+    <file alias="shading_groups_icon_checked.png">icons/shading_groups_icon_checked.png</file>
+    <file alias="textures_icon.png">icons/textures_icon.png</file>
+    <file alias="textures_icon_checked.png">icons/textures_icon_checked.png</file>
+    <file alias="utilities_icon.png">icons/utilities_icon.png</file>
+    <file alias="utilities_icon_checked.png">icons/utilities_icon_checked.png</file>
   </qresource>
 </RCC>

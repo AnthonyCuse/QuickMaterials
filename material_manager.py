@@ -1331,7 +1331,7 @@ class MaterialManagerDialog(QtWidgets.QDialog):
         self.setObjectName(self.WINDOW_OBJECT)
         self.setWindowTitle("Material Manager")
         self.setMinimumWidth(500)
-        self.setMinimumHeight(540)
+        self.setMinimumHeight(635)
 
         self._ops_pairs = []
         self._last_preview = None
@@ -1473,8 +1473,24 @@ class MaterialManagerDialog(QtWidgets.QDialog):
         self.suffix_edit = QtWidgets.QLineEdit()
         self.suffix_edit.setPlaceholderText("Suffix")
         self.suffix_edit.setToolTip("Optional suffix; supports tokens like (name), (color), (shader), (project), (scene).")
-        rename_row.addWidget(self.prefix_edit, 1)
-        rename_row.addWidget(self.suffix_edit, 1)
+        prefix_column = QtWidgets.QVBoxLayout()
+        prefix_column.setContentsMargins(0, 0, 0, 0)
+        prefix_column.setSpacing(2)
+        prefix_label = QtWidgets.QLabel("Prefix:")
+        prefix_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        prefix_label.setStyleSheet("color: #dcdcdc; font-size: 11px;")
+        prefix_column.addWidget(prefix_label)
+        prefix_column.addWidget(self.prefix_edit)
+        suffix_column = QtWidgets.QVBoxLayout()
+        suffix_column.setContentsMargins(0, 0, 0, 0)
+        suffix_column.setSpacing(2)
+        suffix_label = QtWidgets.QLabel("Suffix:")
+        suffix_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        suffix_label.setStyleSheet("color: #dcdcdc; font-size: 11px;")
+        suffix_column.addWidget(suffix_label)
+        suffix_column.addWidget(self.suffix_edit)
+        rename_row.addLayout(prefix_column, 1)
+        rename_row.addLayout(suffix_column, 1)
 
         self.main_edit = QtWidgets.QLineEdit()
         self.main_edit.setPlaceholderText("Main pattern e.g. (name)_(shader)")
@@ -1482,7 +1498,43 @@ class MaterialManagerDialog(QtWidgets.QDialog):
         rename_main_row = QtWidgets.QHBoxLayout()
         rename_main_row.setContentsMargins(0, 0, 0, 0)
         rename_main_row.setSpacing(6)
-        rename_main_row.addWidget(self.main_edit, 1)
+        main_column = QtWidgets.QVBoxLayout()
+        main_column.setContentsMargins(0, 0, 0, 0)
+        main_column.setSpacing(2)
+        main_label = QtWidgets.QLabel("Main Pattern:")
+        main_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        main_label.setStyleSheet("color: #dcdcdc; font-size: 11px;")
+        main_column.addWidget(main_label)
+        main_column.addWidget(self.main_edit)
+        rename_main_row.addLayout(main_column, 1)
+
+        self.search_edit = QtWidgets.QLineEdit()
+        self.search_edit.setPlaceholderText("Search text within final name")
+        self.search_edit.setToolTip("Text to find within the assembled name before uniqueness is enforced.")
+        self.replace_edit = QtWidgets.QLineEdit()
+        self.replace_edit.setPlaceholderText("Replacement text")
+        self.replace_edit.setToolTip("Text that will replace the search term within the assembled name.")
+        rename_search_row = QtWidgets.QHBoxLayout()
+        rename_search_row.setContentsMargins(0, 0, 0, 0)
+        rename_search_row.setSpacing(6)
+        search_column = QtWidgets.QVBoxLayout()
+        search_column.setContentsMargins(0, 0, 0, 0)
+        search_column.setSpacing(2)
+        search_label = QtWidgets.QLabel("Search:")
+        search_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        search_label.setStyleSheet("color: #dcdcdc; font-size: 11px;")
+        search_column.addWidget(search_label)
+        search_column.addWidget(self.search_edit)
+        replace_column = QtWidgets.QVBoxLayout()
+        replace_column.setContentsMargins(0, 0, 0, 0)
+        replace_column.setSpacing(2)
+        replace_label = QtWidgets.QLabel("Replace:")
+        replace_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        replace_label.setStyleSheet("color: #dcdcdc; font-size: 11px;")
+        replace_column.addWidget(replace_label)
+        replace_column.addWidget(self.replace_edit)
+        rename_search_row.addLayout(search_column, 1)
+        rename_search_row.addLayout(replace_column, 1)
 
         rename_btn_row = QtWidgets.QHBoxLayout()
         rename_btn_row.setContentsMargins(0, 0, 0, 0)
@@ -1572,6 +1624,7 @@ class MaterialManagerDialog(QtWidgets.QDialog):
         rename_group.addWidget(make_separator())
         rename_group.addLayout(rename_row)
         rename_group.addLayout(rename_main_row)
+        rename_group.addLayout(rename_search_row)
         rename_group.addLayout(rename_btn_row)
 
         left_panel_center = QtWidgets.QVBoxLayout()
@@ -1673,6 +1726,12 @@ class MaterialManagerDialog(QtWidgets.QDialog):
         suffix = settings.value("renameSuffix")
         if suffix is not None:
             self.suffix_edit.setText(suffix)
+        search_text = settings.value("renameSearch")
+        if search_text is not None:
+            self.search_edit.setText(search_text)
+        replace_text = settings.value("renameReplace")
+        if replace_text is not None:
+            self.replace_edit.setText(replace_text)
 
     def _save_settings(self):
         settings = self._settings
@@ -1685,6 +1744,8 @@ class MaterialManagerDialog(QtWidgets.QDialog):
         settings.setValue("renamePrefix", self.prefix_edit.text())
         settings.setValue("renameMain", self.main_edit.text())
         settings.setValue("renameSuffix", self.suffix_edit.text())
+        settings.setValue("renameSearch", self.search_edit.text())
+        settings.setValue("renameReplace", self.replace_edit.text())
         settings.sync()
 
     # ---------------- utility ----------------
@@ -2197,6 +2258,8 @@ class MaterialManagerDialog(QtWidgets.QDialog):
         prefix = self.prefix_edit.text()
         main = self.main_edit.text()
         suffix = self.suffix_edit.text()
+        search_text = self.search_edit.text()
+        replace_text = self.replace_edit.text()
 
         plan = []
         used_names = set()
@@ -2206,13 +2269,17 @@ class MaterialManagerDialog(QtWidgets.QDialog):
                 errors[mat] = "Can't rename referenced materials"
             tokens = _token_map(mat)
             candidate = _build_name(prefix, main, suffix, tokens)
-            final_name = _unique_rename(candidate, used_names)
+            adjusted = candidate
+            if search_text:
+                adjusted = candidate.replace(search_text, replace_text)
+            final_name = _unique_rename(adjusted, used_names)
             color_display = _format_color_display(mat, tokens.get("(color)"))
             shader_token = tokens.get("(shader)")
             shader_display = shader_token if shader_token is not None else ""
             plan.append({
                 "material": mat,
                 "candidate": candidate,
+                "adjusted": adjusted,
                 "final": final_name,
                 "color_display": color_display,
                 "shader_display": shader_display,
