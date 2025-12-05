@@ -409,8 +409,7 @@ class MaterialSwatchIcon(QtWidgets.QLabel):
             if not hasattr(self, '_update_error_logged'):
                 self._update_error_logged = True
                 import traceback
-                print(f"[MaterialSwatchIcon] Error updating texture for {self.material_name}: {e}")
-                print(f"[MaterialSwatchIcon] Traceback: {traceback.format_exc()}")
+                pass
             # Silently fail - keep the fast mode swatch
             pass
     
@@ -431,7 +430,7 @@ class MaterialSwatchIcon(QtWidgets.QLabel):
             # Apply the mask
             self.setMask(mask.mask())
         except Exception as e:
-            print(f"[MaterialSwatchIcon] Failed to apply circular mask: {e}")
+            pass
     
     def paintEvent(self, event):
         """Override paintEvent to draw the pixmap in a circular shape with background."""
@@ -2693,9 +2692,6 @@ class MaterialSwatchIcon(QtWidgets.QLabel):
             return pixmap
             
         except Exception as e:
-            import traceback
-            print(f"[MaterialSwatchIcon] Error creating swatch icon for {material_name}: {e}")
-            traceback.print_exc()
             return None
     
     def _get_emission_data(self, material_name):
