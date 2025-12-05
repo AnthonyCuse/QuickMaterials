@@ -1,4 +1,5 @@
 import os
+import sys
 import colorsys  # For HSV to RGB conversion
 # --- Qt compatibility for Maya 2024 (PySide2) & Maya 2025 (PySide6) ---
 try:
@@ -108,7 +109,30 @@ class ImportTxTool(QtWidgets.QWidget):
 
         self.search_folder_path = ""  # Initialize the search folder path variable
 
-        self.texture_data = {}
+        self.texture_data = {}  # Keep for backward compatibility with old texture type rows
+        
+        # NEW: Unified texture selection data structure
+        self.selected_textures = {
+            "unassigned": [],  # List of texture info dicts
+            "assigned": []     # List of texture info dicts
+        }
+        
+        # NEW: Widget references for each texture entry
+        self.texture_entry_widgets = {}  # Maps texture_path -> widget info dict
+
+        # Minimum sizing + settings toggle state
+        self._settings_toggle_initialized = False
+        self._minimum_width_baseline = 700
+        self._base_min_height = 330
+        self._settings_frame_extra_height = 220
+        self._search_mode_object_names = {
+            "maya_file": "textureSearchMayaFileCheckbox",
+            "sourceimages": "textureSearchMayaSourceimagesCheckbox",
+            "custom": "textureSearchCustomPathCheckbox",
+        }
+        self._search_mode_checkboxes = {}
+        self._search_mode_lock = False
+        self._current_search_mode = "maya_file"
 
         self.init_ui()
 
@@ -116,11 +140,15 @@ class ImportTxTool(QtWidgets.QWidget):
 
         # Remember the last directory a texture was imported from
         self.last_texture_dir = ""
+        
+        # Cache for UDIM counts per directory+pattern (so all textures from same path show same count)
+        self._udim_count_cache = {}  # Key: (directory, base_pattern, ext) -> count
 
     def init_ui(self):
         loader = QtUiTools.QUiLoader()
 
         script_dir = os.path.dirname(__file__)
+        
         ui_file_path = os.path.join(script_dir, "QtDesigner", "textureImporter.ui")
 
         ui_file = QtCore.QFile(ui_file_path)
@@ -133,8 +161,6 @@ class ImportTxTool(QtWidgets.QWidget):
 
         self.auto_initialize_ui_elements(self.ui_instance)
         print(f"[DEBUG] ui_elements: {self.ui_elements}")
-
-        self.hide_adv_textures()
 
         # Initialize scroll area
         scroll_area = self.ui_elements["texturesScrollArea"]
@@ -166,11 +192,12 @@ class ImportTxTool(QtWidgets.QWidget):
             QtCore.Qt.WindowMinimizeButtonHint
         )
 
-        # Set minimum size - Adjust these values as needed
-        self.setMinimumSize(400, 200)
-
-        # Set default/initial size - Adjust these values as needed
-        self.resize(515, 330)
+        # Initialize dynamic minimum sizing based on visible sections
+        self.refresh_minimum_size()
+        self.resize(
+            max(self.minimumWidth(), self._minimum_width_baseline),
+            max(self.minimumHeight(), self._base_min_height)
+        )
 
         self.setup_connections()
 
@@ -189,50 +216,39 @@ class ImportTxTool(QtWidgets.QWidget):
         if self.connections_initialized:
             print("[DEBUG] Connections already initialized. Skipping.")
             return
-        # Advanced Textures Toggle Button
-        if "showAdvTexturesButton" in self.ui_elements:
-            button = self._get_widget("showAdvTexturesButton", QtWidgets.QPushButton)  # safer
-            if button:
-                # try to disconnect only our slot; fall back to generic disconnect if needed
-                try:
-                    button.clicked.disconnect(self.toggle_adv_textures)
-                except Exception:
-                    try:
-                        button.clicked.disconnect()
-                    except Exception:
-                        pass
-                button.clicked.connect(self.toggle_adv_textures)
-                self._debug_print("Connected showAdvTexturesButton -> toggle_adv_textures")
-            else:
-                self._debug_print("showAdvTexturesButton resolved to None")
-        else:
-            print("[DEBUG] showAdvTexturesButton not found in ui_elements")
+        # Advanced Textures Toggle Button (deprecated - no longer used)
+        # if "showAdvTexturesButton" in self.ui_elements:
+        #     button = self._get_widget("showAdvTexturesButton", QtWidgets.QPushButton)
+        #     if button:
+        #         button.clicked.connect(self.toggle_adv_textures)
 
-        # Show Channels Buttons & “Set” Buttons (all texture types)
-        for texture_type in ALL_TEXTURE_TYPES:
-            show_btn_name = f"{texture_type}ShowChannelsButton"
-            if show_btn_name in self.ui_elements:
-                btn = self.ui_elements[show_btn_name]
-                try:
-                    btn.clicked.disconnect()
-                except Exception:
-                    pass
-                btn.clicked.connect(partial(self.toggle_channel_container, texture_type))
-                print(f"[DEBUG] Connected {show_btn_name} to toggle_channel_container")
-            else:
-                print(f"[DEBUG] {show_btn_name} not found in ui_elements")
-
-            set_btn_name = f"{texture_type}SetButton"
-            if set_btn_name in self.ui_elements:
-                btn = self.ui_elements[set_btn_name]
-                try:
-                    btn.clicked.disconnect()
-                except Exception:
-                    pass
-                btn.clicked.connect(partial(self.select_texture_file, texture_type))
-                print(f"[DEBUG] Connected {set_btn_name} to select_texture_file")
-            else:
-                print(f"[DEBUG] {set_btn_name} not found in ui_elements")
+        # OLD UI: Show Channels Buttons & "Set" Buttons (all texture types) - DISABLED
+        # These buttons are from the old UI and are not needed with the unified texture selection UI
+        # Keeping code commented out in case we need to restore old UI functionality
+        # for texture_type in ALL_TEXTURE_TYPES:
+        #     show_btn_name = f"{texture_type}ShowChannelsButton"
+        #     if show_btn_name in self.ui_elements:
+        #         btn = self.ui_elements[show_btn_name]
+        #         try:
+        #             btn.clicked.disconnect()
+        #         except Exception:
+        #             pass
+        #         btn.clicked.connect(partial(self.toggle_channel_container, texture_type))
+        #         print(f"[DEBUG] Connected {show_btn_name} to toggle_channel_container")
+        #     else:
+        #         print(f"[DEBUG] {show_btn_name} not found in ui_elements")
+        #
+        #     set_btn_name = f"{texture_type}SetButton"
+        #     if set_btn_name in self.ui_elements:
+        #         btn = self.ui_elements[set_btn_name]
+        #         try:
+        #             btn.clicked.disconnect()
+        #         except Exception:
+        #             pass
+        #         btn.clicked.connect(partial(self.select_texture_file, texture_type))
+        #         print(f"[DEBUG] Connected {set_btn_name} to select_texture_file")
+        #     else:
+        #         print(f"[DEBUG] {set_btn_name} not found in ui_elements")
 
         # Auto Set Button for Texture Types - REMOVED (functionality simplified)
         # for texture_type in ALL_TEXTURE_TYPES:
@@ -251,8 +267,8 @@ class ImportTxTool(QtWidgets.QWidget):
         #     button.setVisible(False)  # Hide the button
 
 
-        # Texture Importer Settings Button
-        # Texture importer settings button removed - settings now handled by main quickMaterialsSettingsButton
+        # Texture Importer Settings Button toggle
+        self._setup_settings_toggle_button()
 
         # Auto-Find-All Button - REMOVED (functionality simplified)
         # auto_all_btn = self.ui_elements.get("autoFindAllButton")
@@ -274,14 +290,15 @@ class ImportTxTool(QtWidgets.QWidget):
 
 
         # Import / Preview Import button  # <-- new
-        import_btn = self.ui_elements.get("importTexturesButton")
-        if import_btn:
+        import_btn = self._get_widget("importTexturesButton", QtWidgets.QPushButton)
+        if import_btn and isValid(import_btn):
             try:
                 import_btn.clicked.disconnect()
             except Exception:
                 pass
             import_btn.clicked.connect(self._on_import_textures_clicked)
             self._debug_print("Connected importTexturesButton to _on_import_textures_clicked")
+            self._update_import_button_label()
 
         # Clear All button  # <-- new
         clear_all_btn = self.ui_elements.get("clearAllButton")
@@ -295,8 +312,6 @@ class ImportTxTool(QtWidgets.QWidget):
 
 
 
-
-        self.connections_initialized = True  # Mark connections as initialized
 
         # Connect the editTextureSearchNamesButton to open the TextureSearchNamesUI
         if "editTextureSearchNamesButton" in self.ui_elements:
@@ -334,6 +349,279 @@ class ImportTxTool(QtWidgets.QWidget):
             mat_cb.currentIndexChanged.connect(self._on_material_combo_changed)
             self._debug_print("Connected materialComboBox to _on_material_combo_changed")
 
+        self._init_search_mode_checkboxes()
+
+        set_btn = self.ui_elements.get("textureSearchCustomPathSetButton")
+        if set_btn and isValid(set_btn):
+            try:
+                set_btn.clicked.disconnect()
+            except Exception:
+                pass
+            set_btn.clicked.connect(self._on_custom_path_set_button_clicked)
+
+        self.connections_initialized = True  # Mark connections as initialized
+
+    def _setup_settings_toggle_button(self):
+        """Wire textureImporterSettingsButton to show/hide its frame and update sizing."""
+        if getattr(self, "_settings_toggle_initialized", False):
+            return
+
+        settings_btn, settings_frame = self._get_settings_widgets()
+        if not settings_btn or not settings_frame:
+            return
+
+        try:
+            settings_btn.setCheckable(True)
+        except Exception:
+            pass
+
+        settings_btn.blockSignals(True)
+        settings_btn.setChecked(False)
+        settings_btn.blockSignals(False)
+        settings_frame.setVisible(False)
+        settings_btn.toggled.connect(self._on_settings_frame_toggled)
+
+        self._settings_toggle_initialized = True
+        self.refresh_minimum_size()
+
+    def _on_settings_frame_toggled(self, checked):
+        _, settings_frame = self._get_settings_widgets()
+        if settings_frame and isValid(settings_frame):
+            settings_frame.setVisible(bool(checked))
+        self.refresh_minimum_size()
+        if checked:
+            self._ensure_within_minimum_bounds()
+
+    def refresh_minimum_size(self):
+        """Adjust the tool's minimum size based on which sections are visible."""
+        min_w = max(int(self._minimum_width_baseline), 300)
+        min_h = int(self._base_min_height)
+
+        _, settings_frame = self._get_settings_widgets()
+        if settings_frame and isValid(settings_frame) and settings_frame.isVisible():
+            hint = settings_frame.sizeHint().height()
+            if hint <= 0:
+                hint = settings_frame.minimumSizeHint().height()
+            if hint <= 0:
+                hint = self._settings_frame_extra_height
+            min_h += max(int(self._settings_frame_extra_height), int(hint))
+
+        self.setMinimumSize(min_w, min_h)
+
+    def _ensure_within_minimum_bounds(self):
+        """Resize the window if it's currently smaller than the enforced minimum."""
+        min_size = self.minimumSize()
+        target_w = max(self.width(), min_size.width())
+        target_h = max(self.height(), min_size.height())
+        try:
+            self.resize(target_w, target_h)
+        except Exception:
+            pass
+
+    def _get_settings_widgets(self):
+        """Return (button, frame) for the settings toggle, refreshing stale refs."""
+        btn = self.ui_elements.get("textureImporterSettingsButton")
+        if not btn or not isValid(btn):
+            btn = self.findChild(QtWidgets.QPushButton, "textureImporterSettingsButton")
+            if btn:
+                self.ui_elements["textureImporterSettingsButton"] = btn
+
+        frame = self.ui_elements.get("textureImporterSettingsFrame")
+        if not frame or not isValid(frame):
+            frame = self.findChild(QtWidgets.QFrame, "textureImporterSettingsFrame")
+            if frame:
+                self.ui_elements["textureImporterSettingsFrame"] = frame
+
+        return btn, frame
+
+    def _on_custom_path_set_button_clicked(self):
+        """Replicate legacy behavior for the custom-path Set button."""
+        line_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
+        if not line_edit or not isValid(line_edit):
+            return
+
+        current_path = line_edit.text().strip()
+        if current_path:
+            resolved_path = self._resolve_custom_path_keys(current_path)
+            if resolved_path:
+                if os.path.exists(resolved_path):
+                    self._open_folder(resolved_path)
+                else:
+                    create_cb = self.ui_elements.get("createIfDoesntExistCheckbox")
+                    should_create = bool(create_cb and isValid(create_cb) and create_cb.isChecked())
+                    if should_create:
+                        try:
+                            os.makedirs(resolved_path, exist_ok=True)
+                            self._open_folder(resolved_path)
+                        except Exception as exc:
+                            cmds.warning(f"Failed to create folder '{resolved_path}': {exc}")
+                    else:
+                        cmds.warning(
+                            f"Folder does not exist: {resolved_path}\n"
+                            "Enable 'Create if doesn't exist' to create it automatically."
+                        )
+            else:
+                cmds.warning(f"Invalid path template: {current_path}")
+        else:
+            start_dir = cmds.workspace(q=True, rootDirectory=True) or ""
+            folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Texture Folder", start_dir)
+            if folder:
+                line_edit.setText(folder)
+                self._set_search_mode("custom")
+
+    def _open_folder(self, path):
+        """Open the given path in the OS file browser."""
+        if os.name == 'nt':
+            os.startfile(path)
+        elif os.name == 'posix':
+            try:
+                if hasattr(os, "uname") and os.uname().sysname == 'Darwin':
+                    os.system(f'open "{path}"')
+                else:
+                    os.system(f'xdg-open "{path}"')
+            except Exception:
+                pass
+
+    def _resolve_custom_path_keys(self, path_template):
+        """
+        Resolve key substitution in custom path template.
+        
+        Supported keys:
+        - (scene) → current Maya file folder
+        - (project) → current Maya project folder
+        
+        Everything after the key is treated as regular path components.
+        
+        Examples:
+        - (scene)/textures → [maya file folder]/textures
+        - (project)/sourceimages/materials → [project folder]/sourceimages/materials
+        
+        Returns the resolved path or None if invalid.
+        """
+        if not path_template:
+            return None
+            
+        try:
+            # Get current scene path
+            scene_path = cmds.file(q=True, sn=True) or ""
+            scene_dir = os.path.dirname(scene_path) if scene_path else ""
+            
+            # Get current project path
+            project_path = cmds.workspace(q=True, rootDirectory=True) or ""
+            project_dir = project_path.rstrip("/\\") if project_path else ""
+            
+            # Replace keys
+            resolved = path_template
+            resolved = resolved.replace("(scene)", scene_dir)
+            resolved = resolved.replace("(project)", project_dir)
+            
+            # Normalize path separators
+            resolved = os.path.normpath(resolved)
+            
+            return resolved
+            
+        except Exception as e:
+            print(f"[DEBUG] Error resolving path template '{path_template}': {e}")
+            return None
+
+    def _init_search_mode_checkboxes(self):
+        """Ensure the three search-path checkboxes behave exclusively."""
+        for mode in list(self._search_mode_object_names.keys()):
+            cb = self._get_search_checkbox(mode)
+            if not cb:
+                continue
+            try:
+                cb.toggled.disconnect()
+            except Exception:
+                pass
+            cb.toggled.connect(lambda checked, m=mode: self._on_search_mode_checkbox_toggled(m, checked))
+
+        initial_mode = None
+        for mode in self._search_mode_object_names.keys():
+            cb = self._get_search_checkbox(mode)
+            if cb and cb.isChecked():
+                initial_mode = mode
+                break
+        if not initial_mode:
+            initial_mode = "maya_file"
+        self._set_search_mode(initial_mode, force=True)
+
+    def _on_search_mode_checkbox_toggled(self, mode, checked):
+        if self._search_mode_lock:
+            return
+        if checked:
+            self._set_search_mode(mode)
+            return
+
+        # Prevent all checkboxes from being unchecked
+        any_other_checked = any(
+            cb.isChecked()
+            for m, cb in self._search_mode_checkboxes.items()
+            if m != mode and cb and isValid(cb)
+        )
+        if not any_other_checked:
+            self._set_search_mode(mode)
+
+    def _set_search_mode(self, mode, force=False):
+        target_cb = self._get_search_checkbox(mode)
+        if not target_cb:
+            return
+        if not force and self._current_search_mode == mode:
+            # still refresh custom-path widgets in case line edit pointers changed
+            self._update_custom_path_widgets()
+            return
+
+        self._search_mode_lock = True
+        for m in self._search_mode_object_names.keys():
+            checkbox = self._get_search_checkbox(m)
+            if checkbox:
+                checkbox.setChecked(m == mode)
+        self._search_mode_lock = False
+        self._current_search_mode = mode
+        self._update_custom_path_widgets()
+
+    def _get_search_checkbox(self, mode):
+        """Return the checkbox widget for a search mode, refreshing stale refs."""
+        obj_name = self._search_mode_object_names.get(mode)
+        if not obj_name:
+            return None
+
+        cb = self._search_mode_checkboxes.get(mode)
+        if not cb or not isValid(cb):
+            cb = self.ui_elements.get(obj_name)
+            if not cb or not isValid(cb):
+                cb = self.findChild(QtWidgets.QCheckBox, obj_name)
+                if cb:
+                    self.ui_elements[obj_name] = cb
+            if cb and isValid(cb):
+                self._search_mode_checkboxes[mode] = cb
+            else:
+                cb = None
+        return cb
+
+    def _update_custom_path_widgets(self):
+        """Enable/disable custom-path widgets based on current search mode."""
+        custom_on = (self._current_search_mode == "custom")
+        widget_names = [
+            "textureSearchCustomPathLineEdit",
+            "textureSearchCustomPathSetButton",
+            "customSearchFolderPathLabel",
+            "createIfDoesntExistCheckbox",
+        ]
+
+        for widget_name in widget_names:
+            w = self.ui_elements.get(widget_name)
+            if not w or not isValid(w):
+                w = self.findChild(QtWidgets.QWidget, widget_name)
+                if w:
+                    self.ui_elements[widget_name] = w
+            if w and isValid(w):
+                w.setEnabled(custom_on)
+
+        if not custom_on:
+            line_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
+            if line_edit and isValid(line_edit):
+                line_edit.clearFocus()
 
     def _load_settings(self):
         """Return dict from settings/texture_importer_settings.json or {}."""
@@ -353,6 +641,7 @@ class ImportTxTool(QtWidgets.QWidget):
         """
         Load per-texture-type keyword lists from Settings/texture_search_names.json
         (or legacy settings/texture_search_names.json). Falls back to {type:[type]}.
+        Also returns packed textures if present.
         """
         base_dir = os.path.dirname(__file__)
         candidates = [
@@ -378,7 +667,10 @@ class ImportTxTool(QtWidgets.QWidget):
                 norm[ttype] = [str(v).strip() for v in vals if str(v).strip()]
             else:
                 norm[ttype] = [ttype]  # minimal fallback to its own name
-        return norm
+        
+        # Also return packed textures if present
+        packed_textures = data.get("packedTextures", [])
+        return norm, packed_textures
 
     def _build_type_tokens(self, texture_type, material_name=None, kw_map=None):
         """
@@ -554,17 +846,41 @@ class ImportTxTool(QtWidgets.QWidget):
         return _pred
 
     def _on_material_combo_changed(self):
-        btn = self.ui_elements.get("importTexturesButton")
+        self._update_import_button_label()
+
+    def _get_import_button_base_text(self):
         cb = self._get_widget("materialComboBox", QtWidgets.QComboBox)
-        if not btn or not cb or not isValid(cb):
+        is_all = False
+        if cb and isValid(cb):
+            try:
+                is_all = (str(cb.currentText()) == "All Materials")
+            except RuntimeError:
+                self._debug_print("[ImportBtn] currentText() failed (combo deleted).")
+        return "Preview Import Textures" if is_all else "Import Textures"
+
+    def _count_importable_textures(self):
+        if not hasattr(self, "selected_textures"):
+            return 0
+        count = 0
+        for status in ["unassigned", "assigned"]:
+            for texture_info in self.selected_textures.get(status, []):
+                assignments = texture_info.get("assignments", [])
+                if any(a.get("attribute") and a.get("attribute") != "skip" for a in assignments):
+                    count += 1
+        return count
+
+    def _update_import_button_label(self):
+        btn = self._get_widget("importTexturesButton", QtWidgets.QPushButton)
+        if not btn or not isValid(btn):
+            self._debug_print("[ImportBtn] Button not available for label update.")
             return
+        base_text = self._get_import_button_base_text()
+        count = self._count_importable_textures()
         try:
-            is_all = (str(cb.currentText()) == "All Materials")
+            btn.setText(f"{base_text} ({count})")
+            self._debug_print(f"[ImportBtn] Label -> {btn.text()}")
         except RuntimeError:
-            self._debug_print("[ImportBtn] currentText() failed (combo deleted).")
-            return
-        btn.setText("Preview Import Textures" if is_all else "Import Textures")
-        self._debug_print(f"[ImportBtn] Label -> {btn.text()}")
+            self._debug_print("[ImportBtn] Failed to update button text (widget deleted).")
 
     def _on_import_textures_clicked(self):
         cb = self._get_widget("materialComboBox", QtWidgets.QComboBox)
@@ -594,9 +910,48 @@ class ImportTxTool(QtWidgets.QWidget):
 
     def _perform_single_material_import(self, material_name):
         """
-        Import textures currently set in line edits (self.texture_data) for `material_name`.
+        Import textures from self.selected_textures structure for `material_name`.
+        Reads attribute selections, channels, and colorspaces from UI.
         """
         count = 0
+        
+        # Sync UI state to data structure first
+        for texture_path in list(self.texture_entry_widgets.keys()):
+            self._sync_texture_entry_to_data(texture_path)
+        
+        # Process both unassigned and assigned textures
+        for status in ["unassigned", "assigned"]:
+            for texture_info in self.selected_textures[status]:
+                texture_path = texture_info.get("path")
+                if not texture_path or not os.path.isfile(texture_path):
+                    continue
+                
+                assignments = texture_info.get("assignments", [])
+                if not assignments:
+                    continue
+                
+                # Filter out "skip" assignments
+                valid_assignments = [a for a in assignments if a.get("attribute") and a.get("attribute") != "skip"]
+                
+                if not valid_assignments:
+                    continue
+                
+                # If single assignment, use _import_one_type
+                if len(valid_assignments) == 1:
+                    assignment = valid_assignments[0]
+                    texture_type = assignment.get("attribute")
+                    channel = assignment.get("channel")
+                    colorspace = assignment.get("colorspace", "default")
+                    
+                    # Import with channel and colorspace
+                    self._import_one_type_with_channel(material_name, texture_type, texture_path, channel, colorspace, texture_info)
+                    count += 1
+                else:
+                    # Multiple assignments (packed texture)
+                    self._import_packed_texture(texture_path, valid_assignments)
+                    count += 1
+        
+        # Also check old texture_data for backward compatibility
         for ttype in ALL_TEXTURE_TYPES:
             data = self.texture_data.get(ttype)
             if not data:
@@ -606,7 +961,80 @@ class ImportTxTool(QtWidgets.QWidget):
                 continue
             self._import_one_type(material_name, ttype, path)
             count += 1
+        
         self._debug_print(f"[Import] Done single-material import: {material_name} ({count} textures)")
+
+    def _import_one_type_with_channel(self, material, texture_type, file_path, channel, colorspace, texture_info):
+        """
+        Import a single texture type with specific channel and colorspace.
+        Similar to _import_one_type but accepts channel and colorspace parameters.
+        """
+        # Get UDIM info from texture_info
+        use_udim = self.use_udim and texture_info.get("udim_count", 0) > 1
+        udim_pattern = texture_info.get("udim_pattern")
+        
+        # Create file node
+        file_node, path_to_set = self._ensure_file_node(material, texture_type, file_path, colorspace, use_udim)
+        
+        # Get rules for this texture type
+        rules = TEXTURE_RULES.get(texture_type, {})
+        kind = rules.get("kind")
+        attr = rules.get("attr")
+        
+        if not attr:
+            return
+        
+        # Determine source channel
+        if channel:
+            if channel.lower() == "a":
+                src = f"{file_node}.outAlpha"
+            elif channel.lower() == "r":
+                src = f"{file_node}.outColorR"
+            elif channel.lower() == "g":
+                src = f"{file_node}.outColorG"
+            elif channel.lower() == "b":
+                src = f"{file_node}.outColorB"
+            else:
+                src = f"{file_node}.outColorR"
+        else:
+            # Use default channel for this type
+            default_ch = self._default_channel_for_type(texture_type)
+            if default_ch == "A":
+                src = f"{file_node}.outAlpha"
+            elif default_ch == "R":
+                src = f"{file_node}.outColorR"
+            elif default_ch == "G":
+                src = f"{file_node}.outColorG"
+            elif default_ch == "B":
+                src = f"{file_node}.outColorB"
+            else:
+                src = f"{file_node}.outColor"
+        
+        # Connect based on kind
+        if kind == "color":
+            # If src is outColor (full color), connect directly; otherwise replicate scalar to RGB
+            if ".outColor" in src and src.endswith(".outColor"):
+                try:
+                    cmds.connectAttr(src, f"{material}.{attr}", force=True)
+                except Exception:
+                    # fallback to scalar replicate on failure
+                    self._connect_scalar_to_color(f"{file_node}.outColorR", material, attr)
+            else:
+                self._connect_scalar_to_color(src, material, attr)
+        elif kind == "float":
+            try:
+                cmds.connectAttr(src, f"{material}.{attr}", force=True)
+            except Exception as e:
+                self._debug_print(f"[Import] Failed to connect {src} to {material}.{attr}: {e}")
+        elif kind == "normal":
+            nn = self._ensure_ai_normal_map(material)
+            try:
+                if not cmds.isConnected(f"{file_node}.outColor", f"{nn}.input"):
+                    cmds.connectAttr(f"{file_node}.outColor", f"{nn}.input", force=True)
+            except Exception as e:
+                self._debug_print(f"[Import] Failed to connect normal map: {e}")
+        
+        self._debug_print(f"[Import] {file_node}.{src} -> {material}.{attr} (channel={channel or 'default'}, colorspace={colorspace})")
 
     def _perform_bulk_import(self, mat_map):
         """
@@ -742,7 +1170,52 @@ class ImportTxTool(QtWidgets.QWidget):
 
         return (best_type, best_score if best_type else None)
 
-    # -------- helper to pick a “representative” UDIM (prefer 1001, else lowest) --------
+    def _check_packed_textures(self, file_path, packed_textures, material_name=None):
+        """
+        Check if a file matches any packed texture entry.
+        Returns a list of assignments: [{"attribute": "roughness", "channel": "b"}, ...]
+        or empty list if no match.
+        
+        IMPORTANT: This should NOT match normal maps or other specific texture types
+        that have their own classification. Normal maps should be classified as "normal" first.
+        """
+        if not packed_textures:
+            return []
+        
+        name = os.path.basename(file_path).lower()
+        
+        # First check if this is a normal map - if so, don't treat as packed texture
+        # Normal maps should be classified as "normal" type, not packed
+        normal_indicators = ["normal", "nrm", "nrml", "norm"]
+        for indicator in normal_indicators:
+            if self._has_boundary_token(name, indicator):
+                return []  # Let it be classified as normal map instead
+        
+        matches = []
+        
+        for packed_entry in packed_textures:
+            search_names = packed_entry.get("searchNames", "")
+            if not search_names:
+                continue
+            
+            # Check if any search name matches the filename
+            keywords = [kw.strip().lower() for kw in search_names.split(",") if kw.strip()]
+            matched = False
+            for keyword in keywords:
+                # Use similar matching logic as _score_filename but simpler
+                if self._has_boundary_token(name, keyword) or keyword in name:
+                    matched = True
+                    break
+            
+            if matched:
+                # Return all assignments for this packed texture
+                assignments = packed_entry.get("assignments", [])
+                if assignments:
+                    matches.extend(assignments)
+        
+        return matches
+
+    # -------- helper to pick a "representative" UDIM (prefer 1001, else lowest) --------
     def _prefer_representative_udim(self, paths):
         """
         Given a list of file paths that belong to the same texture type, return the best single path
@@ -773,7 +1246,7 @@ class ImportTxTool(QtWidgets.QWidget):
     def select_textures_for_import(self):
         """
         Open a multi-file dialog, classify each selection into a texture type using the
-        token/required-keyword system, then populate the appropriate slots.
+        token/required-keyword system, then populate the unified texture selection UI.
         This ALWAYS considers both standard and advanced types (visibility ignored).
         """
         options = QtWidgets.QFileDialog.Options()
@@ -788,95 +1261,416 @@ class ImportTxTool(QtWidgets.QWidget):
             return
 
         # Load keyword map & get current material name (safe)
-        kw_map = self._load_keyword_map()
+        kw_map, packed_textures = self._load_keyword_map()
         mat_combo = self._get_widget("materialComboBox", QtWidgets.QComboBox)
         material = mat_combo.currentText() if mat_combo else ""
 
-        # Classify each file -> type
-        classified = {}  # type -> [paths...]
-        unmatched = []
+        # Find already-connected textures
+        connected_textures = self._find_connected_textures()
+
+        # Don't clear previous selections - add to existing (or skip if already exists)
+        # Initialize if doesn't exist
+        if not hasattr(self, 'selected_textures') or not self.selected_textures:
+            self.selected_textures = {"unassigned": [], "assigned": []}
+        
+        # Get existing texture paths to avoid duplicates
+        existing_paths = set()
+        for status in ["unassigned", "assigned"]:
+            for tex_info in self.selected_textures[status]:
+                existing_paths.add(tex_info.get("path"))
+
+        # Group UDIM tiles together - collect all files and group by base name
+        udim_groups = {}  # base_name_without_udim -> [paths]
+        regular_files = []  # files without UDIM pattern
 
         for path in files:
+            file_name = os.path.basename(path)
+            file_base, file_ext = os.path.splitext(file_name)
+            
+            # Check for UDIM pattern
+            udim_pattern = self.detect_udim_pattern(file_base)
+            if udim_pattern and self.use_udim:
+                # Remove UDIM number to get base name
+                udim_regex = re.compile(udim_pattern)
+                base_without_udim = udim_regex.sub("", file_base)
+                key = f"{base_without_udim}{file_ext}"
+                if key not in udim_groups:
+                    udim_groups[key] = []
+                udim_groups[key].append(path)
+            else:
+                regular_files.append(path)
+        
+        # Process UDIM groups - use representative tile (prefer 1001)
+        for base_key, tile_paths in udim_groups.items():
+            # Pick representative tile (prefer 1001)
+            rep_path = self._prefer_representative_udim(tile_paths)
+            if not rep_path:
+                continue
+            
+            # Skip if representative path is already in selection
+            if rep_path in existing_paths:
+                self._debug_print(f"[SelectImport] '{os.path.basename(rep_path)}' -> already selected, skipping")
+                continue
+            
+            # Count all tiles for this texture
+            file_dir, file_name = os.path.split(rep_path)
+            file_base, file_ext = os.path.splitext(file_name)
+            udim_pattern = self.detect_udim_pattern(file_base)
+            udim_count = len(tile_paths) if udim_pattern else 0
+            
+            # Classify the representative tile
+            # IMPORTANT: Check packed textures FIRST (even if already connected)
+            # Packed textures should show all their assignments, not just the first connected one
+            packed_matches = self._check_packed_textures(rep_path, packed_textures, material)
+            if packed_matches:
+                # Packed texture - use packed assignments (override connected texture data if exists)
+                assignments = []
+                for match in packed_matches:
+                    attr = match.get("attribute")
+                    channel = match.get("channel")
+                    colorspace = TEXTURE_RULES.get(attr, {}).get("colorSpace", "default") if attr else "default"
+                    assignments.append({"attribute": attr, "channel": channel, "colorspace": colorspace})
+                    self._debug_print(f"[SelectImport] Packed match: attribute={attr}, channel={channel}, colorspace={colorspace}")
+                
+                texture_info = self._build_texture_info(rep_path, {
+                    "status": "packed",
+                    "assignments": assignments
+                })
+                # Don't overwrite udim_count - _build_texture_info already counted all tiles correctly
+                # Use the count from texture_info which was calculated by scanning the directory
+                actual_udim_count = texture_info.get("udim_count", 0)
+                self.selected_textures["assigned"].append(texture_info)
+                self._debug_print(f"[SelectImport] '{os.path.basename(rep_path)}' -> packed texture ({len(packed_matches)} assignments, {actual_udim_count} tiles)")
+                self._debug_print(f"[SelectImport] Final assignments: {assignments}")
+                continue
+            
+            # Check if already connected (only if not a packed texture)
+            if rep_path in connected_textures:
+                texture_info = self._build_texture_info(rep_path, connected_textures[rep_path])
+                # Don't overwrite udim_count - _build_texture_info already counted all tiles correctly
+                actual_udim_count = texture_info.get("udim_count", 0)
+                self.selected_textures["assigned"].append(texture_info)
+                self._debug_print(f"[SelectImport] '{os.path.basename(rep_path)}' -> already connected ({actual_udim_count} tiles)")
+                continue
+            
+            # First check regular texture types (BEFORE packed textures to avoid normal maps matching packed)
+            ttype, score = self._classify_texture_type_for_file(rep_path, kw_map, material)
+            if ttype:
+                # Matched texture - add to assigned section
+                texture_info = self._build_texture_info(rep_path, {
+                    "status": "matched",
+                    "assignments": [{"attribute": ttype, "channel": None, "colorspace": TEXTURE_RULES.get(ttype, {}).get("colorSpace", "default")}]
+                })
+                # Don't overwrite udim_count - _build_texture_info already counted all tiles correctly
+                actual_udim_count = texture_info.get("udim_count", 0)
+                self.selected_textures["assigned"].append(texture_info)
+                self._debug_print(f"[SelectImport] '{os.path.basename(rep_path)}' -> {ttype} (score={score}, {actual_udim_count} tiles)")
+                continue
+            if packed_matches:
+                # Packed texture - add to assigned section with multiple assignments
+                assignments = []
+                for match in packed_matches:
+                    attr = match.get("attribute")
+                    channel = match.get("channel")
+                    colorspace = TEXTURE_RULES.get(attr, {}).get("colorSpace", "default") if attr else "default"
+                    assignments.append({"attribute": attr, "channel": channel, "colorspace": colorspace})
+                    self._debug_print(f"[SelectImport] Packed match: attribute={attr}, channel={channel}, colorspace={colorspace}")
+                
+                texture_info = self._build_texture_info(rep_path, {
+                    "status": "packed",
+                    "assignments": assignments
+                })
+                texture_info["udim_count"] = udim_count
+                self.selected_textures["assigned"].append(texture_info)
+                self._debug_print(f"[SelectImport] '{os.path.basename(rep_path)}' -> packed texture ({len(packed_matches)} assignments, {udim_count} tiles)")
+                self._debug_print(f"[SelectImport] Final assignments: {assignments}")
+                continue
+            
+            # Unmatched texture - add to unassigned section
+            texture_info = self._build_texture_info(rep_path, {
+                "status": "unmatched",
+                "assignments": [{"attribute": None, "channel": None, "colorspace": "default"}]
+            })
+            texture_info["udim_count"] = udim_count
+            self.selected_textures["unassigned"].append(texture_info)
+            self._debug_print(f"[SelectImport] '{os.path.basename(rep_path)}' -> (no match, {udim_count} tiles)")
+        
+        # Process regular (non-UDIM) files
+        for path in regular_files:
+            # Skip if already in selection
+            if path in existing_paths:
+                self._debug_print(f"[SelectImport] '{os.path.basename(path)}' -> already selected, skipping")
+                continue
+            
+            # Check if already connected
+            if path in connected_textures:
+                texture_info = self._build_texture_info(path, connected_textures[path])
+                self.selected_textures["assigned"].append(texture_info)
+                self._debug_print(f"[SelectImport] '{os.path.basename(path)}' -> already connected")
+                continue
+
+            # First check regular texture types (BEFORE packed textures to avoid normal maps matching packed)
             ttype, score = self._classify_texture_type_for_file(path, kw_map, material)
             if ttype:
-                classified.setdefault(ttype, []).append(path)
+                # Matched texture - add to assigned section
+                texture_info = self._build_texture_info(path, {
+                    "status": "matched",
+                    "assignments": [{"attribute": ttype, "channel": None, "colorspace": TEXTURE_RULES.get(ttype, {}).get("colorSpace", "default")}]
+                })
+                self.selected_textures["assigned"].append(texture_info)
                 self._debug_print(f"[SelectImport] '{os.path.basename(path)}' -> {ttype} (score={score})")
-            else:
-                unmatched.append(path)
-                self._debug_print(f"[SelectImport] '{os.path.basename(path)}' -> (no match)")
+                continue
+            
+            # Check packed textures (only if not classified as regular type)
+            packed_matches = self._check_packed_textures(path, packed_textures, material)
+            if packed_matches:
+                # Packed texture - add to assigned section with multiple assignments
+                assignments = []
+                for match in packed_matches:
+                    attr = match.get("attribute")
+                    channel = match.get("channel")
+                    colorspace = TEXTURE_RULES.get(attr, {}).get("colorSpace", "default") if attr else "default"
+                    assignments.append({"attribute": attr, "channel": channel, "colorspace": colorspace})
+                
+                texture_info = self._build_texture_info(path, {
+                    "status": "packed",
+                    "assignments": assignments
+                })
+                self.selected_textures["assigned"].append(texture_info)
+                self._debug_print(f"[SelectImport] '{os.path.basename(path)}' -> packed texture ({len(packed_matches)} assignments)")
+                continue
+            
+            # Unmatched texture - add to unassigned section
+            texture_info = self._build_texture_info(path, {
+                "status": "unmatched",
+                "assignments": [{"attribute": None, "channel": None, "colorspace": "default"}]
+            })
+            self.selected_textures["unassigned"].append(texture_info)
+            self._debug_print(f"[SelectImport] '{os.path.basename(path)}' -> (no match)")
 
-        # For each type, pick a representative (prefer 1001), then process like a normal selection
-        for ttype, paths in classified.items():
-            rep = self._prefer_representative_udim(paths)
-            if rep:
-                self.process_selected_texture(rep, ttype)
+        # Populate UI with selected textures
+        self._populate_texture_selection_ui()
 
-        # Handle unmatched textures with dialog
-        if unmatched:
-            dlg = AssignTexturesDialog(self, unmatched)
-            result = dlg.exec_()
-            if result == QtWidgets.QDialog.Accepted:
-                # Process each assigned texture
-                for texture_path, texture_type in dlg.texture_assignments.items():
-                    rep = self._prefer_representative_udim([texture_path])
-                    if rep:
-                        self.process_selected_texture(rep, texture_type)
-                self._debug_print(f"[SelectImport] Assigned {len(dlg.texture_assignments)} unmatched texture(s)")
-            else:
-                self._debug_print(f"[SelectImport] Cancelled assignment of {len(unmatched)} unmatched texture(s)")
+    def _build_texture_info(self, file_path, info_dict):
+        """
+        Build a texture info dict with UDIM detection.
+        
+        Args:
+            file_path: Path to texture file
+            info_dict: Dict with "status" and "assignments" keys
+        
+        Returns:
+            Dict with keys: path, name, udim_pattern, udim_count, assignments
+        """
+        file_dir, file_name = os.path.split(file_path)
+        file_base, file_ext = os.path.splitext(file_name)
+        
+        # UDIM detection - always count tiles if pattern is detected
+        # The use_udim checkbox only controls display, not detection
+        udim_pattern = self.detect_udim_pattern(file_base)
+        udim_count = 0
+        if udim_pattern:
+            udim_count = self.count_udim_tiles(file_dir, file_base, file_ext, udim_pattern)
+            self._debug_print(f"[BuildTextureInfo] UDIM detected: pattern={udim_pattern}, count={udim_count} for {file_name}")
+        
+        result = {
+            "path": file_path,
+            "name": file_name,
+            "udim_pattern": udim_pattern,
+            "udim_count": udim_count,
+            "assignments": info_dict.get("assignments", [])
+        }
+        self._debug_print(f"[BuildTextureInfo] Built texture info with {len(result['assignments'])} assignments, udim_count={udim_count}: {result['assignments']}")
+        return result
 
     def _pre_populate_textures(self, texture_files):
         """
         Pre-populate the texture importer with selected texture files.
         This is called when the texture importer is opened with pre-selected textures.
+        Uses the same logic as select_textures_for_import() but without file dialog.
         """
         if not texture_files:
             return
 
         # Load keyword map & get current material name (safe)
-        kw_map = self._load_keyword_map()
+        kw_map, packed_textures = self._load_keyword_map()
         mat_combo = self._get_widget("materialComboBox", QtWidgets.QComboBox)
         material = mat_combo.currentText() if mat_combo else ""
 
-        # Classify each file -> type
-        classified = {}  # type -> [paths...]
-        unmatched = []
+        # Find already-connected textures
+        connected_textures = self._find_connected_textures()
+
+        # Clear previous selections
+        self.selected_textures = {"unassigned": [], "assigned": []}
+
+        # Group UDIM tiles together - collect all files and group by base name
+        udim_groups = {}  # base_name_without_udim -> [paths]
+        regular_files = []  # files without UDIM pattern
 
         for path in texture_files:
+            file_name = os.path.basename(path)
+            file_base, file_ext = os.path.splitext(file_name)
+            
+            # Check for UDIM pattern
+            udim_pattern = self.detect_udim_pattern(file_base)
+            if udim_pattern and self.use_udim:
+                # Remove UDIM number to get base name
+                udim_regex = re.compile(udim_pattern)
+                base_without_udim = udim_regex.sub("", file_base)
+                key = f"{base_without_udim}{file_ext}"
+                if key not in udim_groups:
+                    udim_groups[key] = []
+                udim_groups[key].append(path)
+            else:
+                regular_files.append(path)
+        
+        # Process UDIM groups - use representative tile (prefer 1001)
+        for base_key, tile_paths in udim_groups.items():
+            # Pick representative tile (prefer 1001)
+            rep_path = self._prefer_representative_udim(tile_paths)
+            if not rep_path:
+                continue
+            
+            # Count all tiles for this texture
+            file_dir, file_name = os.path.split(rep_path)
+            file_base, file_ext = os.path.splitext(file_name)
+            udim_pattern = self.detect_udim_pattern(file_base)
+            udim_count = len(tile_paths) if udim_pattern else 0
+            
+            # Classify the representative tile
+            # IMPORTANT: Check packed textures FIRST (even if already connected)
+            # Packed textures should show all their assignments, not just the first connected one
+            packed_matches = self._check_packed_textures(rep_path, packed_textures, material)
+            if packed_matches:
+                # Packed texture - use packed assignments (override connected texture data if exists)
+                assignments = []
+                for match in packed_matches:
+                    attr = match.get("attribute")
+                    channel = match.get("channel")
+                    colorspace = TEXTURE_RULES.get(attr, {}).get("colorSpace", "default") if attr else "default"
+                    assignments.append({"attribute": attr, "channel": channel, "colorspace": colorspace})
+                    self._debug_print(f"[PrePopulate] Packed match: attribute={attr}, channel={channel}, colorspace={colorspace}")
+                
+                texture_info = self._build_texture_info(rep_path, {
+                    "status": "packed",
+                    "assignments": assignments
+                })
+                # Don't overwrite udim_count - _build_texture_info already counted all tiles correctly
+                # Use the count from texture_info which was calculated by scanning the directory
+                actual_udim_count = texture_info.get("udim_count", 0)
+                self.selected_textures["assigned"].append(texture_info)
+                self._debug_print(f"[PrePopulate] '{os.path.basename(rep_path)}' -> packed texture ({len(packed_matches)} assignments, {actual_udim_count} tiles)")
+                self._debug_print(f"[PrePopulate] Final assignments: {assignments}")
+                continue
+            
+            # Check if already connected (only if not a packed texture)
+            if rep_path in connected_textures:
+                texture_info = self._build_texture_info(rep_path, connected_textures[rep_path])
+                # Don't overwrite udim_count - _build_texture_info already counted all tiles correctly
+                actual_udim_count = texture_info.get("udim_count", 0)
+                self.selected_textures["assigned"].append(texture_info)
+                self._debug_print(f"[PrePopulate] '{os.path.basename(rep_path)}' -> already connected ({actual_udim_count} tiles)")
+                continue
+            
+            # First check regular texture types (before packed textures)
+            ttype, score = self._classify_texture_type_for_file(rep_path, kw_map, material)
+            if ttype:
+                # Matched texture - add to assigned section
+                texture_info = self._build_texture_info(rep_path, {
+                    "status": "matched",
+                    "assignments": [{"attribute": ttype, "channel": None, "colorspace": TEXTURE_RULES.get(ttype, {}).get("colorSpace", "default")}]
+                })
+                # Don't overwrite udim_count - _build_texture_info already counted all tiles correctly
+                actual_udim_count = texture_info.get("udim_count", 0)
+                self.selected_textures["assigned"].append(texture_info)
+                self._debug_print(f"[PrePopulate] '{os.path.basename(rep_path)}' -> {ttype} (score={score}, {actual_udim_count} tiles)")
+                continue
+            if packed_matches:
+                # Packed texture - add to assigned section with multiple assignments
+                assignments = []
+                for match in packed_matches:
+                    attr = match.get("attribute")
+                    channel = match.get("channel")
+                    colorspace = TEXTURE_RULES.get(attr, {}).get("colorSpace", "default") if attr else "default"
+                    assignments.append({"attribute": attr, "channel": channel, "colorspace": colorspace})
+                    self._debug_print(f"[PrePopulate] Packed match: attribute={attr}, channel={channel}, colorspace={colorspace}")
+                
+                texture_info = self._build_texture_info(rep_path, {
+                    "status": "packed",
+                    "assignments": assignments
+                })
+                texture_info["udim_count"] = udim_count
+                self.selected_textures["assigned"].append(texture_info)
+                self._debug_print(f"[PrePopulate] '{os.path.basename(rep_path)}' -> packed texture ({len(packed_matches)} assignments, {udim_count} tiles)")
+                self._debug_print(f"[PrePopulate] Final assignments: {assignments}")
+                continue
+            
+            # Unmatched texture - add to unassigned section
+            texture_info = self._build_texture_info(rep_path, {
+                "status": "unmatched",
+                "assignments": [{"attribute": None, "channel": None, "colorspace": "default"}]
+            })
+            texture_info["udim_count"] = udim_count
+            self.selected_textures["unassigned"].append(texture_info)
+            self._debug_print(f"[PrePopulate] '{os.path.basename(rep_path)}' -> (no match, {udim_count} tiles)")
+        
+        # Process regular (non-UDIM) files
+        for path in regular_files:
+            # Check if already connected
+            if path in connected_textures:
+                texture_info = self._build_texture_info(path, connected_textures[path])
+                self.selected_textures["assigned"].append(texture_info)
+                self._debug_print(f"[PrePopulate] '{os.path.basename(path)}' -> already connected")
+                continue
+
+            # First check regular texture types (BEFORE packed textures to avoid normal maps matching packed)
             ttype, score = self._classify_texture_type_for_file(path, kw_map, material)
             if ttype:
-                classified.setdefault(ttype, []).append(path)
+                # Matched texture - add to assigned section
+                texture_info = self._build_texture_info(path, {
+                    "status": "matched",
+                    "assignments": [{"attribute": ttype, "channel": None, "colorspace": TEXTURE_RULES.get(ttype, {}).get("colorSpace", "default")}]
+                })
+                self.selected_textures["assigned"].append(texture_info)
                 self._debug_print(f"[PrePopulate] '{os.path.basename(path)}' -> {ttype} (score={score})")
-            else:
-                unmatched.append(path)
-                self._debug_print(f"[PrePopulate] '{os.path.basename(path)}' -> (no match)")
+                continue
+            
+            # Check packed textures (only if not classified as regular type)
+            packed_matches = self._check_packed_textures(path, packed_textures, material)
+            if packed_matches:
+                # Packed texture - add to assigned section with multiple assignments
+                assignments = []
+                for match in packed_matches:
+                    attr = match.get("attribute")
+                    channel = match.get("channel")
+                    colorspace = TEXTURE_RULES.get(attr, {}).get("colorSpace", "default") if attr else "default"
+                    assignments.append({"attribute": attr, "channel": channel, "colorspace": colorspace})
+                
+                texture_info = self._build_texture_info(path, {
+                    "status": "packed",
+                    "assignments": assignments
+                })
+                self.selected_textures["assigned"].append(texture_info)
+                self._debug_print(f"[PrePopulate] '{os.path.basename(path)}' -> packed texture ({len(packed_matches)} assignments)")
+                continue
+            
+            # Unmatched texture - add to unassigned section
+            texture_info = self._build_texture_info(path, {
+                "status": "unmatched",
+                "assignments": [{"attribute": None, "channel": None, "colorspace": "default"}]
+            })
+            self.selected_textures["unassigned"].append(texture_info)
+            self._debug_print(f"[PrePopulate] '{os.path.basename(path)}' -> (no match)")
 
-        # For each type, pick a representative (prefer 1001), then process like a normal selection
-        for ttype, paths in classified.items():
-            rep = self._prefer_representative_udim(paths)
-            if rep:
-                self.process_selected_texture(rep, ttype)
-
-        # Handle unmatched textures with dialog
-        if unmatched:
-            dlg = AssignTexturesDialog(self, unmatched)
-            result = dlg.exec_()
-            if result == QtWidgets.QDialog.Accepted:
-                # Process each assigned texture
-                for texture_path, texture_type in dlg.texture_assignments.items():
-                    rep = self._prefer_representative_udim([texture_path])
-                    if rep:
-                        self.process_selected_texture(rep, texture_type)
-                self._debug_print(f"[PrePopulate] Assigned {len(dlg.texture_assignments)} unmatched texture(s)")
-            else:
-                self._debug_print(f"[PrePopulate] Cancelled assignment of {len(unmatched)} unmatched texture(s)")
+        # Populate UI with selected textures
+        self._populate_texture_selection_ui()
 
     def clear_all_textures(self):
         """
         Clear all texture line edits and in-memory selections.
         Also clears any cached bulk matches from Auto-Find-All.
         """
-        # Clear UI fields
+        # Clear UI fields (old texture type rows)
         for ttype in ALL_TEXTURE_TYPES:
             le = self.ui_elements.get(f"{ttype}LineEdit")
             if le:
@@ -892,6 +1686,18 @@ class ImportTxTool(QtWidgets.QWidget):
                 self._bulk_match_cache.clear()
             except Exception:
                 self._bulk_match_cache = {}
+        
+        # Clear new unified texture selection structure
+        if hasattr(self, 'selected_textures'):
+            self.selected_textures = {"unassigned": [], "assigned": []}
+        
+        # Clear widget references
+        if hasattr(self, 'texture_entry_widgets'):
+            self.texture_entry_widgets.clear()
+        
+        # Clear UI entries
+        self._clear_texture_entries()
+        self._update_import_button_label()
 
         self._debug_print("[ClearAll] Cleared all texture entries and caches.")
 
@@ -906,6 +1712,38 @@ class ImportTxTool(QtWidgets.QWidget):
         """
         # Search folder functionality removed - this function is no longer used for auto-search
         return None
+
+    # Set frame style for texture atributes
+    def _apply_texture_entry_style(self, widget, status):
+        """Apply consistent styling for assigned/unassigned texture entry frames."""
+        if not widget:
+            return
+        widget.setObjectName("textureEntryContainer")
+        if status == "assigned":
+            style = """
+                QWidget#textureEntryContainer {
+                    background-color: #2a2a2a;
+                    border: 0px solid #666666;
+                    border-radius: 6px;
+                    padding: 4px;
+                    margin: 2px;
+                }
+            """
+        else:
+            style = """
+                QWidget#textureEntryContainer {
+                    background-color: #3a3a3a;
+                    border: 0px solid #555555;
+                    border-radius: 6px;
+                    padding: 4px;
+                    margin: 2px;
+                }
+            """
+        widget.setStyleSheet(style)
+
+    def _get_combo_stylesheet(self, color="#00f7c8"):
+        """Return the shared combobox stylesheet with a specific text color."""
+        return combo_stylesheet_template.format(color=color)
 
     # -------- UDIM --------
     def detect_udim_pattern(self, file_base):
@@ -937,7 +1775,9 @@ class ImportTxTool(QtWidgets.QWidget):
         """
         Re-render every texture type line edit text based on self.use_udim
         and the stored self.texture_data entries.
+        Also updates the unified texture selection UI line edits.
         """
+        # Update old texture type line edits
         for ttype, data in self.texture_data.items():
             le = self.ui_elements.get(f"{ttype}LineEdit")
             if not le:
@@ -948,6 +1788,44 @@ class ImportTxTool(QtWidgets.QWidget):
                 le.setText(f"{fname} ({udim_count} Tiles)")
             else:
                 le.setText(fname)
+        
+        # Update unified texture selection UI line edits
+        if hasattr(self, 'texture_entry_widgets'):
+            path_to_info = {}
+            for status in ["unassigned", "assigned"]:
+                for tex_info in self.selected_textures.get(status, []):
+                    tex_path = tex_info.get("path")
+                    if tex_path:
+                        path_to_info[tex_path] = tex_info
+            
+            for texture_path, widget_info in self.texture_entry_widgets.items():
+                texture_info = path_to_info.get(texture_path)
+                if texture_info:
+                    self._update_texture_entry_widget_display(widget_info, texture_info)
+
+    def _update_texture_entry_widget_display(self, widget_info, texture_info):
+        """Update the line edit text and UDIM label for a texture entry."""
+        if not widget_info or not texture_info:
+            return
+        
+        texture_path = texture_info.get("path", "")
+        texture_name = texture_info.get("name", os.path.basename(texture_path))
+        udim_count = texture_info.get("udim_count", 0)
+        
+        line_edit = widget_info.get("line_edit")
+        if line_edit:
+            line_edit.blockSignals(True)
+            line_edit.setText(texture_name)
+            line_edit.blockSignals(False)
+        
+        udim_label = widget_info.get("udim_label")
+        if udim_label:
+            if self.use_udim and udim_count > 1:
+                udim_label.setText(f"({udim_count} Tiles)")
+                udim_label.setVisible(True)
+            else:
+                udim_label.clear()
+                udim_label.setVisible(False)
 
     def _get_widget(self, name, cls=None):
         """
@@ -966,6 +1844,64 @@ class ImportTxTool(QtWidgets.QWidget):
             return None
         return w
 
+    def _find_connected_textures(self):
+        """
+        Find textures that are already connected to the current material.
+        Returns dict: {texture_path: {"status": "connected", "assignments": [{"attribute": "...", "channel": "..."}]}}
+        """
+        mat_combo = self._get_widget("materialComboBox", QtWidgets.QComboBox)
+        material = mat_combo.currentText() if mat_combo else ""
+        
+        if not material or material == "All Materials" or not cmds.objExists(material):
+            return {}
+        
+        connected = {}
+        
+        # Check each texture type's attribute
+        for texture_type in ALL_TEXTURE_TYPES:
+            if texture_type not in TEXTURE_RULES:
+                continue
+            
+            rules = TEXTURE_RULES[texture_type]
+            attr = rules.get("attr")
+            if not attr:
+                continue
+            
+            # Check if attribute has a connection
+            try:
+                connections = cmds.listConnections(f"{material}.{attr}", source=True, destination=False, plugs=True) or []
+                for conn_plug in connections:
+                    # Extract file node from connection
+                    source_node = conn_plug.split(".")[0] if "." in conn_plug else conn_plug
+                    
+                    # Check if it's a file node
+                    if cmds.nodeType(source_node) == "file":
+                        file_path = cmds.getAttr(f"{source_node}.fileTextureName")
+                        if file_path:
+                            # Normalize path
+                            file_path = file_path.replace("\\", "/")
+                            # Extract channel from connection
+                            channel = None
+                            if ".outColorR" in conn_plug:
+                                channel = "r"
+                            elif ".outColorG" in conn_plug:
+                                channel = "g"
+                            elif ".outColorB" in conn_plug:
+                                channel = "b"
+                            elif ".outAlpha" in conn_plug:
+                                channel = "a"
+                            
+                            if file_path not in connected:
+                                connected[file_path] = {"status": "connected", "assignments": []}
+                            
+                            connected[file_path]["assignments"].append({
+                                "attribute": texture_type,
+                                "channel": channel
+                            })
+            except Exception as e:
+                pass  # Attribute might not exist or not connected
+        
+        return connected
 
     # ---------- Import helpers ----------
     def _get_channel_selection(self, texture_type):
@@ -1045,6 +1981,33 @@ class ImportTxTool(QtWidgets.QWidget):
                 except Exception as e:
                     self._debug_print(f"[UDIM] Failed setting uvTilingMode on {node_name}: {e}")
         else:
+            # When UDIM is turned off, replace <UDIM> with the actual UDIM number from the original path
+            if "<UDIM>" in path_to_set:
+                # Try to get the original path from texture_data to extract the UDIM number
+                # Look for texture_data entry that matches this texture_type
+                texture_data_entry = self.texture_data.get(texture_type, {})
+                original_path = texture_data_entry.get("path", file_path)
+                
+                # Extract UDIM number from original path (prefer 1001, else first found)
+                udim_match = re.search(r"10\d{2}", os.path.basename(original_path))
+                if udim_match:
+                    udim_number = udim_match.group(0)
+                    path_to_set = path_to_set.replace("<UDIM>", udim_number)
+                    self._debug_print(f"[UDIM] Replaced <UDIM> with {udim_number} in path: {path_to_set}")
+                else:
+                    # Fallback: if we can't find UDIM in original, try to find it in the directory
+                    # Look for files matching the pattern
+                    if os.path.isdir(file_dir):
+                        pattern_base = path_to_set.replace("<UDIM>", "").replace("\\", "/")
+                        pattern_base = os.path.basename(pattern_base)
+                        # Try common UDIM numbers
+                        for udim_num in ["1001", "1002", "1003"]:
+                            test_path = os.path.join(file_dir, pattern_base.replace(file_ext, f".{udim_num}{file_ext}"))
+                            if os.path.exists(test_path):
+                                path_to_set = path_to_set.replace("<UDIM>", udim_num)
+                                self._debug_print(f"[UDIM] Found UDIM file, replaced <UDIM> with {udim_num}")
+                                break
+            
             try:
                 if cmds.attributeQuery("uvTilingMode", node=node_name, exists=True):
                     cmds.setAttr(f"{node_name}.uvTilingMode", 0)  # 0 = off/single
@@ -1056,6 +2019,24 @@ class ImportTxTool(QtWidgets.QWidget):
             cmds.setAttr(f"{node_name}.fileTextureName", path_to_set.replace("\\", "/"), type="string")
         except Exception as e:
             self._debug_print(f"[FilePath] Failed to set fileTextureName on {node_name}: {e}")
+
+        # Create and connect place2dTexture node (like Maya does automatically)
+        place2d_name = f"{node_name}_place2dTexture"
+        if not cmds.objExists(place2d_name):
+            place2d_name = cmds.shadingNode("place2dTexture", asUtility=True, name=place2d_name)
+            self._debug_print(f"[Place2D] Created {place2d_name} for {node_name}")
+        
+        # Connect place2dTexture to file node (standard connections)
+        try:
+            # Connect outUV to uvCoord
+            if not cmds.isConnected(f"{place2d_name}.outUV", f"{node_name}.uvCoord"):
+                cmds.connectAttr(f"{place2d_name}.outUV", f"{node_name}.uvCoord", force=True)
+            # Connect outUvFilterSize to uvFilterSize
+            if not cmds.isConnected(f"{place2d_name}.outUvFilterSize", f"{node_name}.uvFilterSize"):
+                cmds.connectAttr(f"{place2d_name}.outUvFilterSize", f"{node_name}.uvFilterSize", force=True)
+            self._debug_print(f"[Place2D] Connected {place2d_name} to {node_name}")
+        except Exception as e:
+            self._debug_print(f"[Place2D] Failed to connect {place2d_name} to {node_name}: {e}")
 
         return node_name, path_to_set
 
@@ -1156,7 +2137,16 @@ class ImportTxTool(QtWidgets.QWidget):
             return
 
         rules = TEXTURE_RULES[texture_type]
-        color_space = rules["colorSpace"]
+        # Get colorspace from combobox, or use default from rules
+        colorspace_combo = self.ui_elements.get(f"{texture_type}ColorspaceComboBox")
+        if colorspace_combo:
+            selected_colorspace = colorspace_combo.currentText()
+            if selected_colorspace and selected_colorspace != "default":
+                color_space = selected_colorspace
+            else:
+                color_space = rules["colorSpace"]  # Use default from rules
+        else:
+            color_space = rules["colorSpace"]  # Fallback to default
         kind = rules["kind"]
 
         # Create or reuse file node
@@ -1240,6 +2230,178 @@ class ImportTxTool(QtWidgets.QWidget):
 
         self._debug_print(f"[Import] {texture_type}: {file_node} -> {material}.{rules['attr']}")
 
+    def _import_packed_texture(self, file_path, assignments):
+        """
+        Import a packed texture with multiple attribute assignments and channel selections.
+        assignments: [{"attribute": "roughness", "channel": "b"}, {"attribute": "metallic", "channel": "g"}, ...]
+        """
+        if not assignments:
+            return
+        
+        mat_combo = self._get_widget("materialComboBox", QtWidgets.QComboBox)
+        material = mat_combo.currentText() if mat_combo else ""
+        if not material:
+            self._debug_print("[Import] No material selected for packed texture import")
+            return
+        
+        # Extract texture filename for node naming (use base name without extension)
+        file_dir, file_name = os.path.split(file_path)
+        file_base, file_ext = os.path.splitext(file_name)
+        # Clean the filename for Maya node naming
+        safe_texture_name = re.sub(r"[^A-Za-z0-9_]", "_", file_base)
+        safe_mat = re.sub(r"[^A-Za-z0-9_]", "_", material)
+        file_node_name = f"{safe_mat}_{safe_texture_name}_file"
+        if not cmds.objExists(file_node_name):
+            file_node_name = cmds.shadingNode("file", asTexture=True, name=file_node_name)
+        
+        # Get colorspace from first assignment (or use default)
+        colorspace = assignments[0].get("colorspace", "default") if assignments else "default"
+        if colorspace == "-colorspace-" or not colorspace:
+            colorspace = "default"
+        
+        # --- Color management overrides (make node respect our explicit colorSpace) ---
+        try:
+            if cmds.attributeQuery("ignoreColorSpaceFileRules", node=file_node_name, exists=True):
+                cmds.setAttr(f"{file_node_name}.ignoreColorSpaceFileRules", 1)
+        except Exception as e:
+            self._debug_print(f"[ColorSpace] ignoreColorSpaceFileRules set failed on {file_node_name}: {e}")
+        
+        try:
+            if cmds.attributeQuery("useDefaultColorSpace", node=file_node_name, exists=True):
+                cmds.setAttr(f"{file_node_name}.useDefaultColorSpace", 0)
+        except Exception as e:
+            self._debug_print(f"[ColorSpace] useDefaultColorSpace set failed on {file_node_name}: {e}")
+        
+        try:
+            if cmds.attributeQuery("colorSpace", node=file_node_name, exists=True) and colorspace:
+                cmds.setAttr(f"{file_node_name}.colorSpace", colorspace, type="string")
+                self._debug_print(f"[ColorSpace] {file_node_name}.colorSpace -> '{colorspace}'")
+        except Exception as e:
+            self._debug_print(f"[ColorSpace] Failed to set {file_node_name}.colorSpace='{colorspace}': {e}")
+        
+        # --- UDIM handling ---
+        path_to_set = file_path
+        
+        if self.use_udim:
+            # Replace UDIM digits with <UDIM> if detected
+            udim_regex = re.compile(r"10\d{2}")
+            if udim_regex.search(file_name):
+                path_to_set = os.path.join(file_dir, udim_regex.sub("<UDIM>", file_name))
+                try:
+                    if cmds.attributeQuery("uvTilingMode", node=file_node_name, exists=True):
+                        cmds.setAttr(f"{file_node_name}.uvTilingMode", 3)  # 3 = UDIM
+                        self._debug_print(f"[UDIM] Set uvTilingMode=3 (UDIM) on {file_node_name}")
+                except Exception as e:
+                    self._debug_print(f"[UDIM] Failed setting uvTilingMode on {file_node_name}: {e}")
+        else:
+            # When UDIM is turned off, replace <UDIM> with the actual UDIM number from the original path
+            if "<UDIM>" in path_to_set:
+                udim_match = re.search(r"10\d{2}", os.path.basename(file_path))
+                if udim_match:
+                    udim_number = udim_match.group(0)
+                    path_to_set = path_to_set.replace("<UDIM>", udim_number)
+                    self._debug_print(f"[UDIM] Replaced <UDIM> with {udim_number} in path: {path_to_set}")
+            
+            try:
+                if cmds.attributeQuery("uvTilingMode", node=file_node_name, exists=True):
+                    cmds.setAttr(f"{file_node_name}.uvTilingMode", 0)  # 0 = off/single
+            except Exception as e:
+                self._debug_print(f"[UDIM] Failed disabling uvTilingMode on {file_node_name}: {e}")
+        
+        # Set file path (pattern or single)
+        try:
+            cmds.setAttr(f"{file_node_name}.fileTextureName", path_to_set.replace("\\", "/"), type="string")
+            self._debug_print(f"[FilePath] Set {file_node_name}.fileTextureName -> '{path_to_set}'")
+        except Exception as e:
+            self._debug_print(f"[FilePath] Failed to set fileTextureName on {file_node_name}: {e}")
+            return
+        
+        # Create and connect place2dTexture node (like Maya does automatically)
+        place2d_name = f"{file_node_name}_place2dTexture"
+        if not cmds.objExists(place2d_name):
+            place2d_name = cmds.shadingNode("place2dTexture", asUtility=True, name=place2d_name)
+            self._debug_print(f"[Place2D] Created {place2d_name} for {file_node_name}")
+        
+        # Connect place2dTexture to file node (standard connections)
+        try:
+            if not cmds.isConnected(f"{place2d_name}.outUV", f"{file_node_name}.uvCoord"):
+                cmds.connectAttr(f"{place2d_name}.outUV", f"{file_node_name}.uvCoord", force=True)
+            if not cmds.isConnected(f"{place2d_name}.outUvFilterSize", f"{file_node_name}.uvFilterSize"):
+                cmds.connectAttr(f"{place2d_name}.outUvFilterSize", f"{file_node_name}.uvFilterSize", force=True)
+            self._debug_print(f"[Place2D] Connected {place2d_name} to {file_node_name}")
+        except Exception as e:
+            self._debug_print(f"[Place2D] Failed to connect {place2d_name} to {file_node_name}: {e}")
+        
+        # Process each assignment
+        for assignment in assignments:
+            texture_type = assignment.get("attribute")
+            channel = assignment.get("channel")
+            
+            if not texture_type or texture_type not in TEXTURE_RULES:
+                continue
+            
+            rules = TEXTURE_RULES[texture_type]
+            kind = rules["kind"]
+            
+            # Determine source channel
+            if channel:
+                if channel == "A":
+                    src = f"{file_node_name}.outAlpha"
+                elif channel == "R":
+                    src = f"{file_node_name}.outColorR"
+                elif channel == "G":
+                    src = f"{file_node_name}.outColorG"
+                elif channel == "B":
+                    src = f"{file_node_name}.outColorB"
+                else:
+                    src = f"{file_node_name}.outColorR"  # fallback
+            else:
+                # Use default channel for this type
+                ch_pref = self._default_channel_for_type(texture_type)
+                if ch_pref == "A":
+                    src = f"{file_node_name}.outAlpha"
+                elif ch_pref == "R":
+                    src = f"{file_node_name}.outColorR"
+                elif ch_pref == "G":
+                    src = f"{file_node_name}.outColorG"
+                elif ch_pref == "B":
+                    src = f"{file_node_name}.outColorB"
+                else:
+                    src = f"{file_node_name}.outColorR"
+            
+            # Connect based on kind
+            if kind == "color":
+                self._connect_scalar_to_color(src, material, rules["attr"])
+            elif kind == "float":
+                try:
+                    cmds.connectAttr(src, f"{material}.{rules['attr']}", force=True)
+                except Exception as e:
+                    self._debug_print(f"[Import] Failed to connect {src} to {material}.{rules['attr']}: {e}")
+            elif kind == "normal":
+                nn = self._ensure_ai_normal_map(material)
+                try:
+                    if not cmds.isConnected(f"{file_node_name}.outColor", f"{nn}.input"):
+                        cmds.connectAttr(f"{file_node_name}.outColor", f"{nn}.input", force=True)
+                except Exception as e:
+                    self._debug_print(f"[Import] Failed to connect normal map: {e}")
+            elif kind == "displacement":
+                # Displacement needs to connect to the shading group's displacementShader
+                disp_node, sg = self._ensure_displacement_network(material)
+                try:
+                    if not cmds.isConnected(src, f"{disp_node}.displacement"):
+                        incoming = cmds.listConnections(f"{disp_node}.displacement", plugs=True) or []
+                        for plug in incoming:
+                            try:
+                                cmds.disconnectAttr(plug, f"{disp_node}.displacement")
+                            except Exception:
+                                pass
+                        cmds.connectAttr(src, f"{disp_node}.displacement", force=True)
+                        self._debug_print(f"[Import] Packed displacement: {file_node_name}.{src} -> {disp_node}.displacement (SG={sg})")
+                except Exception as e:
+                    self._debug_print(f"[Import] Failed to connect displacement: {e}")
+            
+            self._debug_print(f"[Import] Packed texture: {file_node_name}.{src} -> {material}.{rules.get('attr', 'N/A')} (channel={channel or 'default'}, kind={kind})")
+
     def open_texture_importer_settings(self):
         if not hasattr(self, "texture_importer_settings_ui") or self.texture_importer_settings_ui is None:
             self.texture_importer_settings_ui = TextureImporterSettingsUI(parent=self)
@@ -1310,7 +2472,7 @@ class ImportTxTool(QtWidgets.QWidget):
         """
         search_line_edit = self.ui_elements.get("searchFolderLineEdit")
         if not search_line_edit:
-            cmds.warning("searchFolderLineEdit not found in UI elements.")
+            # searchFolderLineEdit is deprecated - silently skip
             return
 
         # ---------------- read settings ----------------
@@ -1421,7 +2583,7 @@ class ImportTxTool(QtWidgets.QWidget):
         Uses user keyword map (JSON). Scores candidates and returns the best path or None.
         """
         # Load keywords for texture types
-        kw_map = self._load_keyword_map() if hasattr(self, "_load_keyword_map") else {}
+        kw_map, _ = self._load_keyword_map() if hasattr(self, "_load_keyword_map") else ({}, [])
         type_keywords = kw_map.get(texture_type, [texture_type])
         type_regexes = self._regexes_for_keywords(type_keywords)
 
@@ -1602,18 +2764,34 @@ class ImportTxTool(QtWidgets.QWidget):
     def count_udim_tiles(self, file_dir, file_base, file_ext, udim_pattern):
         """
         Counts the number of UDIM tiles in the same directory that match the pattern.
+        Uses a cache so all textures from the same path show the same UDIM count.
 
         Returns:
             int: The number of UDIM tiles found.
         """
+        # Create cache key based on directory, base pattern (without UDIM), and extension
         udim_regex = re.compile(udim_pattern)
+        base_without_udim = udim_regex.sub("", file_base)
+        cache_key = (file_dir, base_without_udim, file_ext)
+        
+        # Check cache first
+        if cache_key in self._udim_count_cache:
+            cached_count = self._udim_count_cache[cache_key]
+            self._debug_print(f"[UDIM] Using cached count {cached_count} for pattern '{base_without_udim}' in '{file_dir}'")
+            return cached_count
+        
+        # Count tiles if not in cache
         count = 0
-        for f in os.listdir(file_dir):
-            if os.path.splitext(f)[1] == file_ext:
-                base_without_udim = udim_regex.sub("", file_base)
-                f_base_without_udim = udim_regex.sub("", os.path.splitext(f)[0])
-                if base_without_udim == f_base_without_udim:
-                    count += 1
+        if os.path.isdir(file_dir):
+            for f in os.listdir(file_dir):
+                if os.path.splitext(f)[1] == file_ext:
+                    f_base_without_udim = udim_regex.sub("", os.path.splitext(f)[0])
+                    if base_without_udim == f_base_without_udim:
+                        count += 1
+        
+        # Store in cache
+        self._udim_count_cache[cache_key] = count
+        self._debug_print(f"[UDIM] Counted {count} tiles for pattern '{base_without_udim}' in '{file_dir}' (cached)")
         return count
 
     def open_texture_search_names_ui(self):
@@ -1628,13 +2806,12 @@ class ImportTxTool(QtWidgets.QWidget):
         self._debug_print("TextureSearchNamesUI opened.")
 
 
-    def hide_adv_textures(self):
-        print("DEBUG: Called hide_adv_textures()")
-        if "advTexturesContainer" in self.ui_elements:
-            print("DEBUG: advTexturesContainer found, hiding it now.")
-            self.ui_elements["advTexturesContainer"].setVisible(False)
 
     def setup_scroll_area_ui(self):
+        """
+        Create empty scroll area for texture entries.
+        Textures are populated dynamically when selected, with unassigned at the top.
+        """
         scroll_area = self.ui_elements["texturesScrollArea"]
         scroll_area.setWidgetResizable(True)
         scroll_area.setMinimumSize(0, 0)
@@ -1649,30 +2826,21 @@ class ImportTxTool(QtWidgets.QWidget):
         # Apply the stylesheet to the scroll area and its children
         scroll_area.setStyleSheet(scroll_area_stylesheet)
 
+        # Single container for all textures (unassigned will be ordered at top)
+        self.textures_container = QtWidgets.QWidget()
+        self.textures_layout = QtWidgets.QVBoxLayout(self.textures_container)
+        self.textures_layout.setContentsMargins(0, 0, 0, 0)
+        self.textures_layout.setSpacing(2)
+        scroll_layout.addWidget(self.textures_container)
 
+        # Keep old texture type containers for backward compatibility (hidden by default)
         # Standard textures container
         self.standard_textures_container = QtWidgets.QWidget()
         self.standard_textures_layout = QtWidgets.QVBoxLayout(self.standard_textures_container)
         self.standard_textures_layout.setContentsMargins(0, 0, 0, 0)
         self.standard_textures_layout.setSpacing(2)
         scroll_layout.addWidget(self.standard_textures_container)
-
-        # Create a horizontal layout for the "Show Adv Textures" button with spacer
-        adv_textures_button_layout = QtWidgets.QHBoxLayout()
-        adv_textures_button_layout.setContentsMargins(0, 0, 0, 0)
-        adv_textures_button_layout.setSpacing(2)
-
-        # Show advanced textures button
-        self.ui_elements["showAdvTexturesButton"] = QtWidgets.QPushButton("Show Adv Textures +")
-        self.ui_elements["showAdvTexturesButton"].clicked.connect(self.toggle_adv_textures)
-        adv_textures_button_layout.addWidget(self.ui_elements["showAdvTexturesButton"])
-
-        # Add a spacer to push the button to the left
-        spacer = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        adv_textures_button_layout.addItem(spacer)
-
-        # Add the button layout to the scroll area layout
-        scroll_layout.addLayout(adv_textures_button_layout)
+        self.standard_textures_container.setVisible(False)  # Hidden by default
 
         # Advanced textures container
         self.adv_textures_container = QtWidgets.QWidget()
@@ -1680,10 +2848,10 @@ class ImportTxTool(QtWidgets.QWidget):
         self.adv_textures_layout.setContentsMargins(0, 0, 0, 0)
         self.adv_textures_layout.setSpacing(0)
         scroll_layout.addWidget(self.adv_textures_container)
-        self.adv_textures_container.setVisible(False)  # Hide by default
+        self.adv_textures_container.setVisible(False)  # Hidden by default
         self.ui_elements["advTexturesContainer"] = self.adv_textures_container
 
-        # Populate standard and advanced texture types
+        # Populate standard and advanced texture types (for backward compatibility)
         self.populate_texture_types()
 
         # Add a spacer to allow dynamic shrinking
@@ -1849,6 +3017,22 @@ class ImportTxTool(QtWidgets.QWidget):
             cb.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
             checkboxes_layout.addWidget(cb)
 
+        # Add colorspace combobox
+        colorspace_label = QtWidgets.QLabel("Colorspace:")
+        colorspace_label.setStyleSheet(channel_label_stylesheet)
+        colorspace_label.setMinimumHeight(18)
+        colorspace_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        checkboxes_layout.addWidget(colorspace_label)
+        
+        colorspace_combo = QtWidgets.QComboBox()
+        colorspace_combo.addItems(["default", "sRGB", "Raw", "ACEScg"])
+        colorspace_combo.setCurrentText("default")  # Default to "default"
+        colorspace_combo.setStyleSheet(self._get_combo_stylesheet())
+        colorspace_combo.setMinimumHeight(18)
+        colorspace_combo.setMinimumWidth(80)
+        colorspace_combo.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        checkboxes_layout.addWidget(colorspace_combo)
+
         checkboxes_layout.addStretch(1)
         container_layout.addLayout(checkboxes_layout)
 
@@ -1857,6 +3041,7 @@ class ImportTxTool(QtWidgets.QWidget):
         self.ui_elements[f"{texture_type}ChannelGreenCheckbox"] = green_cb
         self.ui_elements[f"{texture_type}ChannelBlueCheckbox"] = blue_cb
         self.ui_elements[f"{texture_type}ChannelAlphaCheckbox"] = alpha_cb
+        self.ui_elements[f"{texture_type}ColorspaceComboBox"] = colorspace_combo
 
         # Wire mutual exclusivity
         red_cb.toggled.connect(lambda state, t=texture_type: self._on_channel_checkbox_toggled(t, "R"))
@@ -1883,22 +3068,573 @@ class ImportTxTool(QtWidgets.QWidget):
             currently_visible = container.isVisible()
             container.setVisible(not currently_visible)
             button.setText("-" if container.isVisible() else "+")
-            print(f"[DEBUG] {container_name} visibility set to {not currently_visible}")
+
+    # ---------- NEW: Unified texture selection UI functions ----------
+    
+    def _get_display_name(self, texture_type):
+        """Helper function to get display name for texture types."""
+        display_names = {
+            "baseColor": "Base Color",
+            "emissionClr": "Emission Color",
+            "subsurfaceClr": "Subsurface Color",
+            "specularClr": "Specular Color",
+            "transmissionClr": "Transmission Color",
+            "coatRoughness": "Coat Roughness",
+        }
+        if texture_type in display_names:
+            return display_names[texture_type]
+        result = texture_type[0].upper()
+        for char in texture_type[1:]:
+            if char.isupper():
+                result += " " + char
+            else:
+                result += char
+        return result
+
+    def _populate_texture_selection_ui(self):
+        """
+        Populate the scroll area with texture entries from self.selected_textures.
+        Clears current entries and creates new ones.
+        Unassigned textures are ordered at the top.
+        """
+        # Clear existing texture entries
+        self._clear_texture_entries()
+        
+        # Create entries for unassigned textures first (at top)
+        for texture_info in self.selected_textures["unassigned"]:
+            # Check if it has assignments to determine visual status
+            has_assignment = any(a.get("attribute") and a.get("attribute") != "skip" 
+                               for a in texture_info.get("assignments", []))
+            visual_status = "assigned" if has_assignment else "unassigned"
+            widget = self._create_texture_entry_widget(texture_info, visual_status)
+            if widget:
+                self.textures_layout.addWidget(widget)
+        
+        # Create entries for assigned textures (below unassigned)
+        for texture_info in self.selected_textures["assigned"]:
+            # Check if it has assignments to determine visual status
+            has_assignment = any(a.get("attribute") and a.get("attribute") != "skip" 
+                               for a in texture_info.get("assignments", []))
+            visual_status = "assigned" if has_assignment else "unassigned"
+            widget = self._create_texture_entry_widget(texture_info, visual_status)
+            if widget:
+                self.textures_layout.addWidget(widget)
+        
+        self._update_import_button_label()
+
+    def _clear_texture_entries(self):
+        """Clear all texture entry widgets from the UI."""
+        # Clear all textures from single container
+        while self.textures_layout.count():
+            item = self.textures_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # Clear widget references
+        self.texture_entry_widgets.clear()
+
+    def _create_texture_entry_widget(self, texture_info, status):
+        """
+        Create a texture entry widget with appropriate background color and controls.
+        
+        Args:
+            texture_info: Dict with keys: path, name, udim_pattern, udim_count, assignments
+            status: "unassigned" or "assigned"
+        
+        Returns:
+            QWidget: The container widget for this texture entry
+        """
+        texture_path = texture_info.get("path")
+        if not texture_path:
+            return None
+        
+        # Create main container widget
+        container = QtWidgets.QWidget()
+        container_layout = QtWidgets.QVBoxLayout(container)
+        container_layout.setContentsMargins(8, 8, 8, 8)  # 2px padding around each material attribute
+        container_layout.setSpacing(4)
+        
+        # Apply border color based on status (assigned/unassigned)
+        self._apply_texture_entry_style(container, status)
+        
+        # First row: Del button + Line edit + Colorspace combobox
+        first_row = QtWidgets.QHBoxLayout()
+        first_row.setContentsMargins(0, 0, 0, 0)
+        first_row.setSpacing(4)
+        
+        # Delete button (to the left of line edit)
+        del_btn = QtWidgets.QPushButton("Del")
+        del_btn.setFixedWidth(30)
+        del_btn.setMinimumHeight(20)
+        del_btn.setStyleSheet("""
+            QPushButton {
+                font-family: 'Segoe UI';
+                font-size: 11px;
+                color: #cccccc;
+                background-color: #444444;
+                border: none;
+                border-radius: 4px;
+                padding: 2px 4px;
+            }
+            QPushButton:hover {
+                background-color: #5a2a2a;
+                border: none;
+            }
+            QPushButton:pressed {
+                background-color: #4a1a1a;
+            }
+        """)
+        del_btn.clicked.connect(lambda: self._delete_texture_entry(texture_path))
+        first_row.addWidget(del_btn)
+        
+        # Texture name line edit (read-only display of filename)
+        texture_name = texture_info.get("name", os.path.basename(texture_path))
+        udim_count = texture_info.get("udim_count", 0)
+        self._debug_print(f"[CreateWidget] Display: texture_name={texture_name}, udim_count={udim_count}, use_udim={self.use_udim}")
+        
+        name_line_edit = QtWidgets.QLineEdit(texture_name)
+        name_line_edit.setReadOnly(True)
+        name_line_edit.setStyleSheet(scroll_area_stylesheet)
+        name_line_edit.setMinimumHeight(20)
+        first_row.addWidget(name_line_edit)
+        
+        # UDIM count label (blue text)
+        udim_label = QtWidgets.QLabel("")
+        udim_label.setStyleSheet(udim_label_stylesheet)
+        udim_label.setMinimumHeight(18)
+        udim_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        udim_label.setVisible(False)
+        first_row.addWidget(udim_label)
+        
+        # Folder icon button (to select texture file for this entry)
+        folder_btn = QtWidgets.QPushButton()
+        folder_btn.setFixedWidth(28)
+        folder_btn.setMinimumHeight(20)
+        folder_icon = QtGui.QIcon(":/icons/folder_icon.png")
+        folder_btn.setIcon(folder_icon)
+        folder_btn.setToolTip("Select texture file for this entry")
+        folder_btn.setStyleSheet("""
+            QPushButton {
+                font-family: 'Segoe UI';
+                font-size: 12px;
+                color: #ffffff;
+                background-color: transparent;
+                border: none;
+                border-radius: 8px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
+            QPushButton:pressed {
+                background-color: rgba(255, 255, 255, 0.2);
+            }
+        """)
+        folder_btn.clicked.connect(lambda: self._select_texture_for_entry(texture_path))
+        first_row.addWidget(folder_btn)
+        
+        # Colorspace combobox (updates based on attribute selection, disable wheel scrolling)
+        class NoWheelComboBox(QtWidgets.QComboBox):
+            def wheelEvent(self, event):
+                event.ignore()
+        
+        colorspace_combo = NoWheelComboBox()
+        colorspace_combo.addItem("-colorspace-", "default")
+        colorspace_combo.addItems(["sRGB", "Raw", "ACEScg"])
+        # Set default colorspace based on first assignment if available
+        default_colorspace = "-colorspace-"
+        assignments = texture_info.get("assignments", [])
+        if assignments and assignments[0].get("attribute"):
+            attr = assignments[0].get("attribute")
+            if attr and attr != "skip" and attr in TEXTURE_RULES:
+                default_colorspace = TEXTURE_RULES[attr].get("colorSpace", "-colorspace-")
+        colorspace_combo.setCurrentText(default_colorspace)
+        
+        def update_colorspace_combo_color():
+            selected_text = colorspace_combo.currentText()
+            color = "#b0b0b0" if selected_text == "-colorspace-" else "#00f7c8"
+            colorspace_combo.setStyleSheet(self._get_combo_stylesheet(color))
+        
+        # Apply initial color state
+        update_colorspace_combo_color()
+        
+        # Connect signal to update color when selection changes
+        colorspace_combo.currentIndexChanged.connect(lambda: update_colorspace_combo_color())
+        colorspace_combo.currentTextChanged.connect(lambda: update_colorspace_combo_color())
+        
+        colorspace_combo.setMinimumHeight(20)
+        colorspace_combo.setMinimumWidth(80)
+        first_row.addWidget(colorspace_combo)
+        
+        # Store colorspace combo reference
+        container_layout.addLayout(first_row)
+        
+        # Get assignments (packed textures may have multiple)
+        assignments = texture_info.get("assignments", [])
+        if not assignments:
+            # Add one empty assignment
+            assignments = [{"attribute": None, "channel": None, "colorspace": "default"}]
+        
+        # Store widget references for this texture
+        widget_info = {
+            "widget": container,
+            "line_edit": name_line_edit,
+            "udim_label": udim_label,
+            "del_button": del_btn,
+            "colorspace_combo": colorspace_combo,
+            "attribute_combos": [],
+            "plus_button": None,
+            "channel_checkboxes": [],  # List of dicts with R/G/B/A checkboxes per assignment
+            "status": status
+        }
+        
+        # Create assignment rows (one per assignment, or one empty row)
+        self._debug_print(f"[CreateWidget] Texture: {texture_name}, assignments count: {len(assignments)}")
+        for idx, assignment in enumerate(assignments):
+            self._debug_print(f"[CreateWidget]   Assignment {idx}: {assignment}")
+            self._debug_print(f"[CreateWidget] Creating {len(assignments)} assignment rows for {texture_path}")
+            self._debug_print(f"[CreateWidget] Assignment {idx}: attribute={assignment.get('attribute')}, channel={assignment.get('channel')}")
+            assignment_widget = self._create_assignment_row(
+                container_layout, texture_path, assignment, idx == 0, len(assignments) > 1, widget_info
+            )
+            if assignment_widget:
+                widget_info["attribute_combos"].append(assignment_widget.get("combo"))
+                widget_info["channel_checkboxes"].append(assignment_widget.get("checkboxes", {}))
+                if idx == 0:
+                    widget_info["plus_button"] = assignment_widget.get("plus_button")
+        
+        # Store widget info
+        self._update_texture_entry_widget_display(widget_info, texture_info)
+        self.texture_entry_widgets[texture_path] = widget_info
+        
+        return container
+
+    def _create_assignment_row(self, parent_layout, texture_path, assignment, is_first, has_multiple, widget_info):
+        """
+        Create a single assignment row with combobox, plus/minus buttons, and inline R/G/B/A checkboxes.
+        
+        Returns:
+            Dict with keys: "combo", "plus_button", "minus_button", "checkboxes"
+        """
+        row_widget = QtWidgets.QWidget()
+        row_layout = QtWidgets.QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(4)
+        
+        result = {}
+        
+        # Plus button (only on first row)
+        if is_first:
+            plus_btn = QtWidgets.QPushButton("+")
+            plus_btn.setFixedWidth(18)
+            plus_btn.setMinimumHeight(18)
+            plus_btn.setStyleSheet(scroll_area_stylesheet)
+            plus_btn.clicked.connect(lambda: self._add_assignment_row_to_texture(texture_path))
+            row_layout.addWidget(plus_btn)
+            result["plus_button"] = plus_btn
+            
+            # If multiple assignments, add 1px spacer then minus button
+            if has_multiple:
+                spacer_1px = QtWidgets.QSpacerItem(1, 1, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+                row_layout.addItem(spacer_1px)
+                
+                minus_btn = QtWidgets.QPushButton("-")
+                minus_btn.setFixedWidth(18)
+                minus_btn.setMinimumHeight(18)
+                minus_btn.setStyleSheet(scroll_area_stylesheet)
+                assignment_idx = len(widget_info.get("attribute_combos", []))
+                minus_btn.clicked.connect(lambda: self._remove_assignment_row_from_texture(texture_path, assignment_idx))
+                row_layout.addWidget(minus_btn)
+                result["minus_button"] = minus_btn
         else:
-            print(f"[DEBUG] Missing {container_name} or {button_name}")
+            # Spacer for alignment (same width as plus button)
+            spacer = QtWidgets.QSpacerItem(22, 20, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+            row_layout.addItem(spacer)
+            
+            # If multiple assignments, add more spacing then minus button (for second+ attributes)
+            # ADJUST THIS VALUE TO CHANGE SPACING BEFORE MINUS BUTTON FOR 2ND+ ATTRIBUTES:
+            if has_multiple:
+                spacer_width = 1  # <-- CHANGE THIS VALUE (currently 8px) to adjust spacing before minus button
+                spacer = QtWidgets.QSpacerItem(spacer_width, 1, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+                row_layout.addItem(spacer)
+                
+                minus_btn = QtWidgets.QPushButton("-")
+                minus_btn.setFixedWidth(18)
+                minus_btn.setMinimumHeight(18)
+                minus_btn.setStyleSheet(scroll_area_stylesheet)
+                assignment_idx = len(widget_info.get("attribute_combos", []))
+                minus_btn.clicked.connect(lambda: self._remove_assignment_row_from_texture(texture_path, assignment_idx))
+                row_layout.addWidget(minus_btn)
+                result["minus_button"] = minus_btn
+        
+        # Attribute combobox (disable wheel scrolling)
+        class NoWheelComboBox(QtWidgets.QComboBox):
+            def wheelEvent(self, event):
+                event.ignore()
+        
+        attribute_combo = NoWheelComboBox()
+        attribute_combo.setStyleSheet(self._get_combo_stylesheet())
+        attribute_combo.setMinimumHeight(20)
+        attribute_combo.setMinimumWidth(120)
+        
+        # Add "-skip import-" as first item
+        attribute_combo.addItem("-skip import-", "skip")
+        
+        # Add all texture types
+        for ttype in ALL_TEXTURE_TYPES:
+            display = self._get_display_name(ttype)
+            attribute_combo.addItem(display, ttype)
+        
+        # Set current selection based on assignment
+        attribute = assignment.get("attribute")
+        if attribute:
+            for i in range(attribute_combo.count()):
+                if attribute_combo.itemData(i) == attribute:
+                    attribute_combo.setCurrentIndex(i)
+                    break
+        else:
+            attribute_combo.setCurrentIndex(0)
 
-    def toggle_adv_textures(self):
-        self._debug_print("toggle_adv_textures called")
-        adv_container = self._get_widget("advTexturesContainer", QtWidgets.QWidget)
-        btn = self._get_widget("showAdvTexturesButton", QtWidgets.QPushButton)
-        if not adv_container or not btn:
-            self._debug_print("Missing advTexturesContainer or showAdvTexturesButton")
+        def update_attribute_combo_color():
+            selected_data = attribute_combo.currentData()
+            color = "#ff3b3b" if selected_data == "skip" else "#00f7c8"
+            attribute_combo.setStyleSheet(self._get_combo_stylesheet(color))
+        
+        # Apply initial color state
+        update_attribute_combo_color()
+        
+        row_layout.addWidget(attribute_combo)
+        result["combo"] = attribute_combo
+        
+        # Channel selection UI (checkboxes + label)
+        channel_label = QtWidgets.QLabel("(RGB Channels)")
+        channel_label.setStyleSheet(channel_label_stylesheet)
+        channel_label.setMinimumHeight(18)
+        channel_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        
+        channel_names = {
+            "R": "(Red Channel)",
+            "G": "(Green Channel)",
+            "B": "(Blue Channel)",
+            "A": "(Alpha Channel)",
+        }
+        
+        red_cb = QtWidgets.QCheckBox("R")
+        green_cb = QtWidgets.QCheckBox("G")
+        blue_cb = QtWidgets.QCheckBox("B")
+        alpha_cb = QtWidgets.QCheckBox("A")
+        checkboxes = {"R": red_cb, "G": green_cb, "B": blue_cb, "A": alpha_cb}
+        
+        def update_channel_label_text():
+            selected_key = next((k for k, cb in checkboxes.items() if cb.isChecked()), None)
+            channel_label.setText(channel_names.get(selected_key, "(RGB Channels)"))
+        
+        def handle_checkbox_toggle(channel_key):
+            cb = checkboxes.get(channel_key)
+            if not cb:
+                return
+            if cb.isChecked():
+                for other_key, other_cb in checkboxes.items():
+                    if other_key != channel_key and other_cb.isChecked():
+                        other_cb.blockSignals(True)
+                        other_cb.setChecked(False)
+                        other_cb.blockSignals(False)
+            update_channel_label_text()
+            self._sync_texture_entry_to_data(texture_path)
+        
+        for key, cb in checkboxes.items():
+            cb.setStyleSheet(checkbox_stylesheet)
+            cb.setMinimumHeight(18)
+            cb.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+            row_layout.addWidget(cb)
+            cb.toggled.connect(lambda checked, chan_key=key: handle_checkbox_toggle(chan_key))
+        
+        row_layout.addSpacing(4)
+        row_layout.addWidget(channel_label)
+        
+        result["checkboxes"] = checkboxes
+        
+        # Set initial enabled state based on attribute
+        initial_attr = attribute_combo.itemData(attribute_combo.currentIndex())
+        is_skip_initial = (initial_attr == "skip" or initial_attr is None)
+        for cb in checkboxes.values():
+            cb.setEnabled(not is_skip_initial)
+        
+        # Set channel checkbox based on assignment
+        channel = assignment.get("channel")
+        attribute = assignment.get("attribute")
+        self._debug_print(f"[CreateRow] Creating row for attribute={attribute}, channel={channel}")
+        
+        if channel:
+            channel_upper = channel.upper()
+            if channel_upper in checkboxes:
+                checkboxes[channel_upper].blockSignals(True)
+                checkboxes[channel_upper].setChecked(True)
+                checkboxes[channel_upper].blockSignals(False)
+                self._debug_print(f"[CreateRow] Set channel {channel_upper} checkbox for {attribute}")
+        elif attribute and attribute in TEXTURE_RULES:
+            default_ch = self._default_channel_for_type(attribute)
+            if default_ch and default_ch.upper() in checkboxes:
+                checkboxes[default_ch.upper()].blockSignals(True)
+                checkboxes[default_ch.upper()].setChecked(True)
+                checkboxes[default_ch.upper()].blockSignals(False)
+                self._debug_print(f"[CreateRow] Set default channel {default_ch.upper()} checkbox for {attribute}")
+        
+        update_channel_label_text()
+        
+        # Connect signal to update data structure and colorspace (after checkboxes exist)
+        def on_attribute_changed(idx, path=texture_path):
+            self._sync_texture_entry_to_data(path)
+            attr = attribute_combo.itemData(idx)
+            if attr and attr != "skip" and attr in TEXTURE_RULES:
+                colorspace = TEXTURE_RULES[attr].get("colorSpace", "-colorspace-")
+                widget_info["colorspace_combo"].setCurrentText(colorspace)
+            else:
+                widget_info["colorspace_combo"].setCurrentText("-colorspace-")
+            
+            update_attribute_combo_color()
+            
+            is_skip = (attr == "skip" or attr is None)
+            for cb in checkboxes.values():
+                cb.setEnabled(not is_skip)
+                if is_skip and cb.isChecked():
+                    cb.blockSignals(True)
+                    cb.setChecked(False)
+                    cb.blockSignals(False)
+            update_channel_label_text()
+        
+        attribute_combo.currentIndexChanged.connect(on_attribute_changed)
+        
+        row_layout.addStretch(1)
+        parent_layout.addWidget(row_widget)
+        
+        return result
+
+    def _add_assignment_row_to_texture(self, texture_path):
+        """Add another assignment row to a packed texture entry."""
+        widget_info = self.texture_entry_widgets.get(texture_path)
+        if not widget_info:
             return
+        
+        # Find texture info in selected_textures
+        texture_info = None
+        for status in ["unassigned", "assigned"]:
+            for tex_info in self.selected_textures[status]:
+                if tex_info.get("path") == texture_path:
+                    texture_info = tex_info
+                    break
+            if texture_info:
+                break
+        
+        if not texture_info:
+            return
+        
+        # Add new assignment
+        assignments = texture_info.get("assignments", [])
+        assignments.append({"attribute": None, "channel": None, "colorspace": "default"})
+        
+        # Recreate UI
+        self._populate_texture_selection_ui()
 
-        currently_visible = adv_container.isVisible()
-        adv_container.setVisible(not currently_visible)
-        btn.setText("Hide Adv Textures -" if not currently_visible else "Show Adv Textures +")
-        self._debug_print(f"Advanced Textures visibility set to {not currently_visible}")
+    def _remove_assignment_row_from_texture(self, texture_path, assignment_index):
+        """Remove an assignment row from a packed texture entry."""
+        # Find texture info
+        texture_info = None
+        for status in ["unassigned", "assigned"]:
+            for tex_info in self.selected_textures[status]:
+                if tex_info.get("path") == texture_path:
+                    texture_info = tex_info
+                    break
+            if texture_info:
+                break
+        
+        if not texture_info:
+            return
+        
+        assignments = texture_info.get("assignments", [])
+        if 0 <= assignment_index < len(assignments):
+            assignments.pop(assignment_index)
+            # If no assignments left, add one empty
+            if not assignments:
+                assignments.append({"attribute": None, "channel": None, "colorspace": "default"})
+            
+            # Recreate UI
+            self._populate_texture_selection_ui()
+
+    def _sync_texture_entry_to_data(self, texture_path):
+        """
+        Read widget states and update self.selected_textures data structure.
+        Called when user changes any UI element.
+        """
+        widget_info = self.texture_entry_widgets.get(texture_path)
+        if not widget_info:
+            return
+        
+        # Find texture info in selected_textures
+        texture_info = None
+        status_key = None
+        for status in ["unassigned", "assigned"]:
+            for idx, tex_info in enumerate(self.selected_textures[status]):
+                if tex_info.get("path") == texture_path:
+                    texture_info = tex_info
+                    status_key = status
+                    break
+            if texture_info:
+                break
+        
+        if not texture_info:
+            return
+        
+        # Update assignments from UI
+        assignments = []
+        colorspace = widget_info["colorspace_combo"].currentText() if widget_info.get("colorspace_combo") else "default"
+        
+        for idx, combo in enumerate(widget_info["attribute_combos"]):
+            attribute = combo.itemData(combo.currentIndex())
+            if attribute == "skip":
+                continue
+            
+            # Get checkboxes for this assignment
+            checkboxes = widget_info["channel_checkboxes"][idx] if idx < len(widget_info["channel_checkboxes"]) else {}
+            
+            channel = None
+            # Find checked channel
+            for ch_name, cb in checkboxes.items():
+                if cb and cb.isChecked():
+                    channel = ch_name.lower()
+                    break
+            
+            # Use colorspace from main combobox (shared for all assignments of this texture)
+            assignments.append({
+                "attribute": attribute,
+                "channel": channel,
+                "colorspace": colorspace
+            })
+        
+        # Update texture info
+        texture_info["assignments"] = assignments if assignments else [{"attribute": None, "channel": None, "colorspace": "default"}]
+        
+        # Update status based on assignments (but don't move between lists - just update visual)
+        has_assignment = any(a.get("attribute") and a.get("attribute") != "skip" for a in texture_info["assignments"])
+        
+        # Update the visual status (background color) without moving the entry
+        widget = widget_info.get("widget")
+        if widget:
+            new_status = "assigned" if has_assignment else "unassigned"
+            self._apply_texture_entry_style(widget, new_status)
+            widget_info["status"] = new_status
+        
+        # Update the status in the data structure for import purposes, but don't move between lists
+        # This way the visual updates but position stays the same
+        if has_assignment and status_key == "unassigned":
+            # Update status in data but don't move - just mark for import
+            texture_info["_visual_status"] = "assigned"
+        elif not has_assignment and status_key == "assigned":
+            # Update status in data but don't move - just mark for import
+            texture_info["_visual_status"] = "unassigned"
+        
+        self._update_import_button_label()
+
 
     def _default_channel_for_type(self, texture_type):
         """
@@ -1948,6 +3684,82 @@ class ImportTxTool(QtWidgets.QWidget):
             # Widget might be gone; ignore safely
             pass
 
+    def _delete_texture_entry(self, texture_path):
+        """Delete a texture entry from the list entirely."""
+        # Remove from selected_textures
+        for status in ["unassigned", "assigned"]:
+            for tex_info in self.selected_textures[status][:]:
+                if tex_info.get("path") == texture_path:
+                    self.selected_textures[status].remove(tex_info)
+                    break
+        
+        # Remove widget reference
+        if texture_path in self.texture_entry_widgets:
+            widget_info = self.texture_entry_widgets[texture_path]
+            widget = widget_info.get("widget")
+            if widget:
+                widget.deleteLater()
+            del self.texture_entry_widgets[texture_path]
+        
+        # Recreate UI to reflect changes
+        self._populate_texture_selection_ui()
+        
+        self._debug_print(f"[Delete] Deleted texture entry: {os.path.basename(texture_path)}")
+
+    def _select_texture_for_entry(self, texture_path):
+        """Open file dialog to select a new texture file for this entry."""
+        # Get the directory of the current texture as starting point
+        current_dir = os.path.dirname(texture_path) if texture_path else ""
+        
+        options = QtWidgets.QFileDialog.Options()
+        file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select Texture File",
+            current_dir,
+            "Image Files (*.png *.jpg *.jpeg *.tif *.tiff *.exr *.tga *.bmp)",
+            options=options
+        )
+        
+        if not file_path:
+            return
+        
+        # Find the texture entry in selected_textures
+        texture_info = None
+        status_key = None
+        for status in ["unassigned", "assigned"]:
+            for idx, tex_info in enumerate(self.selected_textures[status]):
+                if tex_info.get("path") == texture_path:
+                    texture_info = tex_info
+                    status_key = status
+                    break
+            if texture_info:
+                break
+        
+        if not texture_info:
+            return
+        
+        # Get current assignments to preserve them
+        assignments = texture_info.get("assignments", [])
+        if not assignments:
+            assignments = [{"attribute": None, "channel": None, "colorspace": "-colorspace-"}]
+        
+        # Build new texture info with the new path
+        new_texture_info = self._build_texture_info(file_path, {
+            "status": texture_info.get("status", "unmatched"),
+            "assignments": assignments
+        })
+        
+        # Replace the old texture info with the new one
+        for status in ["unassigned", "assigned"]:
+            for idx, tex_info in enumerate(self.selected_textures[status]):
+                if tex_info.get("path") == texture_path:
+                    self.selected_textures[status][idx] = new_texture_info
+                    break
+        
+        # Refresh UI
+        self._populate_texture_selection_ui()
+        self._debug_print(f"[SelectTexture] Updated texture entry: {os.path.basename(file_path)}")
+
     def _debug_print(self, msg):
         """
         Helper method to print debug messages.
@@ -1964,32 +3776,36 @@ class ImportTxTool(QtWidgets.QWidget):
 checkbox_stylesheet = """
 QCheckBox {
     font-family: 'Segoe UI';
-    font-size: 11px;              /* Slightly smaller text */
-    color: #f2f2f2;
-    background-color: #444444;
+    font-size: 10px;              /* Smaller text */
+    color: #dddddd;               /* Neutral text when unchecked */
+    background-color: transparent;
     border: none;
-    border-radius: 6px;           /* Softer, smaller rounding */
-    padding: 2px 2px;             /* Less padding = tighter fit */
-    margin: 1px 0;                /* Small vertical margin */
+    border-radius: 0px;
+    padding: 1px 4px;             /* Reduced padding */
+    margin: 0px;                  /* No margin */
+}
+QCheckBox:checked {
+    color: #00f7c8;               /* Highlight color only when checked */
+    font-weight: bold;            /* Make text bold when checked */
 }
 QCheckBox::indicator {
-    width: 12px;                  /* Smaller checkbox */
-    height: 12px;
-    border: 1px solid #444444;
-    border-radius: 3px;
+    width: 10px;                  /* Smaller checkbox */
+    height: 10px;
+    border: 1px solid #555555;    /* Dark grey border for unchecked */
+    border-radius: 2px;
     background-color: #2b2b2b;
 }
 QCheckBox::indicator:checked {
     background-color: #ffffff;
-    border: 1px solid #2b2b2b;
+    border: 1px solid #ffffff;    /* White border for checked */
 }
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
-    border: 1px solid #444444;
+    border: 1px solid #555555;    /* Dark grey border for unchecked */
 }
 QCheckBox::indicator:checked:hover,
 QCheckBox::indicator:unchecked:hover {
-    border: 1px solid #ffffff;
+    border: 1px solid #ffffff;    /* White border on hover */
 }
 QCheckBox::indicator:checked:pressed,
 QCheckBox::indicator:unchecked:pressed {
@@ -1999,9 +3815,13 @@ QCheckBox::indicator:unchecked:pressed {
 /* Disabled state */
 QCheckBox:disabled {
     color: #666666;
-    background-color: #3a3a3a;
-    border-radius: 6px;
-    padding: 2px 6px;
+    background-color: transparent;
+    border-radius: 0px;
+    padding: 1px 4px;
+}
+QCheckBox:disabled::indicator {
+    background-color: transparent;
+    border: none;
 }
 """
 
@@ -2021,13 +3841,109 @@ label_stylesheet = """
 channel_label_stylesheet = """
 QLabel {
     font-family: 'Segoe UI';
+    font-size: 10px;
+    font-style: italic;
+    color: #9da3a8;
+    background-color: transparent;
+    border: none;
+    padding: 0px 4px;
+}
+"""
+
+udim_label_stylesheet = """
+QLabel {
+    font-family: 'Segoe UI';
+    font-size: 11px;
+    color: #00f7c8;
+    background-color: transparent;
+    border: none;
+    padding: 0px 4px;
+}
+"""
+
+# Use default combobox styling (no custom stylesheet)
+combo_stylesheet_template = """
+QComboBox {{
+    font-family: 'Segoe UI';
     font-size: 12px;
-    color: #ffffff;
+    color: {color};
     background-color: #444444;
-    border: 2px solid #444444;
+    border: none;
     border-radius: 4px;
-    /* Tighter vertical padding: reduce bottom to minimize gap above checkboxes */
-    padding: -2px -2px -2px -2px;  /* top right bottom left */
+    padding: 2px 6px;
+}}
+QComboBox QAbstractItemView {{
+    background-color: #1e1e1e;
+    border: 1px solid #3a3a3a;
+    color: #00f7c8;
+    selection-background-color: #2f3f3f;
+    selection-color: #ffffff;
+}}
+"""
+
+# Main stylesheet for dialogs (matching texture importer style)
+main_stylesheet = """
+QWidget {
+    background-color: #555555;
+    font-family: 'Segoe UI';
+    font-size: 14px;
+    color: #ffffff;
+}
+
+/* Scroll area styling */
+QScrollArea {
+    background-color: #3a3a3a;
+    border: none;
+    border-radius: 8px;
+}
+
+QScrollArea QWidget {
+    background-color: #3a3a3a;
+}
+
+/* Scrollbar styling */
+QScrollBar:vertical {
+    background-color: #555555;
+    width: 12px;
+    border: none;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #666666;
+    border-radius: 6px;
+    min-height: 20px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #777777;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+/* Buttons */
+QPushButton {
+    font-family: 'Segoe UI';
+    font-size: 13px;
+    color: #ffffff;
+    background-color: #666666;
+    border: 2px solid #444444;
+    border-radius: 6px;
+    padding: 4px 10px;
+}
+
+QPushButton:hover {
+    background-color: #888888;
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;
+}
+
+QPushButton:disabled {
+    color: #666666;
+    background-color: #4a4a4a;
 }
 """
 
@@ -2035,32 +3951,32 @@ scroll_area_stylesheet = """
 /* Buttons */
 QPushButton {
     font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
-    font-size: 12px;          /* Adjust the font size as needed */
+    font-size: 11px;          /* Slightly smaller for inline controls */
     color: #ffffff;           /* White text color */
-    background-color: #666666;/* Dark background color */
-    border: 2px solid #444444;/* Optional border with dark grey color */
-    border-radius: 8px;       /* Rounded corners */
-    padding: 2px 5px;         /* Padding around the text */
+    background-color: #444444;/* Darker background color */
+    border: none;             /* No border */
+    border-radius: 4px;       /* Rounded corners */
+    padding: 0px 4px;         /* Tighter padding for compact buttons */
 }
 QPushButton:hover {
-    background-color: #888888;  /* Slightly lighter background on hover */
+    background-color: #555555;  /* Slightly lighter background on hover */
 }
 QPushButton:pressed {
-    background-color: #1a1a1a;  /* Darker background when pressed */
+    background-color: #2a2a2a;  /* Darker background when pressed */
 }
 QPushButton:disabled {
     color: #666666;             /* Muted text to indicate disabled */
-    border: 1px solid #555555;  /* Optional border with dark grey color */
-    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    border: none;               /* No border */
+    background-color: #3a3a3a;  /* Lighter grey background color for disabled state */
 }
 
 /* Line edits */
 QLineEdit {
     font-family: 'Segoe UI';
-    font-size: 12px;
+    font-size: 14px;
     color: #ffffff;
     background-color: #333333;  /* Retaining the original background color */
-    border: 2px solid #444444;
+    border: none;               /* No border */
     border-radius: 8px;
     padding: 2px 3px;
 }
@@ -2068,7 +3984,7 @@ QLineEdit:hover {
     background-color: #222222;
 }
 QLineEdit:focus {
-    border: 2px solid #555555;
+    border: none;               /* No border */
     background-color: #333333;  /* fixed typo from #44444 */
 }
 
@@ -2164,175 +4080,6 @@ class PreviewImportDialog(QtWidgets.QDialog):
         cancel_btn.clicked.connect(self.reject)
 
 
-class AssignTexturesDialog(QtWidgets.QDialog):
-    """
-    Dialog to manually assign unmatched textures to material attributes.
-    Shows a list of textures with comboboxes for selecting the attribute type.
-    """
-    def __init__(self, parent, unmatched_textures):
-        """
-        Initialize the dialog.
-        
-        Args:
-            parent: Parent widget
-            unmatched_textures: List of file paths that couldn't be matched
-        """
-        super(AssignTexturesDialog, self).__init__(parent)
-        self.setWindowTitle("Assign Textures")
-        self.setModal(True)
-        self.resize(600, 500)
-        
-        # Store the mapping: texture_path -> selected_texture_type
-        self.texture_assignments = {}
-        
-        main = QtWidgets.QVBoxLayout(self)
-        main.setContentsMargins(8, 8, 8, 8)
-        main.setSpacing(8)
-        
-        # Title
-        title = QtWidgets.QLabel("Assign Textures")
-        title.setStyleSheet("font-family: 'Segoe UI'; font-size: 18px; font-weight: 600; color: #ffffff;")
-        main.addWidget(title)
-        
-        # Scroll area for texture assignments
-        scroll = QtWidgets.QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(scroll_area_stylesheet)
-        main.addWidget(scroll, 1)
-        
-        content = QtWidgets.QWidget()
-        scroll.setWidget(content)
-        v = QtWidgets.QVBoxLayout(content)
-        v.setContentsMargins(6, 6, 6, 6)
-        v.setSpacing(8)
-        
-        # Store comboboxes for each texture path
-        self.comboboxes = {}
-        
-        # Helper function to get display name for texture types
-        def get_display_name(texture_type):
-            display_names = {
-                "baseColor": "Base Color",
-                "emissionClr": "Emission Color",
-                "subsurfaceClr": "Subsurface Color",
-                "specularClr": "Specular Color",
-                "transmissionClr": "Transmission Color",
-                "coatRoughness": "Coat Roughness",
-            }
-            if texture_type in display_names:
-                return display_names[texture_type]
-            result = texture_type[0].upper()
-            for char in texture_type[1:]:
-                if char.isupper():
-                    result += " " + char
-                else:
-                    result += char
-            return result
-        
-        # Create a row for each unmatched texture
-        for texture_path in unmatched_textures:
-            texture_name = os.path.basename(texture_path)
-            
-            # Horizontal layout for label + combobox
-            row = QtWidgets.QHBoxLayout()
-            row.setSpacing(10)
-            
-            # Label with texture name
-            label = QtWidgets.QLabel(texture_name)
-            label.setStyleSheet("font-family: 'Segoe UI'; font-size: 13px; color: #d6d6d6; min-width: 200px;")
-            label.setWordWrap(False)
-            row.addWidget(label)
-            
-            # Combobox with all texture types
-            combo = QtWidgets.QComboBox()
-            combo.setStyleSheet("""
-                QComboBox {
-                    font-family: 'Segoe UI';
-                    font-size: 12px;
-                    color: #ffffff;
-                    background-color: #555555;
-                    border: 1px solid #444444;
-                    border-radius: 4px;
-                    padding: 4px;
-                    min-width: 200px;
-                }
-                QComboBox:hover {
-                    background-color: #666666;
-                }
-                QComboBox::drop-down {
-                    border: none;
-                }
-                QComboBox QAbstractItemView {
-                    background-color: #555555;
-                    color: #ffffff;
-                    selection-background-color: #666666;
-                    border: 1px solid #444444;
-                }
-            """)
-            
-            # Add "None" option first (default - user must select)
-            combo.addItem("-- Select Attribute --", None)
-            
-            # Add all texture types with display names
-            for ttype in ALL_TEXTURE_TYPES:
-                display = get_display_name(ttype)
-                combo.addItem(display, ttype)
-            
-            row.addWidget(combo)
-            row.addStretch(1)
-            
-            # Store the combobox reference
-            self.comboboxes[texture_path] = combo
-            
-            # Add row to layout
-            v.addLayout(row)
-        
-        v.addStretch(1)
-        
-        # Buttons
-        btns = QtWidgets.QHBoxLayout()
-        btns.addStretch(1)
-        continue_btn = QtWidgets.QPushButton("Continue")
-        cancel_btn = QtWidgets.QPushButton("Cancel")
-        btns.addWidget(continue_btn)
-        btns.addWidget(cancel_btn)
-        main.addLayout(btns)
-        
-        continue_btn.clicked.connect(self.on_continue)
-        cancel_btn.clicked.connect(self.reject)
-    
-    def on_continue(self):
-        """Called when Continue button is clicked. Validates selections and accepts if valid."""
-        # Check that all textures have been assigned
-        unassigned = []
-        assignments = {}
-        
-        for texture_path, combo in self.comboboxes.items():
-            selected_type = combo.currentData()
-            if selected_type is None:
-                unassigned.append(os.path.basename(texture_path))
-            else:
-                assignments[texture_path] = selected_type
-        
-        # If some textures are unassigned, warn but still allow proceeding with assigned ones
-        if unassigned:
-            response = QtWidgets.QMessageBox.warning(
-                self,
-                "Unassigned Textures",
-                f"The following textures have not been assigned:\n" + 
-                "\n".join(f"• {name}" for name in unassigned) +
-                "\n\nDo you want to continue with only the assigned textures?",
-                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-                QtWidgets.QMessageBox.No
-            )
-            if response == QtWidgets.QMessageBox.No:
-                return  # User cancelled
-        
-        # Store assignments and accept
-        self.texture_assignments = assignments
-        self.accept()
-
-
 class TextureSearchNamesUI(QtWidgets.QWidget):
     """
     Loads textureSearchnames.ui, then dynamically builds the scroll area content
@@ -2378,6 +4125,10 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
 
         # 3) Populate the scroll area with dynamic rows
         self.populate_texture_names_scroll_area()
+        
+        # Initialize packed_texture_entries if not already done
+        if not hasattr(self, 'packed_texture_entries'):
+            self.packed_texture_entries = []
 
         # 3.5) Fill from saved JSON if present
         self._apply_saved_texture_names()
@@ -2462,15 +4213,30 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         scroll_area.setWidget(content_widget)
         content_layout = QtWidgets.QVBoxLayout(content_widget)
         content_layout.setContentsMargins(3, 3, 3, 3)
-        content_layout.setSpacing(4)
+        content_layout.setSpacing(2)  # Reduced spacing for tighter layout
         content_layout.setAlignment(QtCore.Qt.AlignTop | QtCore.Qt.AlignLeft)
 
+        # 4) Frame around texture attributes section
+        attributes_frame = QtWidgets.QFrame()
+        attributes_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        attributes_frame.setStyleSheet("""
+            QFrame {
+                background-color: #3a3a3a;
+                border: 1px solid #555555;
+                border-radius: 6px;
+                padding: 4px;
+            }
+        """)
+        attributes_layout = QtWidgets.QVBoxLayout(attributes_frame)
+        attributes_layout.setContentsMargins(4, 4, 4, 4)
+        attributes_layout.setSpacing(2)
+        
         # 4) For each texture type, create a row: [Label] [LineEdit]
         for ttype in self.texture_types:
             row_widget = QtWidgets.QWidget()
             row_layout = QtWidgets.QHBoxLayout(row_widget)
             row_layout.setContentsMargins(0, 0, 0, 0)
-            row_layout.setSpacing(6)
+            row_layout.setSpacing(4)  # Reduced spacing
 
             # 4a) A QLabel: e.g. "Base Color:" or "Emission Color:"
             display_name = self.get_display_name(ttype)
@@ -2493,7 +4259,8 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
             # 4b) A QLineEdit with objectName "<textureType>TextureNameLineEdit"
             line_edit = QtWidgets.QLineEdit()
             line_edit.setObjectName(f"{ttype}TextureNameLineEdit")
-            line_edit.setPlaceholderText(f"{display_name}, {ttype[:3].upper()}")
+            # Set default text (will be overridden by _apply_saved_texture_names if JSON exists)
+            line_edit.setText(ttype)  # Default to texture type name
             line_edit.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
             line_edit.setStyleSheet("""
                 QLineEdit {
@@ -2523,14 +4290,405 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
             # Store reference for later (saving/loading)
             self.ui_elements[f"{ttype}TextureNameLineEdit"] = line_edit
 
-            content_layout.addWidget(row_widget)
+            attributes_layout.addWidget(row_widget)
+        
+        content_layout.addWidget(attributes_frame)
 
-        # 5) Add an expanding spacer at the bottom
+        # 5) Add Packed Texture section
+        self._add_packed_texture_section(content_layout)
+
+        # 6) Add an expanding spacer at the bottom
         spacer = QtWidgets.QSpacerItem(20, 40,
                                        QtWidgets.QSizePolicy.Minimum,
                                        QtWidgets.QSizePolicy.Expanding)
         content_layout.addItem(spacer)
 
+    def _add_packed_texture_section(self, parent_layout):
+        """
+        Add the Packed Texture section with:
+        - Multiple attribute rows (combobox + plus button + R/G/B/A checkboxes)
+        - Single line edit for search names
+        """
+        # Container for the entire packed texture section
+        packed_section = QtWidgets.QWidget()
+        packed_section_layout = QtWidgets.QVBoxLayout(packed_section)
+        packed_section_layout.setContentsMargins(0, 4, 0, 4)
+        packed_section_layout.setSpacing(4)
+        
+        # Title label with plus button
+        title_row = QtWidgets.QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(4)
+        
+        title_label = QtWidgets.QLabel("Packed textures:")
+        title_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Segoe UI';
+                font-size: 13px;
+                font-weight: 600;
+                color: #ffffff;
+                background-color: #444444;
+                border: 2px solid #444444;
+                border-radius: 6px;
+                padding: 2px 6px;
+            }
+        """)
+        title_row.addWidget(title_label)
+        
+        # Plus button to add new packed texture entry
+        add_packed_btn = QtWidgets.QPushButton("+")
+        add_packed_btn.setFixedWidth(24)
+        add_packed_btn.setFixedHeight(24)
+        add_packed_btn.setStyleSheet("""
+            QPushButton {
+                font-family: 'Segoe UI';
+                font-size: 14px;
+                font-weight: bold;
+                color: #ffffff;
+                background-color: #666666;
+                border: 2px solid #444444;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #888888;
+            }
+            QPushButton:pressed {
+                background-color: #1a1a1a;
+            }
+        """)
+        add_packed_btn.clicked.connect(lambda: self._add_packed_texture_entry())
+        title_row.addWidget(add_packed_btn)
+        title_row.addStretch(1)
+        
+        packed_section_layout.addLayout(title_row)
+        
+        # Container for packed texture entries
+        self.packed_entries_container = QtWidgets.QWidget()
+        self.packed_entries_layout = QtWidgets.QVBoxLayout(self.packed_entries_container)
+        self.packed_entries_layout.setContentsMargins(0, 0, 0, 0)
+        self.packed_entries_layout.setSpacing(4)
+        
+        # Store list of packed texture entries
+        self.packed_texture_entries = []
+        
+        # Add initial entry (default ORM example)
+        self._add_packed_texture_entry()
+        
+        packed_section_layout.addWidget(self.packed_entries_container)
+        
+        parent_layout.addWidget(packed_section)
+    
+    def _add_packed_texture_entry(self):
+        """
+        Add a new packed texture entry with:
+        - Frame around the entry
+        - Multiple attribute rows (combobox + plus button + R/G/B/A checkboxes)
+        - Search names label and line edit inline
+        """
+        # Frame for this packed texture entry
+        entry_frame = QtWidgets.QFrame()
+        entry_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        entry_frame.setStyleSheet("""
+            QFrame {
+                background-color: #3a3a3a;
+                border: 1px solid #555555;
+                border-radius: 6px;
+                padding: 4px;
+            }
+        """)
+        entry_layout = QtWidgets.QVBoxLayout(entry_frame)
+        entry_layout.setContentsMargins(4, 4, 4, 4)
+        entry_layout.setSpacing(4)
+        
+        # Delete button for entire packed texture entry (above first attribute)
+        delete_entry_btn = QtWidgets.QPushButton("Delete Entry")
+        delete_entry_btn.setStyleSheet("""
+            QPushButton {
+                font-family: 'Segoe UI';
+                font-size: 11px;
+                color: #ffffff;
+                background-color: #666666;
+                border: 2px solid #444444;
+                border-radius: 4px;
+                padding: 2px 6px;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background-color: #888888;
+            }
+            QPushButton:pressed {
+                background-color: #1a1a1a;
+            }
+        """)
+        delete_entry_btn.clicked.connect(lambda: self._remove_packed_texture_entry(entry_frame))
+        entry_layout.addWidget(delete_entry_btn)
+        
+        # Container for attribute assignments (will hold multiple rows)
+        assignments_container = QtWidgets.QWidget()
+        assignments_layout = QtWidgets.QVBoxLayout(assignments_container)
+        assignments_layout.setContentsMargins(0, 0, 0, 0)
+        assignments_layout.setSpacing(2)
+        
+        # Store list of assignment rows for this entry
+        assignment_rows = []
+        
+        # Add initial row
+        row_data = self._add_packed_assignment_row(assignments_layout, assignment_rows)
+        
+        entry_layout.addWidget(assignments_container)
+        
+        # Search names label and line edit inline
+        search_row = QtWidgets.QHBoxLayout()
+        search_row.setContentsMargins(0, 0, 0, 0)
+        search_row.setSpacing(4)
+        
+        search_label = QtWidgets.QLabel("Search Names:")
+        search_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Segoe UI';
+                font-size: 12px;
+                color: #ffffff;
+                background-color: #444444;
+                border: 2px solid #444444;
+                border-radius: 6px;
+                padding: 2px 6px;
+            }
+        """)
+        search_row.addWidget(search_label)
+        
+        search_line_edit = QtWidgets.QLineEdit()
+        search_line_edit.setObjectName(f"packedTextureSearchNamesLineEdit_{len(self.packed_texture_entries)}")
+        search_line_edit.setText("OcclusionRoughnessMetallic, ORM" if len(self.packed_texture_entries) == 0 else "")
+        search_line_edit.setStyleSheet("""
+            QLineEdit {
+                font-family: 'Segoe UI';
+                font-size: 11px;
+                color: #ffffff;
+                background-color: #333333;
+                border: 2px solid #444444;
+                border-radius: 6px;
+                padding: 2px 4px;
+            }
+            QLineEdit:hover {
+                background-color: #222222;
+            }
+            QLineEdit:focus {
+                border: 2px solid #555555;
+                background-color: #222222;
+            }
+        """)
+        search_row.addWidget(search_line_edit, 1)
+        
+        entry_layout.addLayout(search_row)
+        
+        # Store entry data
+        entry_data = {
+            'frame': entry_frame,
+            'delete_btn': delete_entry_btn,
+            'assignments_container': assignments_container,
+            'assignments_layout': assignments_layout,
+            'assignment_rows': assignment_rows,
+            'search_line_edit': search_line_edit
+        }
+        self.packed_texture_entries.append(entry_data)
+        self.ui_elements[search_line_edit.objectName()] = search_line_edit
+        
+        self.packed_entries_layout.addWidget(entry_frame)
+    
+    def _remove_packed_texture_entry(self, entry_frame):
+        """Remove an entire packed texture entry."""
+        # Find and remove from list
+        for entry_data in self.packed_texture_entries[:]:
+            if entry_data['frame'] == entry_frame:
+                self.packed_texture_entries.remove(entry_data)
+                break
+        
+        # Remove from layout and delete widget
+        self.packed_entries_layout.removeWidget(entry_frame)
+        entry_frame.deleteLater()
+    
+    def _add_packed_assignment_row(self, parent_layout, assignment_rows_list, attribute=None, channel=None):
+        """
+        Add a row for packed texture assignment:
+        - Combobox for attribute selection
+        - Plus button to add another row
+        - R/G/B/A checkboxes for channel selection
+        """
+        row_widget = QtWidgets.QWidget()
+        row_layout = QtWidgets.QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(4)
+        
+        # Check if this is the first row
+        is_first_row = len(assignment_rows_list) == 0
+        
+        # Plus button to add another row (only on first row)
+        plus_btn = None
+        if is_first_row:
+            plus_btn = QtWidgets.QPushButton("+")
+            plus_btn.setFixedWidth(24)
+            plus_btn.setFixedHeight(24)
+            plus_btn.setStyleSheet("""
+                QPushButton {
+                    font-family: 'Segoe UI';
+                    font-size: 14px;
+                    font-weight: bold;
+                    color: #ffffff;
+                    background-color: #666666;
+                    border: 2px solid #444444;
+                    border-radius: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #888888;
+                }
+                QPushButton:pressed {
+                    background-color: #1a1a1a;
+                }
+            """)
+            plus_btn.clicked.connect(lambda: self._add_packed_assignment_row(parent_layout, assignment_rows_list))
+            row_layout.addWidget(plus_btn)
+        else:
+            # Add spacer to maintain alignment when plus button is not shown
+            spacer = QtWidgets.QSpacerItem(35, 24, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+            row_layout.addItem(spacer)
+        
+        # Minus button to delete this row (skip for the primary row)
+        minus_btn = None
+        if not is_first_row:
+            minus_btn = QtWidgets.QPushButton("-")
+            minus_btn.setFixedWidth(24)
+            minus_btn.setFixedHeight(24)
+            minus_btn.setStyleSheet("""
+                QPushButton {
+                    font-family: 'Segoe UI';
+                    font-size: 14px;
+                    font-weight: bold;
+                    color: #ffffff;
+                    background-color: #666666;
+                    border: 2px solid #444444;
+                    border-radius: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #888888;
+                }
+                QPushButton:pressed {
+                    background-color: #1a1a1a;
+                }
+            """)
+            minus_btn.clicked.connect(lambda: self._remove_packed_assignment_row(row_widget, parent_layout, assignment_rows_list))
+            row_layout.addWidget(minus_btn)
+        else:
+            minus_spacer = QtWidgets.QSpacerItem(24, 24, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+            row_layout.addItem(minus_spacer)
+        
+        # Disable wheel scrolling on combobox (since we're in a scroll area)
+        class NoWheelComboBox(QtWidgets.QComboBox):
+            def wheelEvent(self, event):
+                event.ignore()
+        
+        # Attribute combobox
+        attr_combo = NoWheelComboBox()
+        attr_combo.setStyleSheet("""
+            QComboBox {
+                font-family: 'Segoe UI';
+                font-size: 12px;
+                color: #f2f2f2;
+                background-color: #666666;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 2px 6px;
+                min-height: 18px;
+            }
+            QComboBox:hover {
+                background-color: #777777;
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 20px;
+                background-color: transparent;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 6px solid #f2f2f2;
+                width: 0px;
+                height: 0px;
+                margin-right: 4px;
+            }
+            QComboBox::down-arrow:hover {
+                border-top-color: #ffffff;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #666666;
+                border: 1px solid #555555;
+                selection-background-color: #888888;
+                color: #f2f2f2;
+            }
+        """)
+        attr_combo.setMinimumWidth(120)
+        
+        # Add "Select Attribute" as first item
+        attr_combo.addItem("-- Select Attribute --", None)
+        
+        # Add all texture types
+        for ttype in ALL_TEXTURE_TYPES:
+            display = self.get_display_name(ttype)
+            attr_combo.addItem(display, ttype)
+        
+        # Set default attribute if provided
+        if attribute:
+            for i in range(attr_combo.count()):
+                if attr_combo.itemData(i) == attribute:
+                    attr_combo.setCurrentIndex(i)
+                    break
+        else:
+            attr_combo.setCurrentIndex(0)
+        
+        row_layout.addWidget(attr_combo)
+        
+        # R/G/B/A checkboxes using checkbox_stylesheet
+        channel_checkboxes = {}
+        for channel_name in ['r', 'g', 'b', 'a']:
+            cb = QtWidgets.QCheckBox(channel_name.upper())
+            cb.setStyleSheet(checkbox_stylesheet)
+            # Set default channel if provided
+            if channel and channel_name == channel:
+                cb.setChecked(True)
+            row_layout.addWidget(cb)
+            channel_checkboxes[channel_name] = cb
+        
+        row_layout.addStretch(1)
+        
+        # Store row data
+        row_data = {
+            'widget': row_widget,
+            'combo': attr_combo,
+            'plus_btn': plus_btn,
+            'minus_btn': minus_btn,
+            'checkboxes': channel_checkboxes
+        }
+        assignment_rows_list.append(row_data)
+        
+        parent_layout.addWidget(row_widget)
+        
+        return row_data
+    
+    def _remove_packed_assignment_row(self, row_widget, parent_layout, assignment_rows_list):
+        """Remove a packed texture assignment row."""
+        # Don't allow removing the last row
+        if len(assignment_rows_list) <= 1:
+            return
+        
+        # Find and remove from list
+        for row_data in assignment_rows_list[:]:
+            if row_data['widget'] == row_widget:
+                assignment_rows_list.remove(row_data)
+                break
+        
+        # Remove from layout and delete widget
+        parent_layout.removeWidget(row_widget)
+        row_widget.deleteLater()
 
     def _load_texture_search_names(self):
         """
@@ -2558,6 +4716,7 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
     def _apply_saved_texture_names(self):
         """
         Fill each <ttype>TextureNameLineEdit with the saved, comma-separated keywords.
+        Also load packed texture data if present.
         """
         data = self._load_texture_search_names() or {}
         for ttype in self.texture_types:
@@ -2568,17 +4727,196 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
             if isinstance(keywords, list) and keywords:
                 # Ensure everything is a string, then join by commas
                 le.setText(", ".join(str(k) for k in keywords))
+        
+        # Load packed texture data
+        packed_textures = data.get("packedTextures", [])
+        if packed_textures and len(packed_textures) > 0 and hasattr(self, 'packed_texture_entries'):
+            # Clear existing entries (except first)
+            while len(self.packed_texture_entries) > 1:
+                entry_data = self.packed_texture_entries.pop()
+                entry_data['frame'].deleteLater()
+            
+            # Load each packed texture entry
+            for idx, entry in enumerate(packed_textures):
+                if idx == 0 and len(self.packed_texture_entries) > 0:
+                    # Update first entry
+                    entry_data = self.packed_texture_entries[0]
+                else:
+                    # Create new entry
+                    self._add_packed_texture_entry()
+                    entry_data = self.packed_texture_entries[-1]
+                
+                search_names = entry.get("searchNames", "")
+                assignments = entry.get("assignments", [])
+                
+                # Set search names
+                search_le = entry_data.get('search_line_edit')
+                if search_le:
+                    search_le.setText(search_names)
+                
+                # Load assignments
+                if assignments:
+                    # Clear existing rows (except first)
+                    assignment_rows = entry_data.get('assignment_rows', [])
+                    while len(assignment_rows) > 1:
+                        row_data = assignment_rows.pop()
+                        row_data['widget'].deleteLater()
+                    
+                    # Update first row
+                    if len(assignment_rows) > 0:
+                        first_row = assignment_rows[0]
+                        first_assignment = assignments[0]
+                        attr = first_assignment.get("attribute")
+                        channel = first_assignment.get("channel")
+                        if attr:
+                            for i in range(first_row['combo'].count()):
+                                if first_row['combo'].itemData(i) == attr:
+                                    first_row['combo'].setCurrentIndex(i)
+                                    break
+                        if channel and channel in first_row['checkboxes']:
+                            first_row['checkboxes'][channel].setChecked(True)
+                    
+                    # Add additional rows for remaining assignments
+                    for assignment in assignments[1:]:
+                        attr = assignment.get("attribute")
+                        channel = assignment.get("channel")
+                        self._add_packed_assignment_row(
+                            entry_data['assignments_layout'],
+                            assignment_rows,
+                            attribute=attr,
+                            channel=channel
+                        )
 
 
     def setup_connections(self):
         """
         Connect the Save Texture Names button to save_texture_names().
+        Also add "Open Settings Location" and "Cancel" buttons next to it.
         """
         save_btn = self.ui_elements.get("saveTextureNamesButton")
         if save_btn:
             save_btn.clicked.connect(self.save_texture_names)
+            
+            # Get the parent layout to add new buttons
+            parent_layout = save_btn.parent().layout()
+            if parent_layout:
+                # Find the index of save button in the layout
+                save_index = parent_layout.indexOf(save_btn)
+                
+                # Create "Open Settings Location" button
+                open_settings_btn = QtWidgets.QPushButton("Open Settings Location")
+                open_settings_btn.setStyleSheet("""
+                    QPushButton {
+                        font-family: 'Segoe UI';
+                        font-size: 12px;
+                        color: #ffffff;
+                        background-color: #666666;
+                        border: 2px solid #444444;
+                        border-radius: 6px;
+                        padding: 4px 10px;
+                        min-height: 26px;
+                    }
+                    QPushButton:hover {
+                        background-color: #888888;
+                    }
+                    QPushButton:pressed {
+                        background-color: #1a1a1a;
+                    }
+                """)
+                open_settings_btn.clicked.connect(self.open_settings_location)
+                
+                # Create "Cancel" button
+                cancel_btn = QtWidgets.QPushButton("Cancel")
+                cancel_btn.setStyleSheet("""
+                    QPushButton {
+                        font-family: 'Segoe UI';
+                        font-size: 12px;
+                        color: #ffffff;
+                        background-color: #666666;
+                        border: 2px solid #444444;
+                        border-radius: 6px;
+                        padding: 4px 10px;
+                        min-height: 26px;
+                    }
+                    QPushButton:hover {
+                        background-color: #888888;
+                    }
+                    QPushButton:pressed {
+                        background-color: #1a1a1a;
+                    }
+                """)
+                cancel_btn.clicked.connect(self.close)
+                
+                # Create horizontal button layout with all buttons matching sizes
+                btn_layout = QtWidgets.QHBoxLayout()
+                btn_layout.setSpacing(4)
+                
+                # Remove save button from parent if it's in a layout
+                if isinstance(parent_layout, QtWidgets.QVBoxLayout):
+                    parent_layout.removeWidget(save_btn)
+                elif isinstance(parent_layout, QtWidgets.QHBoxLayout):
+                    parent_layout.removeWidget(save_btn)
+                
+                # Style save button to match others
+                save_btn.setStyleSheet("""
+                    QPushButton {
+                        font-family: 'Segoe UI';
+                        font-size: 12px;
+                        color: #ffffff;
+                        background-color: #666666;
+                        border: 2px solid #444444;
+                        border-radius: 6px;
+                        padding: 4px 10px;
+                        min-height: 26px;
+                    }
+                    QPushButton:hover {
+                        background-color: #888888;
+                    }
+                    QPushButton:pressed {
+                        background-color: #1a1a1a;
+                    }
+                """)
+                
+                # Add all buttons with equal stretch
+                save_btn.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+                open_settings_btn.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+                cancel_btn.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+                
+                btn_layout.addWidget(save_btn, 1)
+                btn_layout.addWidget(open_settings_btn, 1)
+                btn_layout.addWidget(cancel_btn, 1)
+                
+                # Add button layout to parent
+                if isinstance(parent_layout, QtWidgets.QVBoxLayout):
+                    parent_layout.addLayout(btn_layout)
+                elif isinstance(parent_layout, QtWidgets.QHBoxLayout):
+                    parent_layout.insertLayout(save_index, btn_layout)
+                else:
+                    # Fallback: try to find a container
+                    container = save_btn.parent()
+                    if container:
+                        container_layout = container.layout()
+                        if container_layout:
+                            if isinstance(container_layout, QtWidgets.QVBoxLayout):
+                                container_layout.addLayout(btn_layout)
         else:
             cmds.warning("saveTextureNamesButton not found in UI.")
+    
+    def open_settings_location(self):
+        """Open the Settings folder in the system file explorer."""
+        script_dir = os.path.dirname(__file__)
+        settings_folder = os.path.join(script_dir, "Settings")
+        if not os.path.isdir(settings_folder):
+            settings_folder = os.path.join(script_dir, "settings")  # legacy fallback
+        
+        if os.path.isdir(settings_folder):
+            if os.name == 'nt':  # Windows
+                os.startfile(settings_folder)
+            elif os.name == 'posix':  # macOS/Linux
+                import subprocess
+                subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', settings_folder])
+        else:
+            cmds.warning(f"Settings folder not found: {settings_folder}")
     
     def _apply_matching_stylesheet(self):
         """
@@ -2596,13 +4934,13 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         
         /* Scroll area styling */
         QScrollArea {
-            background-color: #444444;
+            background-color: #3a3a3a;
             border: none;
             border-radius: 8px;
         }
         
         QScrollArea QWidget {
-            background-color: #444444;
+            background-color: #3a3a3a;
         }
         
         /* Scrollbar styling */
@@ -2699,7 +5037,7 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         if texture_frame:
             texture_frame.setStyleSheet("""
                 QFrame {
-                    background-color: #444444;
+                    background-color: #333333;
                     border: 0px solid #333333;
                     border-radius: 8px;
                     padding: 4px;
@@ -2712,7 +5050,7 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         if scroll_area:
             scroll_area.setStyleSheet("""
                 QScrollArea {
-                    background-color: #444444;
+                    background-color: #3a3a3a;
                     border: none;
                     border-radius: 6px;
                 }
@@ -2729,6 +5067,7 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         """
         Gathers keywords from each "<textureType>TextureNameLineEdit", builds a dict:
           { "baseColor": [...], "roughness": [...], ... }
+        Also saves packed texture data.
         Then writes it out to "<script_dir>/Settings/texture_search_names.json".
         """
         texture_names = {}
@@ -2741,6 +5080,38 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
                 texture_names[ttype] = keywords
             else:
                 cmds.warning(f"{key} not found in UI elements.")
+
+        # Gather packed texture data
+        packed_textures = []
+        if hasattr(self, 'packed_texture_entries'):
+            for entry_data in self.packed_texture_entries:
+                search_le = entry_data.get('search_line_edit')
+                if search_le:
+                    search_names = search_le.text().strip()
+                    if search_names:
+                        assignments = []
+                        for row_data in entry_data.get('assignment_rows', []):
+                            attr = row_data['combo'].currentData()
+                            if attr:  # Only include rows with selected attributes
+                                # Find checked channel
+                                channel = None
+                                for ch_name, cb in row_data['checkboxes'].items():
+                                    if cb.isChecked():
+                                        channel = ch_name
+                                        break
+                                assignments.append({
+                                    "attribute": attr,
+                                    "channel": channel
+                                })
+                        
+                        if assignments:  # Only add if there are valid assignments
+                            packed_textures.append({
+                                "searchNames": search_names,
+                                "assignments": assignments
+                            })
+        
+        if packed_textures:
+            texture_names["packedTextures"] = packed_textures
 
         # Ensure Settings folder exists (match other readers/writers)
         script_dir = os.path.dirname(__file__)
@@ -2874,7 +5245,12 @@ class TextureImporterSettingsUI(QtWidgets.QWidget):
 
     def _update_custom_path_widgets(self):
         """Enable/disable custom-path widgets based on checkbox state."""
-        custom_on = self.ui_elements["textureSearchCustomPathCheckbox"].isChecked()
+        custom_cb = self._search_mode_checkboxes.get("custom") or self.ui_elements.get("textureSearchCustomPathCheckbox")
+        if not self._search_mode_checkboxes and self._search_mode_object_names:
+            self._init_search_mode_checkboxes()
+
+        custom_cb = self._get_search_checkbox("custom")
+        custom_on = bool(custom_cb and custom_cb.isChecked())
         for widget_name in (
             "textureSearchCustomPathLineEdit",
             "textureSearchCustomPathSetButton",
@@ -2887,7 +5263,9 @@ class TextureImporterSettingsUI(QtWidgets.QWidget):
 
         # If custom path is off, remove focus so the cursor isn't blinking
         if not custom_on:
-            self.ui_elements["textureSearchCustomPathLineEdit"].clearFocus()
+            line_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
+            if line_edit and isValid(line_edit):
+                line_edit.clearFocus()
 
 
     def _choose_custom_path(self):
