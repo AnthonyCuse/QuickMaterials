@@ -643,6 +643,7 @@ QPushButton:disabled {
 
 QCheckBox:checked {
     color: #00f7c8;               /* Highlight color only when checked */
+    font-weight: bold;            /* Make text bold when checked */
 }
 
 
@@ -655,9 +656,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -717,6 +720,7 @@ QCheckBox:disabled {
 
 QCheckBox:checked {
     color: #00f7c8;               /* Highlight color only when checked */
+    font-weight: bold;            /* Make text bold when checked */
 }
 
 
@@ -729,9 +733,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -791,6 +797,7 @@ QCheckBox:disabled {
 
 QCheckBox:checked {
     color: #00f7c8;               /* Highlight color only when checked */
+    font-weight: bold;            /* Make text bold when checked */
 }
 
 
@@ -803,9 +810,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -1426,6 +1435,9 @@ QPushButton:disabled {
                <verstretch>0</verstretch>
               </sizepolicy>
              </property>
+             <property name="autoFillBackground">
+              <bool>false</bool>
+             </property>
              <property name="styleSheet">
               <string notr="true">QCheckBox {
     font-family: 'Segoe UI';
@@ -1453,9 +1465,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;

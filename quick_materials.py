@@ -3770,6 +3770,9 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         self._last_material_list_hash = None  # Hash of material list to detect changes
         self._last_filter_state_hash = None  # Hash of filter/search state
         
+        # Debug flag for tracking refresh triggers (set to True to enable debug logging)
+        self._debug_refresh_triggers = False
+        
         # PERFORMANCE OPTIMIZATION: Deferred icon creation queue
         self._pending_icon_creations = []  # List of icon creation requests to process after UI is built
         
@@ -3885,19 +3888,15 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         # Use maya.utils.executeDeferred directly to avoid relying on MEL evalDeferred.
         # Wrap execution in try-except to handle any potential evalDeferred NameError issues.
         # This script will work whether Maya executes it as Python or MEL (via python() command)
+        # NOTE: Python try/except requires newlines, not semicolons
+        # Maya's uiScript can handle multi-line Python strings
         return (
-            "import maya.utils as _mutils; "
-            "import QuickMaterials.quick_materials as _qm; "
-            "try: "
-            "    _mutils.executeDeferred(_qm.QuickMaterialsUI.restore_from_workspace); "
-            "except NameError as e: "
-            "    if 'evalDeferred' in str(e): "
-            "        pass; "
-            "    else: "
-            "        raise; "
-            "except Exception as e: "
-            "    import traceback; "
-            "    traceback.print_exc(); "
+            "import maya.utils as _mutils\n"
+            "import QuickMaterials.quick_materials as _qm\n"
+            "try:\n"
+            "    _mutils.executeDeferred(_qm.QuickMaterialsUI.restore_from_workspace)\n"
+            "except:\n"
+            "    pass\n"
         )
 
     @classmethod
@@ -4119,7 +4118,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             print(f"Error: UI file not found at: {uiFilePath}")
             return
 
-        # Change current directory to the UI file’s folder for loader
+        # Change current directory to the UI file's folder for loader
         QtCore.QDir.setCurrent(os.path.dirname(uiFilePath))
 
         loader = QtUiTools.QUiLoader()
@@ -4132,7 +4131,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             # Load the .ui file
             loaded_ui = loader.load(uiFile)
 
-            # Close the .ui file now that it’s loaded
+            # Close the .ui file now that it's loaded
             uiFile.close()
 
             # Create a layout on this dialog and add the loaded UI
@@ -5422,6 +5421,13 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             material_converter_btn.clicked.connect(self.open_material_converter)
         else:
             print("Error: materialConverterButton not found.")
+        
+        # Launch the Mesh exporter tool
+        mesh_exporter_btn = self.ui_elements.get('meshExporterButton')
+        if mesh_exporter_btn:
+            mesh_exporter_btn.clicked.connect(self.open_mesh_exporter)
+        else:
+            print("Error: meshExporterButton not found.")
         
         # Connect list entry scaling buttons
         scale_down_btn = self._get_widget('scaleDownListEntriesButton', QtWidgets.QPushButton)
@@ -8017,12 +8023,44 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         try:
             # Get count of all unused nodes before deletion
             unused_nodes = []
+            
+            # Try multiple methods to find unused nodes
+            # Method 1: Try hyperShade command (may not work in all Maya versions)
             try:
-                # Get unused nodes using Maya's hyperShade command (includes all node types)
                 unused_nodes = cmds.hyperShade(listUnusedNodes=True) or []
+                # Also try alternative syntax
+                if not unused_nodes:
+                    try:
+                        unused_nodes = cmds.hyperShade(listUnusedNodes=1) or []
+                    except Exception:
+                        pass
             except Exception as e:
-                cmds.warning(f"Failed to get unused nodes list: {e}")
-                return
+                print(f"[DEBUG] hyperShade method failed: {e}")
+                unused_nodes = []
+            
+            # Method 2: If hyperShade fails, manually find unused nodes
+            if not unused_nodes:
+                try:
+                    unused_nodes = self._find_unused_nodes_manual()
+                except Exception as e:
+                    print(f"[DEBUG] Manual method failed: {e}")
+                    unused_nodes = []
+            
+            # Method 3: Try using MEL command to get the list
+            if not unused_nodes:
+                try:
+                    # Use MEL to get unused nodes list
+                    mel_result = mel.eval('string $unused[] = `hyperShade -listUnusedNodes`; $unused;')
+                    if mel_result:
+                        unused_nodes = mel_result if isinstance(mel_result, list) else [mel_result]
+                except Exception as e:
+                    print(f"[DEBUG] MEL method failed: {e}")
+                    unused_nodes = []
+            
+            # Debug output
+            print(f"[DEBUG] Found {len(unused_nodes)} unused nodes")
+            if len(unused_nodes) > 0 and len(unused_nodes) <= 20:
+                print(f"[DEBUG] Unused nodes: {unused_nodes}")
             
             # Check if there are any unused nodes to delete
             unused_count = len(unused_nodes)
@@ -8072,6 +8110,132 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         except Exception as e:
             cmds.warning(f"Failed to delete unused materials: {e}")
 
+    def _find_unused_nodes_manual(self):
+        """
+        Manually find unused shading nodes by checking which nodes are connected to assigned shading groups.
+        This is a fallback method when hyperShade command doesn't work.
+        """
+        unused_nodes = []
+        
+        try:
+            # Get all shading groups
+            all_shading_groups = cmds.ls(type='shadingEngine') or []
+            
+            # Find which shading groups are actually assigned (have members)
+            used_shading_groups = set()
+            for sg in all_shading_groups:
+                try:
+                    # Skip default shading groups that Maya creates (but check if they have members)
+                    if sg in ['initialShadingGroup', 'initialParticleSE']:
+                        members = cmds.sets(sg, q=True) or []
+                        if members:
+                            used_shading_groups.add(sg)
+                        continue
+                    members = cmds.sets(sg, q=True) or []
+                    if members:
+                        used_shading_groups.add(sg)
+                except Exception:
+                    pass
+            
+            # Get all nodes connected to used shading groups (these are "used" nodes)
+            used_nodes = set()
+            used_nodes.update(used_shading_groups)  # Include the shading groups themselves
+            
+            for sg in used_shading_groups:
+                try:
+                    # Get all upstream connections from this shading group (shading network)
+                    # Use listHistory with pruneDagObjects to exclude DAG nodes
+                    connected = cmds.listHistory(sg, future=False, pruneDagObjects=True, ac=True) or []
+                    used_nodes.update(connected)
+                    
+                    # Also get direct source connections
+                    direct_conns = cmds.listConnections(sg, source=True, destination=False, skipConversionNodes=True) or []
+                    used_nodes.update(direct_conns)
+                    
+                    # Get connections through all attributes (more comprehensive)
+                    attrs = cmds.listAttr(sg, connectable=True) or []
+                    for attr in attrs:
+                        try:
+                            conns = cmds.listConnections(f"{sg}.{attr}", source=True, destination=False, skipConversionNodes=True) or []
+                            used_nodes.update(conns)
+                        except Exception:
+                            pass
+                except Exception as e:
+                    print(f"[DEBUG] Error getting connections for {sg}: {e}")
+            
+            # Get all shading-related nodes in the scene
+            # Use a comprehensive list of shading node types
+            shading_node_types = [
+                # Materials
+                'lambert', 'blinn', 'phong', 'phongE', 'anisotropic', 'layeredShader',
+                'rampShader', 'surfaceShader', 'useBackground', 'shadingMap',
+                # Arnold materials
+                'aiStandardSurface', 'aiStandard', 'aiMixShader', 'aiCarPaint',
+                'aiHair', 'aiSkin', 'aiToon', 'aiFlat', 'aiUtility',
+                # Textures
+                'file', 'place2dTexture', 'ramp', 'noise', 'fractal', 'brownian',
+                'granite', 'leather', 'marble', 'mountain', 'rock', 'snow',
+                'stucco', 'wood', 'ocean', 'cloth', 'crater', 'volumeNoise',
+                'envBall', 'envChrome', 'envCube', 'envSky', 'envSphere',
+                'projection', 'stencil', 'layeredTexture', 'movie',
+                # Utility nodes
+                'multiplyDivide', 'plusMinusAverage', 'reverse', 'setRange',
+                'clamp', 'remapValue', 'remapColor', 'blendColors', 'gammaCorrect',
+                'contrast', 'luminance', 'hsvToRgb', 'rgbToHsv', 'vectorProduct',
+                'condition', 'samplerInfo', 'bump2d', 'bump3d', 'displacementShader',
+                'volumeShader', 'lightInfo', 'distanceBetween', 'unitConversion',
+                # Arnold utilities
+                'aiImage', 'aiNormalMap', 'aiNoise', 'aiMix', 'aiColorCorrect',
+                'aiRange', 'aiClamp', 'aiToFloat', 'aiToVector', 'aiToColor',
+                'aiVectorToFloat', 'aiVectorToColor', 'aiColorToFloat', 'aiColorToVector',
+                # Shading engines (already have these, but include for completeness)
+                'shadingEngine'
+            ]
+            
+            all_shading_nodes = set()
+            for node_type in shading_node_types:
+                try:
+                    nodes = cmds.ls(type=node_type) or []
+                    all_shading_nodes.update(nodes)
+                except Exception:
+                    pass
+            
+            # Remove default nodes that should never be deleted
+            default_nodes = {'initialShadingGroup', 'initialParticleSE', 'lambert1', 'particleCloud1', 'defaultShaderList1'}
+            all_shading_nodes = all_shading_nodes - default_nodes
+            
+            # Find unused nodes (nodes not in used_nodes set)
+            unused_nodes = [node for node in all_shading_nodes if node not in used_nodes]
+            
+            # Additional check: remove nodes that are referenced (shouldn't delete referenced nodes)
+            final_unused = []
+            for node in unused_nodes:
+                try:
+                    # Check if node is referenced
+                    if not self._is_referenced(node):
+                        # Double-check: make sure node is actually a shading node (not a transform, etc.)
+                        node_type = cmds.nodeType(node)
+                        if node_type in shading_node_types or 'shader' in node_type.lower() or 'texture' in node_type.lower():
+                            final_unused.append(node)
+                except Exception as e:
+                    # If we can't check, include it (better to find too many than too few)
+                    try:
+                        node_type = cmds.nodeType(node)
+                        if node_type in shading_node_types or 'shader' in node_type.lower() or 'texture' in node_type.lower():
+                            final_unused.append(node)
+                    except Exception:
+                        pass
+            
+            unused_nodes = final_unused
+            
+            print(f"[DEBUG] Manual method: Found {len(used_shading_groups)} used shading groups, {len(used_nodes)} used nodes, {len(all_shading_nodes)} total shading nodes, {len(unused_nodes)} unused nodes")
+            
+        except Exception as e:
+            print(f"[DEBUG] Error in _find_unused_nodes_manual: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        return unused_nodes
 
     def open_material_converter(self):
         """
@@ -8088,6 +8252,22 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         except Exception as e:
             import maya.cmds as cmds
             cmds.warning(f"Material converter failed to open: {e}")
+
+    def open_mesh_exporter(self):
+        """
+        Wrapper to open the QuickMaterials.mesh_exporter tool.
+        Reloads the module during dev. Mesh exporter uses standalone styling.
+        """
+        try:
+            from QuickMaterials import mesh_exporter as _meshexp
+            import importlib
+            importlib.reload(_meshexp)  # nice during iteration; remove if undesired
+
+            # Mesh exporter uses standalone styling, no style argument needed
+            _meshexp.show_export_ui()
+        except Exception as e:
+            import maya.cmds as cmds
+            cmds.warning(f"Mesh exporter failed to open: {e}")
 
 
 
@@ -9840,6 +10020,27 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         """
         Actually perform the material list refresh (called by debounced timer).
         """
+        # #region agent log
+        import json
+        import time
+        try:
+            log_path = r"d:\Maya Tools\QuickMaterials\.cursor\debug.log"
+            with open(log_path, 'a') as f:
+                f.write(json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "B",
+                    "location": "quick_materials.py:9996",
+                    "message": "_perform_actual_refresh starting",
+                    "data": {
+                        "undo_state": cmds.undoInfo(query=True, state=True) if hasattr(cmds, 'undoInfo') else None,
+                        "undo_queue_length": cmds.undoInfo(query=True, length=True) if hasattr(cmds, 'undoInfo') else None,
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }) + "\n")
+        except:
+            pass
+        # #endregion
         start_ts = time.perf_counter()
         # Guard against late timer/scriptJob callbacks on a dead UI
         try:
@@ -9855,7 +10056,44 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         search_text = materialSearchLineEdit.text() if materialSearchLineEdit else ""
 
         # Live filters are read inside populate_materials_scroll_area
+        # #region agent log
+        try:
+            log_path = r"d:\Maya Tools\QuickMaterials\.cursor\debug.log"
+            with open(log_path, 'a') as f:
+                f.write(json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "B",
+                    "location": "quick_materials.py:10015",
+                    "message": "About to call populate_materials_scroll_area",
+                    "data": {
+                        "undo_state": cmds.undoInfo(query=True, state=True) if hasattr(cmds, 'undoInfo') else None,
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }) + "\n")
+        except:
+            pass
+        # #endregion
         self.populate_materials_scroll_area(search_text=search_text)
+        # #region agent log
+        try:
+            log_path = r"d:\Maya Tools\QuickMaterials\.cursor\debug.log"
+            with open(log_path, 'a') as f:
+                f.write(json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "B",
+                    "location": "quick_materials.py:10015",
+                    "message": "Finished populate_materials_scroll_area",
+                    "data": {
+                        "undo_state": cmds.undoInfo(query=True, state=True) if hasattr(cmds, 'undoInfo') else None,
+                        "undo_queue_length": cmds.undoInfo(query=True, length=True) if hasattr(cmds, 'undoInfo') else None,
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }) + "\n")
+        except:
+            pass
+        # #endregion
         end_ts = time.perf_counter()
         build_ms = (end_ts - start_ts) * 1000.0
         request_ts = getattr(self, "_last_refresh_request_ts", 0.0)
@@ -12351,6 +12589,27 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         # but we'll rely on the OpenMaya callbacks for NodeAdded/NodeRemoved which are filtered.
         # For other events (Undo, Redo, SceneOpened), we still want to refresh.
         def _safe_scene_event_cb(*_):
+            # #region agent log
+            import json
+            import time
+            try:
+                log_path = r"d:\Maya Tools\QuickMaterials\.cursor\debug.log"
+                with open(log_path, 'a') as f:
+                    f.write(json.dumps({
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "A",
+                        "location": "quick_materials.py:12510",
+                        "message": "Undo/Redo scriptJob callback fired",
+                        "data": {
+                            "undo_state": cmds.undoInfo(query=True, state=True) if hasattr(cmds, 'undoInfo') else None,
+                            "undo_queue_length": cmds.undoInfo(query=True, length=True) if hasattr(cmds, 'undoInfo') else None,
+                        },
+                        "timestamp": int(time.time() * 1000)
+                    }) + "\n")
+            except:
+                pass
+            # #endregion
             try:
                 inst = self_ref()
                 if not inst:
@@ -12526,8 +12785,11 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             self._om_callbacks.append(cb_id)
         
         # Only register other events that don't need filtering
-        _add_job_multi("Undo")
-        _add_job_multi("Redo")
+        # CRITICAL FIX: Removed Undo/Redo scriptJobs - they trigger refresh operations
+        # that query Maya during undo/redo, which corrupts the undo queue and prevents redo.
+        # The OpenMaya callbacks already handle material changes, so we don't need these.
+        # _add_job_multi("Undo")  # REMOVED: Causes undo queue corruption
+        # _add_job_multi("Redo")  # REMOVED: Causes undo queue corruption
         _add_job_multi("SceneOpened")
         _add_job_multi("NewSceneOpened")
 
@@ -12736,11 +12998,52 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         """
         scriptJob callback → debounce a UI refresh.
         OPTIMIZATION: If node_name is provided, only refresh the relevant tab.
+        CRITICAL: Only refresh for material-related nodes. Ignore mesh/transform edits.
         """
+        # #region agent log
+        import json
+        import time
+        try:
+            log_path = r"d:\Maya Tools\QuickMaterials\.cursor\debug.log"
+            with open(log_path, 'a') as f:
+                f.write(json.dumps({
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "A",
+                    "location": "quick_materials.py:12892",
+                    "message": "_on_material_scene_event called",
+                    "data": {
+                        "node_name": node_name,
+                        "undo_state": cmds.undoInfo(query=True, state=True) if hasattr(cmds, 'undoInfo') else None,
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }) + "\n")
+        except:
+            pass
+        # #endregion
         # Defensive check: don't run if we're being destroyed
         if getattr(self, "_destroying", False):
             return
+        
+        # DEBUG: Log what's triggering the refresh (can be disabled later)
+        if getattr(self, "_debug_refresh_triggers", False):
+            import traceback
+            caller = traceback.extract_stack()[-2]
+            print(f"[QM][DEBUG] _on_material_scene_event called: node_name={node_name}, caller={caller.filename}:{caller.lineno}")
+        
         if node_name:
+            # CRITICAL FIX: Verify this is actually a material-related node before refreshing
+            # This prevents refreshes when meshes, transforms, or other non-material nodes change
+            if not self._is_material_node_type(node_name):
+                # This is not a material node - ignore it completely
+                if getattr(self, "_debug_refresh_triggers", False):
+                    try:
+                        node_type = cmds.nodeType(node_name)
+                        print(f"[QM][DEBUG] Ignoring non-material node: {node_name} (type: {node_type})")
+                    except:
+                        print(f"[QM][DEBUG] Ignoring non-material node: {node_name}")
+                return
+            
             # Determine which tab this node belongs to
             tab = self._get_tab_for_node_type(node_name)
             if tab:
@@ -12748,11 +13051,34 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                 self._queue_tab_refresh(tab, delay_ms=150)
                 return
             else:
-                # Fallback to full refresh if we can't determine tab
-                self._queue_material_refresh(150)
+                # This shouldn't happen if _is_material_node_type returned True, but handle it
+                if getattr(self, "_debug_refresh_triggers", False):
+                    print(f"[QM][DEBUG] Material node {node_name} has no tab, skipping refresh")
                 return
         else:
-            # No node name provided - full refresh
+            # No node name provided - this is from scriptJob events like SceneOpened
+            # Note: Undo/Redo scriptJobs were removed to prevent undo queue corruption
+            # These are legitimate reasons to refresh, so allow them
+            # #region agent log
+            import json
+            import time
+            try:
+                log_path = r"d:\Maya Tools\QuickMaterials\.cursor\debug.log"
+                with open(log_path, 'a') as f:
+                    f.write(json.dumps({
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "A",
+                        "location": "quick_materials.py:12935",
+                        "message": "Queueing refresh from Undo/Redo event",
+                        "data": {
+                            "undo_state": cmds.undoInfo(query=True, state=True) if hasattr(cmds, 'undoInfo') else None,
+                        },
+                        "timestamp": int(time.time() * 1000)
+                    }) + "\n")
+            except:
+                pass
+            # #endregion
             self._queue_material_refresh(150)
 
     # Debounce helper: coalesce refresh requests within delay_ms.
@@ -12813,6 +13139,23 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             self.populate_materials_scroll_area(search_text=search_text)
         except Exception as e:
             print(f"[QM] Error refreshing tab {tab}: {e}")
+    
+    def enable_refresh_debug_logging(self, enable=True):
+        """
+        Enable or disable debug logging for refresh triggers.
+        This helps identify what's causing the shader list to reload unexpectedly.
+        
+        Usage:
+            ui = QuickMaterialsUI.get_instance()
+            ui.enable_refresh_debug_logging(True)  # Enable debug logging
+            ui.enable_refresh_debug_logging(False)  # Disable debug logging
+        """
+        self._debug_refresh_triggers = enable
+        if enable:
+            print("[QM][DEBUG] Refresh trigger debug logging ENABLED")
+            print("[QM][DEBUG] You will see messages when the shader list refresh is triggered")
+        else:
+            print("[QM][DEBUG] Refresh trigger debug logging DISABLED")
 
 
     # When "Selected Only" is active, react quickly to selection changes.
@@ -13477,7 +13820,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             mel.eval('NodeEditorWindow;')
             print("[QM][Graph] NodeEditorWindow; executed")
         except Exception as e:
-            ...
+            pass
 
         settle_delay_ms = 120
         pre_frame_delay_ms = 120

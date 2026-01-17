@@ -409,7 +409,8 @@ class MaterialSwatchIcon(QtWidgets.QLabel):
             if not hasattr(self, '_update_error_logged'):
                 self._update_error_logged = True
                 import traceback
-                pass
+                print(f"[MaterialSwatchIcon] Error updating texture for {self.material_name}: {e}")
+                print(f"[MaterialSwatchIcon] Traceback: {traceback.format_exc()}")
             # Silently fail - keep the fast mode swatch
             pass
     
@@ -430,7 +431,7 @@ class MaterialSwatchIcon(QtWidgets.QLabel):
             # Apply the mask
             self.setMask(mask.mask())
         except Exception as e:
-            pass
+            print(f"[MaterialSwatchIcon] Failed to apply circular mask: {e}")
     
     def paintEvent(self, event):
         """Override paintEvent to draw the pixmap in a circular shape with background."""
@@ -2692,6 +2693,9 @@ class MaterialSwatchIcon(QtWidgets.QLabel):
             return pixmap
             
         except Exception as e:
+            import traceback
+            print(f"[MaterialSwatchIcon] Error creating swatch icon for {material_name}: {e}")
+            traceback.print_exc()
             return None
     
     def _get_emission_data(self, material_name):
@@ -3024,18 +3028,38 @@ class MaterialSwatchIcon(QtWidgets.QLabel):
         """Get the file path from a file texture node, with path resolution."""
         try:
             texture_path = cmds.getAttr(f"{file_node}.fileTextureName")
-            if not texture_path or not os.path.exists(texture_path):
+            if not texture_path:
+                return None
+            
+            # Check if this is a UDIM texture (placeholder or already has tile number)
+            is_udim = False
+            if "<UDIM>" in texture_path or "<u>" in texture_path.lower():
+                is_udim = True
+            else:
+                # Check if path already contains a UDIM tile number (1001-1999)
+                import re
+                udim_match = re.search(r'\.(\d{4})\.', os.path.basename(texture_path))
+                if udim_match:
+                    tile_num = int(udim_match.group(1))
+                    if 1001 <= tile_num <= 1999:
+                        is_udim = True
+            
+            if is_udim:
+                # UDIM texture - find and use the first available tile
+                first_tile_path = self._find_first_udim_tile(texture_path)
+                if first_tile_path and os.path.exists(first_tile_path):
+                    return first_tile_path
+                # If first tile not found, fall back to None (will use average color)
+                return None
+            
+            # Non-UDIM texture - check if file exists, try project directory if not
+            if not os.path.exists(texture_path):
                 try:
-                    if "<UDIM>" in texture_path or "<u>" in texture_path.lower():
-                        # UDIM textures - use first tile if available
-                        # For now, return None to fall back to average color
-                        return None
-                    else:
-                        project_dir = cmds.workspace(query=True, rootDirectory=True)
-                        if project_dir:
-                            resolved = os.path.join(project_dir, "sourceimages", texture_path)
-                            if os.path.exists(resolved):
-                                texture_path = resolved
+                    project_dir = cmds.workspace(query=True, rootDirectory=True)
+                    if project_dir:
+                        resolved = os.path.join(project_dir, "sourceimages", texture_path)
+                        if os.path.exists(resolved):
+                            texture_path = resolved
                 except:
                     pass
             
@@ -3043,6 +3067,72 @@ class MaterialSwatchIcon(QtWidgets.QLabel):
                 return None
             
             return texture_path
+        except Exception:
+            return None
+    
+    def _find_first_udim_tile(self, texture_path):
+        """Find the first available UDIM tile (1001) for a UDIM texture path.
+        
+        Args:
+            texture_path: Path that may contain <UDIM> or <u> placeholder, or already have a tile number
+            
+        Returns:
+            Path to first available tile (1001), or None if not found
+        """
+        try:
+            import re
+            
+            # If path already has a tile number, extract the directory and pattern
+            dir_path = os.path.dirname(texture_path)
+            base_name = os.path.basename(texture_path)
+            
+            # Check if it already has a UDIM number
+            udim_match = re.search(r'\.(\d{4})\.', base_name)
+            if udim_match:
+                # Replace existing tile number with 1001
+                tile_num = udim_match.group(1)
+                parts = base_name.split(f'.{tile_num}.')
+                if len(parts) == 2:
+                    prefix, ext = parts
+                    first_tile_name = f"{prefix}.1001.{ext}"
+                    first_tile_path = os.path.join(dir_path, first_tile_name)
+                    if os.path.exists(first_tile_path):
+                        return first_tile_path
+                    
+                    # If 1001 doesn't exist, search for any available tile in the directory
+                    if os.path.isdir(dir_path):
+                        tiles = []
+                        for f in os.listdir(dir_path):
+                            # Match pattern: prefix.XXXX.ext
+                            match = re.match(rf'^{re.escape(prefix)}\.(\d{{4}})\.{re.escape(ext)}$', f)
+                            if match:
+                                tile_num_found = int(match.group(1))
+                                if 1001 <= tile_num_found <= 1999:  # Valid UDIM range
+                                    tiles.append((tile_num_found, f))
+                        
+                        if tiles:
+                            # Sort by tile number and return the first (lowest) one
+                            tiles.sort(key=lambda x: x[0])
+                            return os.path.join(dir_path, tiles[0][1])
+            else:
+                # Path has <UDIM> or <u> placeholder
+                # Replace placeholder with 1001
+                first_tile_path = texture_path.replace("<UDIM>", "1001").replace("<u>", "1001").replace("<U>", "1001")
+                if os.path.exists(first_tile_path):
+                    return first_tile_path
+                
+                # If direct replacement doesn't work, try to find any tile in the directory
+                if os.path.isdir(dir_path):
+                    # Look for any file with a UDIM pattern (1001-1999)
+                    for f in os.listdir(dir_path):
+                        match = re.search(r'\.(\d{4})\.', f)
+                        if match:
+                            tile_num_found = int(match.group(1))
+                            if 1001 <= tile_num_found <= 1999:
+                                # Found a valid UDIM tile, use it
+                                return os.path.join(dir_path, f)
+            
+            return None
         except Exception:
             return None
     

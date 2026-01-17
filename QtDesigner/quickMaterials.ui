@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>311</width>
-    <height>1320</height>
+    <width>250</width>
+    <height>1332</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -1015,9 +1015,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -1089,9 +1091,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -1163,9 +1167,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -1237,9 +1243,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -1311,9 +1319,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -1385,9 +1395,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -1459,9 +1471,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -4608,14 +4622,14 @@ QPushButton:disabled {
                 </sizepolicy>
                </property>
                <property name="toolTip">
-                <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Create a new material for each selection. Select meshes to apply a unique material to each, or select a group to apply a material to all meshes within the group. A mesh selected within a group that is selected will get a unique shader. Use 'Random Hue' to assiign a varied hue to each shader for identification. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Create a new material for each selection. Select meshes to apply a unique material to each, or select a group to apply a material to all meshes within the group. A mesh selected within a group that is selected will get a unique shader. Use 'Random Hue' to assign a varied hue to each shader for identification. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                </property>
                <property name="styleSheet">
                 <string notr="true">QCheckBox {
     font-family: 'Segoe UI';
     font-size: 11px;              /* Slightly smaller text */
     color: #dddddd;               /* Neutral text when unchecked */
-    background-color: #3a3a3a;
+    background-color: #444444;
     border: none;
     border-radius: 6px;           /* Softer, smaller rounding */
     padding: 2px 6px;             /* Less padding = tighter fit */
@@ -4624,6 +4638,7 @@ QPushButton:disabled {
 
 QCheckBox:checked {
     color: #00f7c8;               /* Highlight color only when checked */
+    font-weight: bold;            /* Make text bold when checked */
 }
 
 
@@ -4636,9 +4651,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -4692,7 +4709,7 @@ QCheckBox:disabled {
     font-family: 'Segoe UI';
     font-size: 11px;              /* Slightly smaller text */
     color: #dddddd;               /* Neutral text when unchecked */
-    background-color: #3a3a3a;
+    background-color: #444444;
     border: none;
     border-radius: 6px;           /* Softer, smaller rounding */
     padding: 2px 6px;             /* Less padding = tighter fit */
@@ -4701,6 +4718,7 @@ QCheckBox:disabled {
 
 QCheckBox:checked {
     color: #00f7c8;               /* Highlight color only when checked */
+    font-weight: bold;            /* Make text bold when checked */
 }
 
 
@@ -4713,9 +4731,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -4899,47 +4919,6 @@ QPushButton:disabled {
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="materialManagerButton">
-             <property name="font">
-              <font>
-               <family>Segoe UI</family>
-               <pointsize>-1</pointsize>
-               <weight>75</weight>
-               <bold>true</bold>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QPushButton {
-    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
-    font-size: 12px;  /* Adjust the font size as needed */
-    font-weight: bold;  /* Makes the text bold */
-    color: #ffffff;  /* White text color */
-    background-color: #555555;  /* Dark background color */
-    border: 0px solid #444444;  /* Optional border with dark grey color */
-    border-radius: 8px;  /* Rounded corners */
-    padding: 6px 12px;  /* Padding around the text */
-}
-
-QPushButton:hover {
-    background-color: #666666;  /* Slightly lighter background on hover */
-}
-
-QPushButton:pressed {
-    background-color: #444444;  /* Darker background when pressed */
-}
-QPushButton:disabled {
-    color: #cccccc;  /* Light grey text color to indicate disabled */
-    border: 1px solid #555555;  /* Optional border with dark grey color */
-    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
-    color: #666666;  /* White text color */
-}</string>
-             </property>
-             <property name="text">
-              <string>Material Manager</string>
-             </property>
-            </widget>
-           </item>
-           <item>
             <widget class="QPushButton" name="materialConverterButton">
              <property name="font">
               <font>
@@ -4977,6 +4956,88 @@ QPushButton:disabled {
              </property>
              <property name="text">
               <string>Material Converter</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="textureBakerButton">
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>-1</pointsize>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QPushButton {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 12px;  /* Adjust the font size as needed */
+    font-weight: bold;  /* Makes the text bold */
+    color: #ffffff;  /* White text color */
+    background-color: #555555;  /* Dark background color */
+    border: 0px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 6px 12px;  /* Padding around the text */
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #444444;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Texture Baker</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="meshExporterButton">
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>-1</pointsize>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QPushButton {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 12px;  /* Adjust the font size as needed */
+    font-weight: bold;  /* Makes the text bold */
+    color: #ffffff;  /* White text color */
+    background-color: #555555;  /* Dark background color */
+    border: 0px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 6px 12px;  /* Padding around the text */
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #444444;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Mesh Exporter</string>
              </property>
             </widget>
            </item>
@@ -5547,6 +5608,7 @@ QPushButton:disabled {
 
 QCheckBox:checked {
     color: #00f7c8;               /* Highlight color only when checked */
+    font-weight: bold;            /* Make text bold when checked */
 }
 
 
@@ -5559,9 +5621,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -5621,6 +5685,7 @@ QCheckBox:disabled {
 
 QCheckBox:checked {
     color: #00f7c8;               /* Highlight color only when checked */
+    font-weight: bold;            /* Make text bold when checked */
 }
 
 
@@ -5633,9 +5698,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -5695,6 +5762,7 @@ QCheckBox:disabled {
 
 QCheckBox:checked {
     color: #00f7c8;               /* Highlight color only when checked */
+    font-weight: bold;            /* Make text bold when checked */
 }
 
 
@@ -5707,9 +5775,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -5782,9 +5852,11 @@ QCheckBox::indicator {
 }
 
 QCheckBox::indicator:checked {
-    background-color: #ffffff;
+    background-color: #111111;
     border: 1px solid #2b2b2b;
+    image: url(&quot;:/icons/checkmark.png&quot;);
 }
+
 
 QCheckBox::indicator:unchecked {
     background-color: #2b2b2b;
@@ -7965,8 +8037,6 @@ QPushButton:disabled {
                        <font>
                         <family>Segoe UI</family>
                         <pointsize>-1</pointsize>
-                        <weight>75</weight>
-                        <bold>true</bold>
                        </font>
                       </property>
                       <property name="styleSheet">
@@ -8018,8 +8088,6 @@ QPushButton:disabled {
                        <font>
                         <family>Segoe UI</family>
                         <pointsize>-1</pointsize>
-                        <weight>75</weight>
-                        <bold>true</bold>
                        </font>
                       </property>
                       <property name="styleSheet">
@@ -8149,7 +8217,7 @@ QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical {
                         <rect>
                          <x>0</x>
                          <y>0</y>
-                         <width>273</width>
+                         <width>212</width>
                          <height>61</height>
                         </rect>
                        </property>
@@ -8253,7 +8321,7 @@ QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical {
                         <rect>
                          <x>0</x>
                          <y>0</y>
-                         <width>273</width>
+                         <width>212</width>
                          <height>61</height>
                         </rect>
                        </property>
@@ -8357,7 +8425,7 @@ QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical {
                         <rect>
                          <x>0</x>
                          <y>0</y>
-                         <width>273</width>
+                         <width>212</width>
                          <height>61</height>
                         </rect>
                        </property>
@@ -8461,7 +8529,7 @@ QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical {
                         <rect>
                          <x>0</x>
                          <y>0</y>
-                         <width>273</width>
+                         <width>212</width>
                          <height>61</height>
                         </rect>
                        </property>
@@ -8675,7 +8743,7 @@ QPushButton:disabled {
   </layout>
  </widget>
  <resources>
-  <include location="../../../scripts/maya-python/QuickMaterials/QtDesigner/icons.qrc"/>
+  <include location="icons.qrc"/>
   <include location="icons.qrc"/>
  </resources>
  <connections/>
