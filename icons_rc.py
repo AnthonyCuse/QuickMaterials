@@ -3,7 +3,11 @@
 # Created by: The Resource Compiler for Qt version 5.15.2
 # WARNING! All changes made in this file will be lost!
 
-from PySide2 import QtCore
+# Qt compatibility: Maya 2025+ (PySide6) / Maya 2024- (PySide2)
+try:
+    from PySide6 import QtCore
+except ImportError:
+    from PySide2 import QtCore
 
 qt_resource_data = b"\
 \x00\x009\xa1\

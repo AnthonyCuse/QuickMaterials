@@ -23,11 +23,32 @@ import random
 import re
 import json
 
-# Import icons resource
+# Import icons resource (relative / package / or by path for Maya 2026+ when submodule is file-loaded)
+icons_rc = None
 try:
-    from . import icons_rc  # type: ignore
+    from . import icons_rc as _icons_rc  # type: ignore
+    icons_rc = _icons_rc
 except ImportError:
-    import icons_rc  # type: ignore
+    try:
+        from QuickMaterials import icons_rc as _icons_rc  # type: ignore
+        icons_rc = _icons_rc
+    except ImportError:
+        try:
+            import icons_rc as _icons_rc  # type: ignore
+            icons_rc = _icons_rc
+        except ImportError:
+            # Fallback: load by path (Maya 2026 when this module is loaded via spec_from_file_location)
+            import importlib.util
+            _icons_dir = os.path.dirname(os.path.abspath(__file__))
+            _icons_path = os.path.join(_icons_dir, "icons_rc.py")
+            if os.path.isfile(_icons_path):
+                _spec = importlib.util.spec_from_file_location("icons_rc", _icons_path)
+                if _spec and _spec.loader:
+                    icons_rc = importlib.util.module_from_spec(_spec)
+                    _spec.loader.exec_module(icons_rc)
+                    sys.modules["icons_rc"] = icons_rc
+            if icons_rc is None:
+                raise ImportError("icons_rc not found (tried . import, QuickMaterials, top-level, and %s)" % _icons_path)
 
 
 # --------------------------------------------------------------------------------

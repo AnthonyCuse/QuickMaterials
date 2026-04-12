@@ -5000,47 +5000,6 @@ QPushButton:disabled {
              </property>
             </widget>
            </item>
-           <item>
-            <widget class="QPushButton" name="meshExporterButton">
-             <property name="font">
-              <font>
-               <family>Segoe UI</family>
-               <pointsize>-1</pointsize>
-               <weight>75</weight>
-               <bold>true</bold>
-              </font>
-             </property>
-             <property name="styleSheet">
-              <string notr="true">QPushButton {
-    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
-    font-size: 12px;  /* Adjust the font size as needed */
-    font-weight: bold;  /* Makes the text bold */
-    color: #ffffff;  /* White text color */
-    background-color: #555555;  /* Dark background color */
-    border: 0px solid #444444;  /* Optional border with dark grey color */
-    border-radius: 8px;  /* Rounded corners */
-    padding: 6px 12px;  /* Padding around the text */
-}
-
-QPushButton:hover {
-    background-color: #666666;  /* Slightly lighter background on hover */
-}
-
-QPushButton:pressed {
-    background-color: #444444;  /* Darker background when pressed */
-}
-QPushButton:disabled {
-    color: #cccccc;  /* Light grey text color to indicate disabled */
-    border: 1px solid #555555;  /* Optional border with dark grey color */
-    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
-    color: #666666;  /* White text color */
-}</string>
-             </property>
-             <property name="text">
-              <string>Mesh Exporter</string>
-             </property>
-            </widget>
-           </item>
           </layout>
          </widget>
         </item>

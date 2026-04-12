@@ -2599,11 +2599,13 @@ def register_qt_resources():
     if not registered:
         # Fallback: compiled Python resource module (pyrcc / pyside6-rcc output)
         try:
-            # Try relative package import first
             try:
                 from . import icons_rc  # type: ignore
             except Exception:
-                import icons_rc  # type: ignore
+                try:
+                    from QuickMaterials import icons_rc  # type: ignore
+                except Exception:
+                    import icons_rc  # type: ignore
             registered = True
         except Exception as e:
             pass
@@ -3915,7 +3917,27 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         # Use executeDeferred to ensure Maya UI is fully ready
         def _do_restore():
             try:
-                # Remove any existing instance so we can reattach cleanly
+                # If the workspace control already has our widget (from show_ui() just attaching it),
+                # Maya ran uiScript on first create - do NOT delete/recreate or the window flashes and closes.
+                control_widget = omui.MQtUtil.findControl(cls.workspace_control_name)
+                if control_widget:
+                    try:
+                        wrapped = wrapInstance(int(control_widget), QtWidgets.QWidget)
+                        layout = wrapped.layout()
+                        if layout:
+                            for i in range(layout.count()):
+                                item = layout.itemAt(i)
+                                if item and item.widget() and isinstance(item.widget(), cls):
+                                    existing = item.widget()
+                                    if existing is cls.quick_materials_ui_instance:
+                                        existing.show()
+                                        existing._install_workspace_state_job()
+                                        return
+                                    break
+                    except Exception:
+                        pass
+
+                # Remove any existing instance so we can reattach cleanly (real restore from saved layout)
                 if cls.quick_materials_ui_instance:
                     try:
                         cls.delete_existing_instance()
@@ -4770,8 +4792,8 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             "base_width": 300,  # base min width even if all sections hidden
             "base_height": 50,  # base min height even if all sections hidden (reduced from 100)
             "sections": {
-                "materialCreatorFrame": 140,  # visible => add this many pixels of min height (reduced from 210)
-                "materialCreatorSettingsFrame": 200,
+                "materialCreatorFrame": 250,  # visible => add this many pixels of min height (reduced from 210)
+                "materialCreatorSettingsFrame": 320,
                 "textureImporterSettingsFrame": 160,
                 "materialToolsFrame": 75,
                 "materialListFrame": 200,
@@ -4809,6 +4831,10 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         For materialListSettingsFrame, uses actual widget size to account for UI scaling.
         Also accounts for visible material attribute frames (20px each) within materialCreatorFrame.
         """
+        # Check if self is still valid (not deleted)
+        if not isValid(self):
+            return
+        
         # Ensure profile exists
         if not hasattr(self, "_minsize_profile"):
             self._minsize_profile = self._default_min_sizing_profile()
@@ -4820,8 +4846,11 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         # Add section heights if frames are visible
         sections = profile.get("sections", {})
         for frame_name, add_h in sections.items():
+            # Check if self is still valid before each findChild call
+            if not isValid(self):
+                return
             w = self.findChild(QtWidgets.QWidget, frame_name)
-            if w and w.isVisible():
+            if w and isValid(w) and w.isVisible():
                 try:
                     # For materialListSettingsFrame, use actual widget size to account for UI scaling
                     if frame_name == "materialListSettingsFrame":
@@ -4874,8 +4903,11 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                         ]
                         
                         for attr_frame_name in attribute_frames:
+                            # Check if self is still valid before findChild
+                            if not isValid(self):
+                                return
                             attr_frame = self.findChild(QtWidgets.QWidget, attr_frame_name)
-                            if attr_frame and attr_frame.isVisible():
+                            if attr_frame and isValid(attr_frame) and attr_frame.isVisible():
                                 min_h += 25  # 20px per visible attribute frame (reduced from 30px)
                     else:
                         # For other frames, use the profile value (Qt handles scaling automatically)
@@ -4884,6 +4916,9 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                     pass
 
         # Apply to the dialog (self) once, after computing the total
+        # Check if self is still valid before applying size changes
+        if not isValid(self):
+            return
         self.setMinimumSize(min_w, min_h)
         self._last_minimum_size = QtCore.QSize(min_w, min_h)
 
@@ -4898,17 +4933,31 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         force the vertical shrink/expand, then release all caps.
         """
         def _apply_resize():
+            # Check if self is still valid before proceeding
+            if not isValid(self):
+                return
+            
             # 0) Process any pending layout events to ensure visibility changes are applied
             # Force layout update to ensure all visibility changes are reflected
+            if not isValid(self):
+                return
             self.updateGeometry()
             QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
             # Give layout a moment to settle
             QtWidgets.QApplication.sendPostedEvents(None, 0)
             QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
+            
+            # Check validity before accessing self methods
+            if not isValid(self):
+                return
             self._debug_print_size("snap_to_minimum -> before refresh")
             
             # 1) Recompute dynamic minimums after layout has updated
             self.refresh_minimum_size()
+            
+            # Check validity after refresh_minimum_size (which might be called asynchronously)
+            if not isValid(self):
+                return
             min_sz = self.minimumSize()
             min_h = max(1, min_sz.height())
             self._debug_print_size("snap_to_minimum -> after refresh")
@@ -4923,18 +4972,32 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                     min_sz.width() if min_sz.width() > 0 else 0,
                     self._minimum_width_baseline,
                 ))
-            except Exception:
+            except (RuntimeError, Exception):
+                if not isValid(self):
+                    return
                 current_width = max(self._minimum_width_baseline, min_sz.width() if min_sz.width() > 0 else self._minimum_width_baseline)
 
-            original_self_min_w = self.minimumWidth()
-            original_self_max_w = self.maximumWidth()
+            # Check validity before accessing self properties
+            if not isValid(self):
+                return
+            try:
+                original_self_min_w = self.minimumWidth()
+                original_self_max_w = self.maximumWidth()
+            except RuntimeError:
+                return
 
             # Get the actual Qt host (workspaceControl widget) and its CURRENT drawn width
             qt_host = None
-            memo_width_callable = getattr(getattr(self, "_last_minimum_size", None), "width", None)
-            memo_min_w = memo_width_callable() if callable(memo_width_callable) else memo_width_callable
-            target_min_w = max(self._minimum_width_baseline, memo_min_w if memo_min_w else min_sz.width(), 1)
-            host_w = max(self.width(), current_width)
+            # Check validity before accessing self
+            if not isValid(self):
+                return
+            try:
+                memo_width_callable = getattr(getattr(self, "_last_minimum_size", None), "width", None)
+                memo_min_w = memo_width_callable() if callable(memo_width_callable) else memo_width_callable
+                target_min_w = max(self._minimum_width_baseline, memo_min_w if memo_min_w else min_sz.width(), 1)
+                host_w = max(self.width(), current_width)
+            except RuntimeError:
+                return
             host_original_min_w = None
             host_original_max_w = None
             try:
@@ -4962,13 +5025,24 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                 pass
 
             # 3) Set minimum height constraint, then resize smoothly without temporary clamping
-            original_self_min_h = self.minimumHeight()
-            original_self_max_h = self.maximumHeight()
+            # Check validity before accessing self
+            if not isValid(self):
+                return
+            try:
+                original_self_min_h = self.minimumHeight()
+                original_self_max_h = self.maximumHeight()
+            except RuntimeError:
+                return
             host_original_min_h = None
             host_original_max_h = None
             
             # Set minimum height first to prevent shrinking below target
-            self.setMinimumHeight(min_h)
+            if not isValid(self):
+                return
+            try:
+                self.setMinimumHeight(min_h)
+            except RuntimeError:
+                return
             try:
                 if qt_host:
                     host_original_min_h = qt_host.minimumHeight()
@@ -4985,12 +5059,21 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             except Exception:
                 pass
 
+            if not isValid(self):
+                return
             try:
                 self.resize(current_width, min_h)
-            except Exception:
+            except (RuntimeError, Exception):
+                if not isValid(self):
+                    return
                 pass
-            self.updateGeometry()
-            self._debug_print_size("snap_to_minimum -> after resize")
+            if not isValid(self):
+                return
+            try:
+                self.updateGeometry()
+                self._debug_print_size("snap_to_minimum -> after resize")
+            except RuntimeError:
+                return
 
             # 5) If floating, also ask Maya to size the container (helps on some hosts)
             try:
@@ -5421,13 +5504,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             material_converter_btn.clicked.connect(self.open_material_converter)
         else:
             print("Error: materialConverterButton not found.")
-        
-        # Launch the Mesh exporter tool
-        mesh_exporter_btn = self.ui_elements.get('meshExporterButton')
-        if mesh_exporter_btn:
-            mesh_exporter_btn.clicked.connect(self.open_mesh_exporter)
-        else:
-            print("Error: meshExporterButton not found.")
+
         
         # Connect list entry scaling buttons
         scale_down_btn = self._get_widget('scaleDownListEntriesButton', QtWidgets.QPushButton)
@@ -7341,23 +7418,35 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             
             # components can be a list or a single component string
             if isinstance(components, list):
-                # Batch assign all components at once for better performance
+                # Batch assign all components at once for better performance.
+                # This issues a single sets() call with the full component list.
                 if components:
                     try:
                         cmds.sets(components, edit=True, forceElement=shading_group)
                         assignment_successful = True
                         print(f"[ASSIGN] SUCCESS: Batch assigned {material_name} to {len(components)} components")
                     except Exception as e:
-                        print(f"[ASSIGN] Batch assignment failed, trying one by one: {e}")
-                        # Fallback: assign one by one if batch fails
-                        for comp in components:
+                        # Some very large or mixed-component selections can fail as one big batch,
+                        # so fall back to chunked batches before going truly one-by-one.
+                        print(f"[ASSIGN] Batch assignment failed, trying chunked batches: {e}")
+                        chunk_size = 512
+                        for i in range(0, len(components), chunk_size):
+                            chunk = components[i:i + chunk_size]
                             try:
-                                cmds.sets(comp, edit=True, forceElement=shading_group)
+                                cmds.sets(chunk, edit=True, forceElement=shading_group)
                                 assignment_successful = True
-                            except Exception as comp_err:
-                                print(f"[ASSIGN] ERROR: Failed to assign material to component {comp}: {comp_err}")
-                                cmds.warning(f"Failed to assign material to component {comp}: {comp_err}")
+                            except Exception as chunk_err:
+                                # Final fallback: assign one by one from this problematic chunk.
+                                print(f"[ASSIGN] Chunk assignment failed, trying per-component: {chunk_err}")
+                                for comp in chunk:
+                                    try:
+                                        cmds.sets(comp, edit=True, forceElement=shading_group)
+                                        assignment_successful = True
+                                    except Exception as comp_err:
+                                        print(f"[ASSIGN] ERROR: Failed to assign material to component {comp}: {comp_err}")
+                                        cmds.warning(f"Failed to assign material to component {comp}: {comp_err}")
             else:
+                # Single component string
                 cmds.sets(components, edit=True, forceElement=shading_group)
                 assignment_successful = True
                 print(f"[ASSIGN] SUCCESS: Assigned {material_name} to component: {components}")
@@ -8252,22 +8341,6 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         except Exception as e:
             import maya.cmds as cmds
             cmds.warning(f"Material converter failed to open: {e}")
-
-    def open_mesh_exporter(self):
-        """
-        Wrapper to open the QuickMaterials.mesh_exporter tool.
-        Reloads the module during dev. Mesh exporter uses standalone styling.
-        """
-        try:
-            from QuickMaterials import mesh_exporter as _meshexp
-            import importlib
-            importlib.reload(_meshexp)  # nice during iteration; remove if undesired
-
-            # Mesh exporter uses standalone styling, no style argument needed
-            _meshexp.show_export_ui()
-        except Exception as e:
-            import maya.cmds as cmds
-            cmds.warning(f"Mesh exporter failed to open: {e}")
 
 
 
@@ -10020,6 +10093,38 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         """
         Actually perform the material list refresh (called by debounced timer).
         """
+        # CRITICAL FIX: Check undo state before performing refresh to prevent redo queue corruption
+        try:
+            if hasattr(cmds, 'undoInfo'):
+                undo_state = cmds.undoInfo(query=True, state=True)
+                if not undo_state:
+                    # #region agent log
+                    import json
+                    import time
+                    try:
+                        log_path = r"d:\Maya Tools\QuickMaterials\.cursor\debug.log"
+                        with open(log_path, 'a') as f:
+                            f.write(json.dumps({
+                                "sessionId": "debug-session",
+                                "runId": "run2",
+                                "hypothesisId": "C",
+                                "location": "quick_materials.py:10057",
+                                "message": "Aborting refresh during undo/redo",
+                                "data": {"undo_state": undo_state},
+                                "timestamp": int(time.time() * 1000)
+                            }) + "\n")
+                    except:
+                        pass
+                    # #endregion
+                    # Reschedule refresh for after undo/redo completes
+                    if hasattr(self, "_mat_refresh_timer") and self._mat_refresh_timer is not None:
+                        self._mat_refresh_timer.stop()
+                        self._mat_refresh_timer.start(500)  # Check again in 500ms
+                    return
+        except Exception:
+            # If we can't check undo state, proceed normally (don't break on errors)
+            pass
+        
         # #region agent log
         import json
         import time
@@ -10028,9 +10133,9 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             with open(log_path, 'a') as f:
                 f.write(json.dumps({
                     "sessionId": "debug-session",
-                    "runId": "run1",
-                    "hypothesisId": "B",
-                    "location": "quick_materials.py:9996",
+                    "runId": "run2",
+                    "hypothesisId": "C",
+                    "location": "quick_materials.py:10057",
                     "message": "_perform_actual_refresh starting",
                     "data": {
                         "undo_state": cmds.undoInfo(query=True, state=True) if hasattr(cmds, 'undoInfo') else None,
@@ -12784,12 +12889,13 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         if cb_id:
             self._om_callbacks.append(cb_id)
         
+        # CRITICAL FIX: Removed Undo/Redo scriptJobs - they interfere with Maya's undo/redo queue
+        # The OpenMaya callbacks already handle material changes, so we don't need Undo/Redo events
+        # When Undo/Redo fires, Maya's undo queue state is changing, and refresh operations
+        # that query the scene during this time can corrupt the redo queue.
         # Only register other events that don't need filtering
-        # CRITICAL FIX: Removed Undo/Redo scriptJobs - they trigger refresh operations
-        # that query Maya during undo/redo, which corrupts the undo queue and prevents redo.
-        # The OpenMaya callbacks already handle material changes, so we don't need these.
-        # _add_job_multi("Undo")  # REMOVED: Causes undo queue corruption
-        # _add_job_multi("Redo")  # REMOVED: Causes undo queue corruption
+        # _add_job_multi("Undo")  # REMOVED: Causes redo queue corruption
+        # _add_job_multi("Redo")  # REMOVED: Causes redo queue corruption
         _add_job_multi("SceneOpened")
         _add_job_multi("NewSceneOpened")
 
@@ -13056,8 +13162,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                     print(f"[QM][DEBUG] Material node {node_name} has no tab, skipping refresh")
                 return
         else:
-            # No node name provided - this is from scriptJob events like SceneOpened
-            # Note: Undo/Redo scriptJobs were removed to prevent undo queue corruption
+            # No node name provided - this is from scriptJob events like Undo/Redo/SceneOpened
             # These are legitimate reasons to refresh, so allow them
             # #region agent log
             import json
@@ -13087,6 +13192,41 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         # Suppress refresh while we're doing an in-place rename or muted poll window
         if getattr(self, "_suspend_refresh_count", 0) > 0:
             return
+        
+        # CRITICAL FIX: Suppress refresh during undo/redo to prevent redo queue corruption
+        # Maya's undo queue is in a vulnerable state during undo/redo operations, and
+        # any scene queries can corrupt the redo queue. Check undo state before queueing.
+        try:
+            if hasattr(cmds, 'undoInfo'):
+                undo_state = cmds.undoInfo(query=True, state=True)
+                # If undo is disabled (happens during undo/redo operations), suppress refresh
+                if not undo_state:
+                    # #region agent log
+                    import json
+                    import time
+                    try:
+                        log_path = r"d:\Maya Tools\QuickMaterials\.cursor\debug.log"
+                        with open(log_path, 'a') as f:
+                            f.write(json.dumps({
+                                "sessionId": "debug-session",
+                                "runId": "run2",
+                                "hypothesisId": "C",
+                                "location": "quick_materials.py:13123",
+                                "message": "Suppressing refresh during undo/redo",
+                                "data": {"undo_state": undo_state},
+                                "timestamp": int(time.time() * 1000)
+                            }) + "\n")
+                    except:
+                        pass
+                    # #endregion
+                    # Queue refresh for after undo/redo completes (using a longer delay)
+                    if hasattr(self, "_mat_refresh_timer") and self._mat_refresh_timer is not None:
+                        self._mat_refresh_timer.stop()
+                        self._mat_refresh_timer.start(max(500, int(delay_ms * 2)))  # Longer delay for post-undo/redo
+                    return
+        except Exception:
+            # If we can't check undo state, proceed normally (don't break on errors)
+            pass
         if hasattr(self, "_mat_refresh_timer") and self._mat_refresh_timer is not None:
             self._mat_refresh_timer.stop()
             self._mat_refresh_timer.start(max(0, int(delay_ms)))
@@ -13204,14 +13344,28 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
     # Assign material to current selection (handles lambert1 → initialShadingGroup).
     def assign_material(self, material):
         """
-        Assign the selected material to the currently selected objects.
+        Assign the selected material to the currently selected objects or components.
         Handles default materials like lambert1 by using initialShadingGroup.
         """
         selected_objs = cmds.ls(selection=True, flatten=True)
         if not selected_objs:
-            cmds.warning("No objects selected.")
+            cmds.warning("No objects or components selected.")
             return
 
+        # If the selection is purely components (faces/edges/verts), use the
+        # optimized component assignment path which batches the sets() call.
+        # Component names always contain a '.' (e.g. "pCube1.f[0:10]").
+        component_selection = [obj for obj in selected_objs if "." in obj]
+        if component_selection and len(component_selection) == len(selected_objs):
+            cmds.undoInfo(openChunk=True)
+            try:
+                # This helper already batches the assignment and updates usage state.
+                self.assign_material_to_components(component_selection, material)
+            finally:
+                cmds.undoInfo(closeChunk=True)
+            return
+
+        # Object-level assignment path (transforms/shapes).
         # Retrieve the shading group for the material
         if material == "lambert1":
             shading_group = "initialShadingGroup"
@@ -13229,9 +13383,11 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         cmds.undoInfo(openChunk=True)
         assignment_successful = False
         try:
-            for obj in selected_objs:
-                cmds.sets(obj, edit=True, forceElement=shading_group)
-                print(f"Assigned {material} to {obj}.")
+            # Batch-assign whenever possible for better performance
+            if selected_objs:
+                cmds.sets(selected_objs, edit=True, forceElement=shading_group)
+                for obj in selected_objs:
+                    print(f"Assigned {material} to {obj}.")
                 assignment_successful = True
         except Exception as e:
             cmds.warning(f"Failed to assign material: {e}")
