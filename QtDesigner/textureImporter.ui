@@ -560,7 +560,7 @@ QPushButton:disabled {
                  <enum>Qt::Horizontal</enum>
                 </property>
                 <property name="sizeType">
-                 <enum>QSizePolicy::Fixed</enum>
+                 <enum>QSizePolicy::Expanding</enum>
                 </property>
                 <property name="sizeHint" stdset="0">
                  <size>
@@ -1374,7 +1374,7 @@ QScrollArea &gt; QWidget &gt; QWidget {
               <x>0</x>
               <y>0</y>
               <width>214</width>
-              <height>69</height>
+              <height>72</height>
              </rect>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_6"/>

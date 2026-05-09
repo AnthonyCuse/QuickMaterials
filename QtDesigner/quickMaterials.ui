@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>250</width>
+    <width>254</width>
     <height>1332</height>
    </rect>
   </property>
@@ -4919,7 +4919,7 @@ QPushButton:disabled {
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="materialConverterButton">
+            <widget class="QPushButton" name="textureImporterButton">
              <property name="font">
               <font>
                <family>Segoe UI</family>
@@ -4955,7 +4955,7 @@ QPushButton:disabled {
 }</string>
              </property>
              <property name="text">
-              <string>Material Converter</string>
+              <string>Texture Importer</string>
              </property>
             </widget>
            </item>
@@ -4997,6 +4997,88 @@ QPushButton:disabled {
              </property>
              <property name="text">
               <string>Texture Baker</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="materialConverterButton">
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>-1</pointsize>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QPushButton {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 12px;  /* Adjust the font size as needed */
+    font-weight: bold;  /* Makes the text bold */
+    color: #ffffff;  /* White text color */
+    background-color: #555555;  /* Dark background color */
+    border: 0px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 6px 12px;  /* Padding around the text */
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #444444;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Material Converter</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="regenerateUvTilesButton">
+             <property name="font">
+              <font>
+               <family>Segoe UI</family>
+               <pointsize>-1</pointsize>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QPushButton {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 12px;  /* Adjust the font size as needed */
+    font-weight: bold;  /* Makes the text bold */
+    color: #ffffff;  /* White text color */
+    background-color: #555555;  /* Dark background color */
+    border: 0px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 6px 12px;  /* Padding around the text */
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #444444;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+             </property>
+             <property name="text">
+              <string>Regenerate UV Tile Preview</string>
              </property>
             </widget>
            </item>
@@ -7979,57 +8061,6 @@ QPushButton:disabled {
                      </spacer>
                     </item>
                     <item>
-                     <widget class="QPushButton" name="scaleUpListEntriesButton">
-                      <property name="sizePolicy">
-                       <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-                        <horstretch>0</horstretch>
-                        <verstretch>0</verstretch>
-                       </sizepolicy>
-                      </property>
-                      <property name="minimumSize">
-                       <size>
-                        <width>15</width>
-                        <height>0</height>
-                       </size>
-                      </property>
-                      <property name="font">
-                       <font>
-                        <family>Segoe UI</family>
-                        <pointsize>-1</pointsize>
-                       </font>
-                      </property>
-                      <property name="styleSheet">
-                       <string notr="true">QPushButton {
-    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
-    font-size: 12px;  /* Adjust the font size as needed */
-    color: #ffffff;  /* White text color */
-    background-color: #666666;  /* Dark background color */
-    border: 0px solid #444444;  /* Optional border with dark grey color */
-    border-radius: 5px;  /* Rounded corners */
-    padding: 1px 2px;  /* Padding around the text */
-
-}
-
-QPushButton:hover {
-    background-color: #888888;  /* Slightly lighter background on hover */
-}
-
-QPushButton:pressed {
-    background-color: #1a1a1a;  /* Darker background when pressed */
-}
-QPushButton:disabled {
-    color: #cccccc;  /* Light grey text color to indicate disabled */
-    border: 0px solid #555555;  /* Optional border with dark grey color */
-    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
-    color: #666666;  /* White text color */
-}</string>
-                      </property>
-                      <property name="text">
-                       <string>+</string>
-                      </property>
-                     </widget>
-                    </item>
-                    <item>
                      <widget class="QPushButton" name="scaleDownListEntriesButton">
                       <property name="sizePolicy">
                        <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
@@ -8077,6 +8108,57 @@ QPushButton:disabled {
                       </property>
                       <property name="text">
                        <string>-</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QPushButton" name="scaleUpListEntriesButton">
+                      <property name="sizePolicy">
+                       <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                        <horstretch>0</horstretch>
+                        <verstretch>0</verstretch>
+                       </sizepolicy>
+                      </property>
+                      <property name="minimumSize">
+                       <size>
+                        <width>15</width>
+                        <height>0</height>
+                       </size>
+                      </property>
+                      <property name="font">
+                       <font>
+                        <family>Segoe UI</family>
+                        <pointsize>-1</pointsize>
+                       </font>
+                      </property>
+                      <property name="styleSheet">
+                       <string notr="true">QPushButton {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 12px;  /* Adjust the font size as needed */
+    color: #ffffff;  /* White text color */
+    background-color: #666666;  /* Dark background color */
+    border: 0px solid #444444;  /* Optional border with dark grey color */
+    border-radius: 5px;  /* Rounded corners */
+    padding: 1px 2px;  /* Padding around the text */
+
+}
+
+QPushButton:hover {
+    background-color: #888888;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 0px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+                      </property>
+                      <property name="text">
+                       <string>+</string>
                       </property>
                      </widget>
                     </item>
@@ -8176,7 +8258,7 @@ QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical {
                         <rect>
                          <x>0</x>
                          <y>0</y>
-                         <width>212</width>
+                         <width>216</width>
                          <height>61</height>
                         </rect>
                        </property>
@@ -8280,7 +8362,7 @@ QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical {
                         <rect>
                          <x>0</x>
                          <y>0</y>
-                         <width>212</width>
+                         <width>216</width>
                          <height>61</height>
                         </rect>
                        </property>
@@ -8384,7 +8466,7 @@ QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical {
                         <rect>
                          <x>0</x>
                          <y>0</y>
-                         <width>212</width>
+                         <width>216</width>
                          <height>61</height>
                         </rect>
                        </property>
@@ -8488,7 +8570,7 @@ QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical {
                         <rect>
                          <x>0</x>
                          <y>0</y>
-                         <width>212</width>
+                         <width>216</width>
                          <height>61</height>
                         </rect>
                        </property>

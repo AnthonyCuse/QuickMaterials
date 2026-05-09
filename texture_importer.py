@@ -22,6 +22,69 @@ import maya.mel as mel
 import random
 import re
 import json
+from collections import Counter
+
+
+def _load_quick_materials_all_settings():
+    """
+    Same resolution as quick_materials.load_quick_materials_settings_full_dict
+    (kept here to avoid import cycle: quick_materials imports this module).
+    """
+    d = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings")
+    for fn in ("quick_materials_settings.json", "quick_materials_settings_default.json"):
+        p = os.path.join(d, fn)
+        try:
+            if os.path.isfile(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            continue
+    return {}
+
+
+def _texture_search_names_user_path():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings", "texture_search_names.json")
+
+
+def _texture_search_names_default_path():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings", "texture_search_names_default.json")
+
+
+def _texture_search_names_legacy_path():
+    """Older installs may only have this path; still read it before falling back to default."""
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "Settings", "texture_search_names.json")
+
+
+def load_texture_search_names_raw_dict():
+    """
+    Resolution order: user (settings/) → legacy (Settings/) → packaged default.
+    save_texture_names() writes only the user path; default JSON is never overwritten.
+    """
+    for path in (
+        _texture_search_names_user_path(),
+        _texture_search_names_legacy_path(),
+        _texture_search_names_default_path(),
+    ):
+        try:
+            if os.path.isfile(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            continue
+    return {}
+
+
+try:
+    from .material_converter import resolve_texture_import_mapping
+except ImportError:
+    try:
+        from material_converter import resolve_texture_import_mapping
+    except ImportError:
+        resolve_texture_import_mapping = None
 
 # Import icons resource (relative / package / or by path for Maya 2026+ when submodule is file-loaded)
 icons_rc = None
@@ -105,6 +168,16 @@ TEXTURE_RULES = {
     "displacement":     {"colorSpace": "Raw",  "attr": None,                 "kind": "displacement"}  # special
 }
 
+# Bulk folder import (All Materials mode)
+BULK_ALL_MATERIALS_LABEL = (
+    "All Materials (Import all matching textures to all matching materials)"
+)
+BULK_FOLDER_SKIP_DIRS = frozenset({"old", "archive"})
+BULK_FOLDER_MAX_DEPTH = 6
+# Bulk material group headers + review dialog (orange for separation from cyan controls)
+BULK_MATERIAL_HEADER_COLOR = "#ff9330"
+# Shared accent for texture-attribute labels / combos (matches importer UDIM + combo styling)
+UI_ACCENT_CYAN = "#00f7c8"
 
 
 def maya_main_window():
@@ -155,6 +228,15 @@ class ImportTxTool(QtWidgets.QWidget):
         self._search_mode_lock = False
         self._current_search_mode = "maya_file"
 
+        # Bulk folder scan (All Materials mode) — must exist before init_ui/setup_connections
+        self._bulk_match_cache = {}
+        self._bulk_packed_entries = []
+        self._bulk_unmatched_entries = []
+        self._bulk_folder_root = None
+        self._bulk_type_counts = Counter()
+        self._bulk_packed_file_count = 0
+        self._combo_was_bulk_mode = False
+
         self.init_ui()
 
         self.use_udim = True
@@ -164,6 +246,8 @@ class ImportTxTool(QtWidgets.QWidget):
         
         # Cache for UDIM counts per directory+pattern (so all textures from same path show same count)
         self._udim_count_cache = {}  # Key: (directory, base_pattern, ext) -> count
+
+        self._import_warnings = []
 
     def init_ui(self):
         loader = QtUiTools.QUiLoader()
@@ -221,6 +305,10 @@ class ImportTxTool(QtWidgets.QWidget):
         )
 
         self.setup_connections()
+        self._combo_was_bulk_mode = self._is_all_materials_bulk_mode()
+        self._update_select_textures_button_label()
+        if self._is_all_materials_bulk_mode():
+            self._populate_texture_selection_ui()
 
     def auto_initialize_ui_elements(self, parent_widget):
         for child in parent_widget.findChildren(QtWidgets.QWidget):
@@ -660,25 +748,11 @@ class ImportTxTool(QtWidgets.QWidget):
 
     def _load_keyword_map(self):
         """
-        Load per-texture-type keyword lists from Settings/texture_search_names.json
-        (or legacy settings/texture_search_names.json). Falls back to {type:[type]}.
-        Also returns packed textures if present.
+        Load per-texture-type keyword lists from settings/texture_search_names.json (user),
+        else legacy Settings/ path, else settings/texture_search_names_default.json.
+        Falls back to {type:[type]}. Also returns packed textures if present.
         """
-        base_dir = os.path.dirname(__file__)
-        candidates = [
-            os.path.join(base_dir, "Settings", "texture_search_names.json"),
-            os.path.join(base_dir, "settings", "texture_search_names.json")
-        ]
-        data = {}
-        for path in candidates:
-            try:
-                with open(path, "r") as f:
-                    raw = json.load(f)
-                if isinstance(raw, dict):
-                    data = raw
-                    break
-            except Exception:
-                continue
+        data = load_texture_search_names_raw_dict()
 
         # Normalize: ensure every type exists and is a list of strings
         norm = {}
@@ -706,7 +780,11 @@ class ImportTxTool(QtWidgets.QWidget):
         # Keep the raw type name available too (acts like a keyword if user included it)
         tokens.add(texture_type.lower())
 
-        if material_name and material_name.strip() and material_name != "All Materials":
+        if (
+            material_name
+            and material_name.strip()
+            and material_name != BULK_ALL_MATERIALS_LABEL
+        ):
             m = material_name.strip()
             tokens.add(m.lower())
             # Common variation: drop common prefixes
@@ -867,19 +945,45 @@ class ImportTxTool(QtWidgets.QWidget):
         return _pred
 
     def _on_material_combo_changed(self):
-        self._update_import_button_label()
+        prev_bulk = getattr(self, "_combo_was_bulk_mode", False)
+        cur_bulk = self._is_all_materials_bulk_mode()
+        self._combo_was_bulk_mode = cur_bulk
+        if prev_bulk and not cur_bulk:
+            self._clear_bulk_folder_state()
+            self.selected_textures = {"unassigned": [], "assigned": []}
+            self.texture_entry_widgets.clear()
+        elif not prev_bulk and cur_bulk:
+            self.selected_textures = {"unassigned": [], "assigned": []}
+            self.texture_entry_widgets.clear()
+            self.texture_data.clear()
+        self._update_select_textures_button_label()
+        self._populate_texture_selection_ui()
 
     def _get_import_button_base_text(self):
         cb = self._get_widget("materialComboBox", QtWidgets.QComboBox)
         is_all = False
         if cb and isValid(cb):
             try:
-                is_all = (str(cb.currentText()) == "All Materials")
+                is_all = self._is_all_materials_bulk_mode(str(cb.currentText()))
             except RuntimeError:
                 self._debug_print("[ImportBtn] currentText() failed (combo deleted).")
         return "Preview Import Textures" if is_all else "Import Textures"
 
     def _count_importable_textures(self):
+        if self._is_all_materials_bulk_mode():
+            if not self._bulk_folder_root:
+                return 0
+            n = 0
+            for status in ("unassigned", "assigned"):
+                for texture_info in self.selected_textures.get(status, []):
+                    if not texture_info.get("target_material"):
+                        continue
+                    if any(
+                        a.get("attribute") and a.get("attribute") != "skip"
+                        for a in texture_info.get("assignments", [])
+                    ):
+                        n += 1
+            return n
         if not hasattr(self, "selected_textures"):
             return 0
         count = 0
@@ -914,15 +1018,22 @@ class ImportTxTool(QtWidgets.QWidget):
             self._debug_print("[ImportBtn] materialComboBox access raised RuntimeError (deleted).")
             return
 
-        if current == "All Materials":
-            if not getattr(self, "_bulk_match_cache", None):
-                cmds.warning("No cached matches. Run Auto-Find-All first.")
+        if current == BULK_ALL_MATERIALS_LABEL:
+            if not self._bulk_folder_root:
+                cmds.warning("Select a textures folder first.")
                 return
-            dlg = PreviewImportDialog(self, self._bulk_match_cache)
+            self._sync_all_texture_entries()
+            if self._count_importable_textures() == 0:
+                cmds.warning(
+                    "No matching textures to import. Check filenames include material names, "
+                    "or restore assignments that are set to skip import."
+                )
+                return
+            dlg = BulkImportReviewDialog(self)
             result = dlg.exec_()
             if result == QtWidgets.QDialog.Accepted:
                 self._debug_print("[PreviewImport] Accepted -> performing bulk import")
-                self._perform_bulk_import(self._bulk_match_cache)
+                self._perform_bulk_import()
             else:
                 self._debug_print("[PreviewImport] Cancelled")
         else:
@@ -935,7 +1046,8 @@ class ImportTxTool(QtWidgets.QWidget):
         Reads attribute selections, channels, and colorspaces from UI.
         """
         count = 0
-        
+        self._import_warnings = []
+
         # Sync UI state to data structure first
         for texture_path in list(self.texture_entry_widgets.keys()):
             self._sync_texture_entry_to_data(texture_path)
@@ -984,24 +1096,90 @@ class ImportTxTool(QtWidgets.QWidget):
             count += 1
         
         self._debug_print(f"[Import] Done single-material import: {material_name} ({count} textures)")
+        self._flush_import_warnings()
 
     def _import_one_type_with_channel(self, material, texture_type, file_path, channel, colorspace, texture_info):
         """
         Import a single texture type with specific channel and colorspace.
         Similar to _import_one_type but accepts channel and colorspace parameters.
         """
+        rules = TEXTURE_RULES.get(texture_type, {})
+        kind = rules.get("kind")
+        std_attr = rules.get("attr")
+
+        mapping = self._resolve_texture_mapping(material, texture_type)
+        if mapping.get("warning"):
+            self._record_import_warning(mapping["warning"])
+        if mapping.get("skip"):
+            return
+
+        target_attr = mapping.get("target_attr")
+        opacity_mode = mapping.get("opacity_mode")
+        normal_utility = mapping.get("normal_utility") or "aiNormalMap"
+
+        # Displacement (no surface shader attribute)
+        if kind == "displacement" or texture_type == "displacement":
+            use_udim = self.use_udim and texture_info.get("udim_count", 0) > 1
+            file_node, path_to_set = self._ensure_file_node(
+                material, texture_type, file_path, colorspace, use_udim
+            )
+            disp_node, sg = self._ensure_displacement_network(material)
+            ch = channel
+            if ch:
+                cl = ch.lower()
+                src = (
+                    f"{file_node}.outAlpha"
+                    if cl == "a"
+                    else f"{file_node}.outColorR"
+                    if cl == "r"
+                    else f"{file_node}.outColorG"
+                    if cl == "g"
+                    else f"{file_node}.outColorB"
+                )
+            else:
+                default_ch = self._default_channel_for_type(texture_type)
+                src = (
+                    f"{file_node}.outAlpha"
+                    if default_ch == "A"
+                    else f"{file_node}.outColorR"
+                    if default_ch == "R"
+                    else f"{file_node}.outColorG"
+                    if default_ch == "G"
+                    else f"{file_node}.outColorB"
+                )
+            try:
+                incoming = cmds.listConnections(f"{disp_node}.displacement", plugs=True) or []
+                for plug in incoming:
+                    try:
+                        cmds.disconnectAttr(plug, f"{disp_node}.displacement")
+                    except Exception:
+                        pass
+                cmds.connectAttr(src, f"{disp_node}.displacement", force=True)
+            except Exception:
+                pass
+            self._debug_print(
+                f"[Import] displacement: {file_node} -> {disp_node}.displacement (SG={sg})"
+            )
+            return
+
         # Get UDIM info from texture_info
         use_udim = self.use_udim and texture_info.get("udim_count", 0) > 1
         udim_pattern = texture_info.get("udim_pattern")
         
         # Create file node
         file_node, path_to_set = self._ensure_file_node(material, texture_type, file_path, colorspace, use_udim)
+
+        try:
+            if kind in ("float", "displacement") or texture_type == "opacity":
+                if cmds.attributeQuery("alphaIsLuminance", node=file_node, exists=True):
+                    cmds.setAttr("%s.alphaIsLuminance" % file_node, 1)
+            if kind == "normal":
+                if cmds.attributeQuery("alphaIsLuminance", node=file_node, exists=True):
+                    cmds.setAttr("%s.alphaIsLuminance" % file_node, 0)
+        except Exception:
+            pass
         
-        # Get rules for this texture type
-        rules = TEXTURE_RULES.get(texture_type, {})
-        kind = rules.get("kind")
-        attr = rules.get("attr")
-        
+        attr = target_attr
         if not attr:
             return
         
@@ -1032,6 +1210,27 @@ class ImportTxTool(QtWidgets.QWidget):
                 src = f"{file_node}.outColor"
         
         # Connect based on kind
+        if kind == "normal":
+            nn = self._ensure_normal_map_for_mapping(material, normal_utility)
+            self._connect_file_to_normal_utility(file_node, nn, normal_utility)
+            self._debug_print(
+                f"[Import] {file_node}.outColor -> {nn} -> {material}.normalCamera "
+                f"(channel={channel or 'default'}, colorspace={colorspace})"
+            )
+            return
+
+        if kind == "color" and opacity_mode == "reverse_to_transparency":
+            ch_upper = channel.upper() if channel else None
+            cp = ch_upper if ch_upper in ("A", "R", "G", "B") else (
+                "A" if texture_type == "opacity" else None
+            )
+            self._connect_file_to_reversed_transparency(file_node, material, cp)
+            self._debug_print(
+                f"[Import] {file_node} -> reverse -> {material}.transparency "
+                f"(channel={channel or 'default'}, colorspace={colorspace})"
+            )
+            return
+
         if kind == "color":
             # If src is outColor (full color), connect directly; otherwise replicate scalar to RGB
             if ".outColor" in src and src.endswith(".outColor"):
@@ -1043,38 +1242,54 @@ class ImportTxTool(QtWidgets.QWidget):
             else:
                 self._connect_scalar_to_color(src, material, attr)
         elif kind == "float":
-            try:
-                cmds.connectAttr(src, f"{material}.{attr}", force=True)
-            except Exception as e:
-                self._debug_print(f"[Import] Failed to connect {src} to {material}.{attr}: {e}")
-        elif kind == "normal":
-            nn = self._ensure_ai_normal_map(material)
-            try:
-                if not cmds.isConnected(f"{file_node}.outColor", f"{nn}.input"):
-                    cmds.connectAttr(f"{file_node}.outColor", f"{nn}.input", force=True)
-            except Exception as e:
-                self._debug_print(f"[Import] Failed to connect normal map: {e}")
+            self._connect_float_source_to_attr(src, material, attr)
         
         self._debug_print(f"[Import] {file_node}.{src} -> {material}.{attr} (channel={channel or 'default'}, colorspace={colorspace})")
 
-    def _perform_bulk_import(self, mat_map):
+    def _sync_all_texture_entries(self):
+        """Push all open texture rows from the UI into selected_textures (bulk + single)."""
+        for texture_path in list(self.texture_entry_widgets.keys()):
+            self._sync_texture_entry_to_data(texture_path)
+
+    def _perform_bulk_import(self):
         """
-        Bulk import using mat_map = { material: { type: path_or_None } }.
+        Bulk import from the main scroll area: each texture_info with target_material,
+        honoring assignments, channels, colorspace, and skip rows (same as single-material flow).
         """
-        for mat, type_map in mat_map.items():
-            # Skip materials with no matches
-            if not any(type_map.values()):
-                continue
-            imp = 0
-            for ttype, path in type_map.items():
-                if not path:
+        self._import_warnings = []
+        self._sync_all_texture_entries()
+        for status in ("unassigned", "assigned"):
+            for texture_info in self.selected_textures.get(status, []):
+                mat = texture_info.get("target_material")
+                if not mat:
                     continue
-                if not os.path.isfile(path) and "<UDIM>" not in path:
-                    # Allow UDIM pattern strings to pass (if pre-filter built them that way)
+                texture_path = texture_info.get("path")
+                if not texture_path:
                     continue
-                self._import_one_type(mat, ttype, path)
-                imp += 1
-            self._debug_print(f"[Import] Imported {imp} textures for {mat}")
+                if not os.path.isfile(texture_path) and "<UDIM>" not in str(texture_path):
+                    continue
+                assignments = texture_info.get("assignments", [])
+                valid_assignments = [
+                    a for a in assignments
+                    if a.get("attribute") and a.get("attribute") != "skip"
+                ]
+                if not valid_assignments:
+                    continue
+                if len(valid_assignments) == 1:
+                    a0 = valid_assignments[0]
+                    self._import_one_type_with_channel(
+                        mat,
+                        a0.get("attribute"),
+                        texture_path,
+                        a0.get("channel"),
+                        a0.get("colorspace", "default"),
+                        texture_info,
+                    )
+                else:
+                    self._import_packed_texture(
+                        texture_path, valid_assignments, material=mat
+                    )
+        self._flush_import_warnings()
 
 
 
@@ -1269,7 +1484,12 @@ class ImportTxTool(QtWidgets.QWidget):
         Open a multi-file dialog, classify each selection into a texture type using the
         token/required-keyword system, then populate the unified texture selection UI.
         This ALWAYS considers both standard and advanced types (visibility ignored).
+        In All Materials bulk mode, selects one folder and scans it recursively.
         """
+        if self._is_all_materials_bulk_mode():
+            self._select_folder_for_bulk_import()
+            return
+
         options = QtWidgets.QFileDialog.Options()
         start_dir = self.search_folder_path if self.search_folder_path else ""
         files, _ = QtWidgets.QFileDialog.getOpenFileNames(
@@ -1702,12 +1922,8 @@ class ImportTxTool(QtWidgets.QWidget):
 
         # Reset internal state
         self.texture_data.clear()
-        if hasattr(self, "_bulk_match_cache"):
-            try:
-                self._bulk_match_cache.clear()
-            except Exception:
-                self._bulk_match_cache = {}
-        
+        self._clear_bulk_folder_state()
+
         # Clear new unified texture selection structure
         if hasattr(self, 'selected_textures'):
             self.selected_textures = {"unassigned": [], "assigned": []}
@@ -1873,7 +2089,11 @@ class ImportTxTool(QtWidgets.QWidget):
         mat_combo = self._get_widget("materialComboBox", QtWidgets.QComboBox)
         material = mat_combo.currentText() if mat_combo else ""
         
-        if not material or material == "All Materials" or not cmds.objExists(material):
+        if (
+            not material
+            or material == BULK_ALL_MATERIALS_LABEL
+            or not cmds.objExists(material)
+        ):
             return {}
         
         connected = {}
@@ -1925,6 +2145,534 @@ class ImportTxTool(QtWidgets.QWidget):
         return connected
 
     # ---------- Import helpers ----------
+    def _resolve_texture_mapping(self, material, texture_type):
+        """Map logical texture slot to target plugs; uses material_converter on legacy shaders."""
+        rules = TEXTURE_RULES.get(texture_type, {})
+        std_attr = rules.get("attr")
+        kind = rules.get("kind")
+        if resolve_texture_import_mapping:
+            return resolve_texture_import_mapping(
+                material, texture_type, std_attr, kind
+            )
+        return {
+            "target_attr": std_attr,
+            "opacity_mode": None,
+            "normal_utility": "aiNormalMap",
+            "warning": None,
+            "skip": bool(not std_attr and kind != "displacement"),
+        }
+
+    def _record_import_warning(self, msg):
+        if msg and msg not in self._import_warnings:
+            self._import_warnings.append(msg)
+
+    def _flush_import_warnings(self):
+        if not self._import_warnings:
+            return
+        combined = "\n".join(self._import_warnings)
+        cmds.warning(combined)
+        self._import_warnings = []
+
+    # --- Bulk folder import (All Materials) ---
+    @staticmethod
+    def _strip_namespace_from_material(name):
+        if not name:
+            return ""
+        if ":" in name:
+            return name.split(":")[-1]
+        return name
+
+    def _is_all_materials_bulk_mode(self, combo_text=None):
+        if combo_text is None:
+            cb = self._get_widget("materialComboBox", QtWidgets.QComboBox)
+            try:
+                combo_text = str(cb.currentText()) if cb else ""
+            except RuntimeError:
+                combo_text = ""
+        return combo_text == BULK_ALL_MATERIALS_LABEL
+
+    def _clear_bulk_folder_state(self):
+        self._bulk_match_cache = {}
+        self._bulk_packed_entries = []
+        self._bulk_unmatched_entries = []
+        self._bulk_folder_root = None
+        self._bulk_type_counts = Counter()
+        self._bulk_packed_file_count = 0
+
+    def _walk_bulk_image_files(self, root):
+        """Yield (abs_path, depth_from_root) skipping old/archive dirs; depth capped."""
+        root = os.path.normpath(os.path.abspath(root))
+        if not os.path.isdir(root):
+            return
+        exts = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".exr", ".tga", ".bmp"}
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d.lower() not in BULK_FOLDER_SKIP_DIRS]
+            rel = os.path.relpath(dirpath, root)
+            if rel == ".":
+                depth_here = 0
+            else:
+                depth_here = len(rel.split(os.sep))
+            if depth_here > BULK_FOLDER_MAX_DEPTH:
+                dirnames[:] = []
+                continue
+            for fn in filenames:
+                ext = os.path.splitext(fn)[1].lower()
+                if ext not in exts:
+                    continue
+                yield os.path.join(dirpath, fn), depth_here
+
+    def _pick_matching_material(self, basename_lc, mat_pairs):
+        """Longest material base name contained in basename (namespaces ignored on material)."""
+        for base, mfull in mat_pairs:
+            b = (base or "").strip().lower()
+            if b and b in basename_lc:
+                return mfull
+        return None
+
+    def _run_bulk_folder_scan(self, root):
+        """Scan folder tree, match files to scene materials + texture types; fills bulk caches."""
+        self._bulk_match_cache = {}
+        self._bulk_packed_entries = []
+        self._bulk_unmatched_entries = []
+        self._bulk_type_counts = Counter()
+        self._bulk_packed_file_count = 0
+        abs_root = os.path.abspath(root)
+        self._bulk_folder_root = abs_root
+        kw_map, packed_textures = self._load_keyword_map()
+        materials = self.get_all_materials_sorted()
+        mat_pairs = [
+            (self._strip_namespace_from_material(m), m) for m in materials
+        ]
+        mat_pairs.sort(key=lambda x: len(x[0] or ""), reverse=True)
+
+        file_depths = list(self._walk_bulk_image_files(root))
+        if not file_depths:
+            self.selected_textures = {"unassigned": [], "assigned": []}
+            self._populate_texture_selection_ui()
+            self._update_import_button_label()
+            return
+
+        paths_only = [x[0] for x in file_depths]
+        depth_by_path = dict(file_depths)
+
+        udim_groups = {}
+        regular_files = []
+        for path in paths_only:
+            file_name = os.path.basename(path)
+            file_base, file_ext = os.path.splitext(file_name)
+            udim_pattern = self.detect_udim_pattern(file_base)
+            if udim_pattern and self.use_udim:
+                udim_regex = re.compile(udim_pattern)
+                base_without_udim = udim_regex.sub("", file_base)
+                gk = (os.path.dirname(path), "%s%s" % (base_without_udim, file_ext))
+                udim_groups.setdefault(gk, []).append(path)
+            else:
+                regular_files.append(path)
+
+        slot_candidates = {}
+        packed_tmp = []
+        material_matched_unclassified = []
+
+        def add_slot(mat, ttype, path, depth):
+            slot_candidates.setdefault((mat, ttype), []).append((path, depth))
+
+        def process_rep(rep_path, tile_paths):
+            depth = depth_by_path.get(rep_path, 0)
+            basename_lc = os.path.basename(rep_path).lower()
+            mat_full = self._pick_matching_material(basename_lc, mat_pairs)
+            if not mat_full:
+                return
+            packed_matches = self._check_packed_textures(
+                rep_path, packed_textures, mat_full
+            )
+            if packed_matches:
+                assignments = []
+                for match in packed_matches:
+                    attr = match.get("attribute")
+                    channel = match.get("channel")
+                    cs = (
+                        TEXTURE_RULES.get(attr, {}).get("colorSpace", "default")
+                        if attr
+                        else "default"
+                    )
+                    assignments.append(
+                        {
+                            "attribute": attr,
+                            "channel": channel,
+                            "colorspace": cs,
+                        }
+                    )
+                packed_tmp.append(
+                    {
+                        "material": mat_full,
+                        "path": rep_path,
+                        "assignments": assignments,
+                        "depth": depth,
+                    }
+                )
+                return
+            ttype, _sc = self._classify_texture_type_for_file(
+                rep_path, kw_map, mat_full
+            )
+            if not ttype:
+                material_matched_unclassified.append(
+                    {"material": mat_full, "path": rep_path, "depth": depth}
+                )
+                return
+            add_slot(mat_full, ttype, rep_path, depth)
+
+        for _gk, tile_paths in udim_groups.items():
+            rep_path = self._prefer_representative_udim(tile_paths)
+            if rep_path:
+                process_rep(rep_path, tile_paths)
+
+        for path in regular_files:
+            process_rep(path, [path])
+
+        mat_map = {}
+        for (mat, ttype), lst in slot_candidates.items():
+            best = min(lst, key=lambda x: (x[1], x[0]))
+            mat_map.setdefault(mat, {})[ttype] = best[0]
+
+        packed_by_key = {}
+        for entry in packed_tmp:
+            k = (entry["material"], entry["path"])
+            d = entry["depth"]
+            if k not in packed_by_key or d < packed_by_key[k]["depth"]:
+                packed_by_key[k] = entry
+
+        self._bulk_match_cache = mat_map
+        self._bulk_packed_entries = [
+            {
+                "material": v["material"],
+                "path": v["path"],
+                "assignments": v["assignments"],
+            }
+            for v in packed_by_key.values()
+        ]
+
+        classified_paths = set()
+        for tm in mat_map.values():
+            for pth in tm.values():
+                if pth:
+                    classified_paths.add(os.path.normcase(os.path.normpath(pth)))
+        for v in packed_by_key.values():
+            pth = v.get("path")
+            if pth:
+                classified_paths.add(os.path.normcase(os.path.normpath(pth)))
+
+        best_uncls = {}
+        for row in material_matched_unclassified:
+            pth = row.get("path")
+            if not pth:
+                continue
+            pn = os.path.normcase(os.path.normpath(pth))
+            if pn in classified_paths:
+                continue
+            d = row.get("depth", 0)
+            mat = row.get("material")
+            if pn not in best_uncls or d < best_uncls[pn][0]:
+                best_uncls[pn] = (d, mat, pth)
+        self._bulk_unmatched_entries = [
+            {"material": m, "path": pth, "depth": d}
+            for _pn, (d, m, pth) in best_uncls.items()
+        ]
+
+        self._rebuild_bulk_selected_textures_from_scan(
+            self._bulk_match_cache, self._bulk_packed_entries, self._bulk_unmatched_entries
+        )
+
+        counts = Counter()
+        for _mat, tm in mat_map.items():
+            for tt, pth in tm.items():
+                if pth:
+                    counts[tt] += 1
+        self._bulk_packed_file_count = len(self._bulk_packed_entries)
+        for entry in self._bulk_packed_entries:
+            for a in entry.get("assignments", []):
+                att = a.get("attribute")
+                if att:
+                    counts[att] += 1
+
+        self._bulk_type_counts = counts
+        self._populate_texture_selection_ui()
+        self._update_import_button_label()
+
+    def _rebuild_bulk_selected_textures_from_scan(self, mat_map, packed_entries, unmatched_entries=None):
+        """Fill selected_textures with one row per matched file; each row has target_material for bulk import."""
+        self.selected_textures = {"unassigned": [], "assigned": []}
+        for mat, tm in (mat_map or {}).items():
+            for ttype, path in tm.items():
+                if not path:
+                    continue
+                ti = self._build_texture_info(
+                    path,
+                    {
+                        "assignments": [{
+                            "attribute": ttype,
+                            "channel": None,
+                            "colorspace": TEXTURE_RULES.get(ttype, {}).get("colorSpace", "default"),
+                        }]
+                    },
+                )
+                ti["target_material"] = mat
+                self.selected_textures["assigned"].append(ti)
+        for entry in packed_entries or []:
+            path = entry.get("path")
+            mat = entry.get("material")
+            if not path or not mat:
+                continue
+            assigns = entry.get("assignments") or []
+            ti = self._build_texture_info(
+                path,
+                {"assignments": [dict(a) for a in assigns]},
+            )
+            ti["target_material"] = mat
+            self.selected_textures["assigned"].append(ti)
+        for row in unmatched_entries or []:
+            pth = row.get("path")
+            mat = row.get("material")
+            if not pth or not mat:
+                continue
+            ti = self._build_texture_info(
+                pth,
+                {
+                    "assignments": [{
+                        "attribute": "skip",
+                        "channel": None,
+                        "colorspace": "default",
+                    }]
+                },
+            )
+            ti["target_material"] = mat
+            self.selected_textures["assigned"].append(ti)
+        self.selected_textures["assigned"].sort(
+            key=lambda x: (
+                (x.get("target_material") or "").lower(),
+                os.path.basename(x.get("path") or "").lower(),
+            )
+        )
+
+    def _create_bulk_material_collapsible(self, material_name):
+        """Header row (blue name + collapse) and inner vertical layout for texture rows."""
+        frame = QtWidgets.QFrame()
+        frame.setFrameShape(QtWidgets.QFrame.NoFrame)
+        outer = QtWidgets.QVBoxLayout(frame)
+        outer.setContentsMargins(0, 6, 0, 2)
+        outer.setSpacing(2)
+
+        header = QtWidgets.QWidget()
+        hl = QtWidgets.QHBoxLayout(header)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(6)
+
+        toggle = QtWidgets.QToolButton()
+        toggle.setCheckable(True)
+        toggle.setChecked(True)
+        toggle.setArrowType(QtCore.Qt.DownArrow)
+        toggle.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
+        toggle.setStyleSheet("QToolButton { border: none; background: transparent; }")
+        hl.addWidget(toggle)
+
+        title = QtWidgets.QLabel(material_name)
+        title.setStyleSheet(
+            "font-family: 'Segoe UI'; font-size: 14px; font-weight: bold; color: %s; "
+            "background: transparent; border: none; padding: 2px;"
+            % BULK_MATERIAL_HEADER_COLOR
+        )
+        hl.addWidget(title, 1)
+
+        body = QtWidgets.QWidget()
+        bl = QtWidgets.QVBoxLayout(body)
+        bl.setContentsMargins(12, 0, 0, 4)
+        bl.setSpacing(4)
+
+        outer.addWidget(header)
+        outer.addWidget(body)
+
+        def on_clicked(checked):
+            body.setVisible(checked)
+            toggle.setArrowType(QtCore.Qt.DownArrow if checked else QtCore.Qt.RightArrow)
+
+        toggle.clicked.connect(on_clicked)
+        return {"frame": frame, "body_layout": bl}
+
+    def _populate_bulk_mode_scroll(self):
+        """Bulk mode: same per-texture rows as single-material mode, grouped under collapsible material headers."""
+        hint_folder = QtWidgets.QLabel(
+            "Select a textures folder to match files to scene materials (material name must appear in each filename)."
+        )
+        hint_folder.setWordWrap(True)
+        hint_folder.setStyleSheet(
+            "font-family: 'Segoe UI'; font-size: 13px; color: #cccccc; padding: 4px; background: transparent;"
+        )
+        if not self._bulk_folder_root:
+            self.textures_layout.addWidget(hint_folder)
+            return
+
+        folder_lbl = QtWidgets.QLabel("Folder: %s" % self._bulk_folder_root)
+        folder_lbl.setWordWrap(True)
+        folder_lbl.setStyleSheet(
+            "font-family: 'Segoe UI'; font-size: 13px; color: #aaaaaa; background: transparent;"
+        )
+        self.textures_layout.addWidget(folder_lbl)
+
+        bulk_items = []
+        for status in ("unassigned", "assigned"):
+            for ti in self.selected_textures.get(status, []):
+                if ti.get("target_material"):
+                    bulk_items.append(ti)
+
+        if not bulk_items:
+            empty = QtWidgets.QLabel(
+                "No matching textures found. Filenames must include the material name; "
+                "folders named old or archive are skipped."
+            )
+            empty.setWordWrap(True)
+            empty.setStyleSheet("color: #bbbbbb; padding: 6px; background: transparent;")
+            self.textures_layout.addWidget(empty)
+            return
+
+        by_mat = {}
+        for ti in bulk_items:
+            by_mat.setdefault(ti["target_material"], []).append(ti)
+        for m in by_mat:
+            by_mat[m].sort(key=lambda x: os.path.basename(x.get("path") or "").lower())
+
+        for mat in sorted(by_mat.keys(), key=lambda s: s.lower()):
+            section = self._create_bulk_material_collapsible(mat)
+            self.textures_layout.addWidget(section["frame"])
+            body_layout = section["body_layout"]
+            for ti in by_mat[mat]:
+                has_imp = any(
+                    a.get("attribute") and a.get("attribute") != "skip"
+                    for a in ti.get("assignments", [])
+                )
+                visual = "assigned" if has_imp else "unassigned"
+                w = self._create_texture_entry_widget(ti, visual)
+                if w:
+                    body_layout.addWidget(w)
+
+    def _update_select_textures_button_label(self):
+        btn = self.ui_elements.get(
+            "selectTextureForImportButton"
+        ) or self.ui_elements.get("selectTexturesForImportButton")
+        if not btn or not isValid(btn):
+            return
+        try:
+            if self._is_all_materials_bulk_mode():
+                btn.setText("Select Textures Folder for Import")
+            else:
+                btn.setText("Select Textures For Import")
+        except RuntimeError:
+            pass
+
+    def _select_folder_for_bulk_import(self):
+        start = self._bulk_folder_root or self.search_folder_path or ""
+        folder = QtWidgets.QFileDialog.getExistingDirectory(
+            self,
+            "Select Textures Folder for Import",
+            start,
+        )
+        if not folder:
+            return
+        self.search_folder_path = folder
+        self._run_bulk_folder_scan(folder)
+
+    def _ensure_normal_map_for_mapping(self, material, normal_utility):
+        """aiNormalMap for standardSurface / aiStandardSurface; bump2d for all other shaders."""
+        if normal_utility == "bump2d":
+            return self._ensure_legacy_bump2d(material)
+        return self._ensure_ai_normal_map(material)
+
+    def _ensure_legacy_bump2d(self, material):
+        """
+        Maya bump2d → normalCamera for Lambert / Blinn / Phong (and other non–Standard Surface shaders).
+        Uses tangent-space normal interpretation (bumpInterp) so RGB normal maps display correctly.
+        """
+        bn = "%s_bump2d" % material
+        if not cmds.objExists(bn):
+            bn = cmds.shadingNode("bump2d", asUtility=True, name=bn)
+        try:
+            if cmds.attributeQuery("bumpInterp", node=bn, exists=True):
+                # 0 = bump height, 1 = tangent space normals (Maya default enum order)
+                cmds.setAttr("%s.bumpInterp" % bn, 1)
+        except Exception as e:
+            self._debug_print("[Import] bump2d bumpInterp: %s" % e)
+        try:
+            if not cmds.isConnected("%s.outNormal" % bn, "%s.normalCamera" % material):
+                cmds.connectAttr("%s.outNormal" % bn, "%s.normalCamera" % material, force=True)
+        except Exception:
+            pass
+        return bn
+
+    def _connect_file_to_normal_utility(self, file_node, utility_node, normal_utility):
+        """Wire file texture into aiNormalMap.input or bump2d.bumpValue."""
+        try:
+            if normal_utility == "bump2d":
+                dst_plug = "%s.bumpValue" % utility_node
+            else:
+                dst_plug = "%s.input" % utility_node
+            if not cmds.isConnected("%s.outColor" % file_node, dst_plug):
+                cmds.connectAttr("%s.outColor" % file_node, dst_plug, force=True)
+        except Exception as e:
+            self._debug_print("[Import] normal file -> utility failed: %s" % e)
+
+    def _connect_src_to_reversed_transparency(self, src_plug, material):
+        """
+        Single or triple channel source → reverse → material.transparency (legacy shaders).
+        src_plug: e.g. file.outAlpha or file.outColorR
+        """
+        rev = "%s_opacityRev" % material
+        if not cmds.objExists(rev):
+            rev = cmds.shadingNode("reverse", asUtility=True, name=rev)
+        try:
+            if src_plug.endswith(".outColor"):
+                cmds.connectAttr(src_plug, "%s.input" % rev, force=True)
+            else:
+                for ax in ("R", "G", "B"):
+                    cmds.connectAttr(src_plug, "%s.input%s" % (rev, ax), force=True)
+            cmds.connectAttr("%s.output" % rev, "%s.transparency" % material, force=True)
+        except Exception as e:
+            self._debug_print("[Import] reverse transparency chain failed: %s" % e)
+
+    def _connect_file_to_reversed_transparency(self, file_node, material, ch_pref):
+        """
+        Opacity map (opaque = white) → reverse → transparency (transparent = white), for legacy shaders.
+        ch_pref: "A", "R", "G", "B", or None (prefer full outColor, else alpha on RGB inputs).
+        """
+        cp = ch_pref.upper() if (ch_pref and isinstance(ch_pref, str)) else None
+        try:
+            if cp in (None, "A"):
+                try:
+                    self._connect_src_to_reversed_transparency(
+                        "%s.outColor" % file_node, material
+                    )
+                    return
+                except Exception:
+                    self._connect_src_to_reversed_transparency(
+                        "%s.outAlpha" % file_node, material
+                    )
+                    return
+            if cp == "R":
+                self._connect_src_to_reversed_transparency(
+                    "%s.outColorR" % file_node, material
+                )
+            elif cp == "G":
+                self._connect_src_to_reversed_transparency(
+                    "%s.outColorG" % file_node, material
+                )
+            elif cp == "B":
+                self._connect_src_to_reversed_transparency(
+                    "%s.outColorB" % file_node, material
+                )
+            else:
+                self._connect_src_to_reversed_transparency(
+                    "%s.outColor" % file_node, material
+                )
+        except Exception as e:
+            self._debug_print("[Import] reverse transparency chain failed: %s" % e)
+
     def _get_channel_selection(self, texture_type):
         """
         Return preferred source channel for connections based on checkboxes for this type.
@@ -2113,6 +2861,22 @@ class ImportTxTool(QtWidgets.QWidget):
             except Exception:
                 pass
 
+    def _connect_float_source_to_attr(self, src_plug, material, target_attr):
+        """Connect a single-channel source to a float or color3 attribute (e.g. transmission → transparency)."""
+        if not target_attr:
+            return
+        try:
+            nch = cmds.attributeQuery(target_attr, node=material, numberOfChildren=True)
+            if nch:
+                self._connect_scalar_to_color(src_plug, material, target_attr)
+            else:
+                cmds.connectAttr(src_plug, f"{material}.{target_attr}", force=True)
+        except Exception:
+            try:
+                cmds.connectAttr(src_plug, f"{material}.{target_attr}", force=True)
+            except Exception:
+                pass
+
     def _connect_texture(self, material, texture_type, file_node, rules, channel_pref):
         """
         Wire the file_node to the material according to rules and channel preference.
@@ -2170,6 +2934,16 @@ class ImportTxTool(QtWidgets.QWidget):
             color_space = rules["colorSpace"]  # Fallback to default
         kind = rules["kind"]
 
+        mapping = self._resolve_texture_mapping(material, texture_type)
+        if mapping.get("warning"):
+            self._record_import_warning(mapping["warning"])
+        if mapping.get("skip"):
+            return
+
+        target_attr = mapping.get("target_attr")
+        opacity_mode = mapping.get("opacity_mode")
+        normal_utility = mapping.get("normal_utility") or "aiNormalMap"
+
         # Create or reuse file node
         file_node, path_set = self._ensure_file_node(material, texture_type, file_path, color_space, self.use_udim)
 
@@ -2188,14 +2962,8 @@ class ImportTxTool(QtWidgets.QWidget):
 
         # --- Special: NORMAL ---
         if kind == "normal":
-            # aiNormalMap between file and material.normalCamera
-            nn = self._ensure_ai_normal_map(material)
-            # file (Raw RGB) -> aiNormalMap.input
-            try:
-                if not cmds.isConnected(f"{file_node}.outColor", f"{nn}.input"):
-                    cmds.connectAttr(f"{file_node}.outColor", f"{nn}.input", force=True)
-            except Exception:
-                pass
+            nn = self._ensure_normal_map_for_mapping(material, normal_utility)
+            self._connect_file_to_normal_utility(file_node, nn, normal_utility)
             self._debug_print(f"[Import] {texture_type}: {file_node} -> {nn} -> {material}.normalCamera")
             return
 
@@ -2223,44 +2991,51 @@ class ImportTxTool(QtWidgets.QWidget):
 
         # --- Regular color/float connections ---
         ch_pref = self._get_channel_selection(texture_type)
+        tname = target_attr
+
+        if kind == "color" and opacity_mode == "reverse_to_transparency":
+            self._connect_file_to_reversed_transparency(file_node, material, ch_pref)
+            self._debug_print(
+                f"[Import] {texture_type}: {file_node} -> reverse -> {material}.transparency"
+            )
+            return
 
         if kind == "color":
             # Opacity is "color" in rules but we prefer alpha by default;
             # _get_channel_selection() will return "A" by default for opacity.
             if ch_pref == "A":
-                self._connect_scalar_to_color(f"{file_node}.outAlpha", material, rules["attr"])
+                self._connect_scalar_to_color(f"{file_node}.outAlpha", material, tname)
             elif ch_pref in ("R", "G", "B"):
                 ch_src = {"R": "outColorR", "G": "outColorG", "B": "outColorB"}[ch_pref]
-                self._connect_scalar_to_color(f"{file_node}.{ch_src}", material, rules["attr"])
+                self._connect_scalar_to_color(f"{file_node}.{ch_src}", material, tname)
             else:
                 try:
-                    cmds.connectAttr(f"{file_node}.outColor", f"{material}.{rules['attr']}", force=True)
+                    cmds.connectAttr(f"{file_node}.outColor", f"{material}.{tname}", force=True)
                 except Exception:
                     # fallback replicate from R
-                    self._connect_scalar_to_color(f"{file_node}.outColorR", material, rules["attr"])
+                    self._connect_scalar_to_color(f"{file_node}.outColorR", material, tname)
         else:
             # kind == "float": default prefers Alpha; _get_channel_selection() already did the defaulting
             src = f"{file_node}.outAlpha" if ch_pref == "A" else \
                 f"{file_node}.outColorR" if ch_pref == "R" else \
                     f"{file_node}.outColorG" if ch_pref == "G" else \
                         f"{file_node}.outColorB"
-            try:
-                cmds.connectAttr(src, f"{material}.{rules['attr']}", force=True)
-            except Exception:
-                pass
+            self._connect_float_source_to_attr(src, material, tname)
 
-        self._debug_print(f"[Import] {texture_type}: {file_node} -> {material}.{rules['attr']}")
+        self._debug_print(f"[Import] {texture_type}: {file_node} -> {material}.{tname}")
 
-    def _import_packed_texture(self, file_path, assignments):
+    def _import_packed_texture(self, file_path, assignments, material=None):
         """
         Import a packed texture with multiple attribute assignments and channel selections.
         assignments: [{"attribute": "roughness", "channel": "b"}, {"attribute": "metallic", "channel": "g"}, ...]
+        If material is None, uses the material combo box current text.
         """
         if not assignments:
             return
         
-        mat_combo = self._get_widget("materialComboBox", QtWidgets.QComboBox)
-        material = mat_combo.currentText() if mat_combo else ""
+        if material is None:
+            mat_combo = self._get_widget("materialComboBox", QtWidgets.QComboBox)
+            material = mat_combo.currentText() if mat_combo else ""
         if not material:
             self._debug_print("[Import] No material selected for packed texture import")
             return
@@ -2363,21 +3138,31 @@ class ImportTxTool(QtWidgets.QWidget):
             
             rules = TEXTURE_RULES[texture_type]
             kind = rules["kind"]
-            
-            # Determine source channel
+
+            mapping = self._resolve_texture_mapping(material, texture_type)
+            if mapping.get("warning"):
+                self._record_import_warning(mapping["warning"])
+            if mapping.get("skip"):
+                continue
+
+            target_attr = mapping.get("target_attr")
+            opacity_mode = mapping.get("opacity_mode")
+            normal_utility = mapping.get("normal_utility") or "aiNormalMap"
+
+            # Determine source channel (JSON / UI may use lower case; match _import_one_type_with_channel)
             if channel:
-                if channel == "A":
+                cl = channel.lower()
+                if cl == "a":
                     src = f"{file_node_name}.outAlpha"
-                elif channel == "R":
+                elif cl == "r":
                     src = f"{file_node_name}.outColorR"
-                elif channel == "G":
+                elif cl == "g":
                     src = f"{file_node_name}.outColorG"
-                elif channel == "B":
+                elif cl == "b":
                     src = f"{file_node_name}.outColorB"
                 else:
-                    src = f"{file_node_name}.outColorR"  # fallback
+                    src = f"{file_node_name}.outColorR"
             else:
-                # Use default channel for this type
                 ch_pref = self._default_channel_for_type(texture_type)
                 if ch_pref == "A":
                     src = f"{file_node_name}.outAlpha"
@@ -2389,39 +3174,38 @@ class ImportTxTool(QtWidgets.QWidget):
                     src = f"{file_node_name}.outColorB"
                 else:
                     src = f"{file_node_name}.outColorR"
-            
+
             # Connect based on kind
-            if kind == "color":
-                self._connect_scalar_to_color(src, material, rules["attr"])
-            elif kind == "float":
-                try:
-                    cmds.connectAttr(src, f"{material}.{rules['attr']}", force=True)
-                except Exception as e:
-                    self._debug_print(f"[Import] Failed to connect {src} to {material}.{rules['attr']}: {e}")
-            elif kind == "normal":
-                nn = self._ensure_ai_normal_map(material)
-                try:
-                    if not cmds.isConnected(f"{file_node_name}.outColor", f"{nn}.input"):
-                        cmds.connectAttr(f"{file_node_name}.outColor", f"{nn}.input", force=True)
-                except Exception as e:
-                    self._debug_print(f"[Import] Failed to connect normal map: {e}")
+            if kind == "normal":
+                nn = self._ensure_normal_map_for_mapping(material, normal_utility)
+                self._connect_file_to_normal_utility(file_node_name, nn, normal_utility)
             elif kind == "displacement":
-                # Displacement needs to connect to the shading group's displacementShader
                 disp_node, sg = self._ensure_displacement_network(material)
                 try:
-                    if not cmds.isConnected(src, f"{disp_node}.displacement"):
-                        incoming = cmds.listConnections(f"{disp_node}.displacement", plugs=True) or []
-                        for plug in incoming:
-                            try:
-                                cmds.disconnectAttr(plug, f"{disp_node}.displacement")
-                            except Exception:
-                                pass
-                        cmds.connectAttr(src, f"{disp_node}.displacement", force=True)
-                        self._debug_print(f"[Import] Packed displacement: {file_node_name}.{src} -> {disp_node}.displacement (SG={sg})")
+                    incoming = cmds.listConnections(f"{disp_node}.displacement", plugs=True) or []
+                    for plug in incoming:
+                        try:
+                            cmds.disconnectAttr(plug, f"{disp_node}.displacement")
+                        except Exception:
+                            pass
+                    cmds.connectAttr(src, f"{disp_node}.displacement", force=True)
+                    self._debug_print(
+                        f"[Import] Packed displacement: {file_node_name}.{src} -> "
+                        f"{disp_node}.displacement (SG={sg})"
+                    )
                 except Exception as e:
                     self._debug_print(f"[Import] Failed to connect displacement: {e}")
+            elif kind == "color" and opacity_mode == "reverse_to_transparency":
+                self._connect_src_to_reversed_transparency(src, material)
+            elif kind == "color":
+                self._connect_scalar_to_color(src, material, target_attr)
+            elif kind == "float":
+                self._connect_float_source_to_attr(src, material, target_attr)
             
-            self._debug_print(f"[Import] Packed texture: {file_node_name}.{src} -> {material}.{rules.get('attr', 'N/A')} (channel={channel or 'default'}, kind={kind})")
+            self._debug_print(
+                f"[Import] Packed texture: {file_node_name}.{src} -> {material}.{target_attr} "
+                f"(channel={channel or 'default'}, kind={kind})"
+            )
 
     def open_texture_importer_settings(self):
         if not hasattr(self, "texture_importer_settings_ui") or self.texture_importer_settings_ui is None:
@@ -2435,26 +3219,35 @@ class ImportTxTool(QtWidgets.QWidget):
 
 
     def populate_material_combo_box(self):
-        """Populates the material combo box with all materials in the scene and an 'All Materials' option."""
-        self.ui_elements["materialComboBox"].clear()
+        """Populates the material combo box with all materials in the scene and an All Materials bulk option."""
+        cb = self.ui_elements.get("materialComboBox")
+        if not cb:
+            return
+        cb.clear()
 
-        # Add "All Materials" option first
-        self.ui_elements["materialComboBox"].addItem("All Materials")
+        # Bulk folder import mode (first entry)
+        cb.addItem(BULK_ALL_MATERIALS_LABEL)
 
         all_materials = self.get_all_materials_sorted()
-        self.ui_elements["materialComboBox"].addItems(all_materials)
+        cb.addItems(all_materials)
 
         # Pre-select the material passed during initialization, if any
         if self.material:
-            index = self.ui_elements["materialComboBox"].findText(self.material)
+            index = cb.findText(self.material)
             if index >= 0:
-                self.ui_elements["materialComboBox"].setCurrentIndex(index)
+                cb.setCurrentIndex(index)
             else:
-                # If the material is not found, default to "All Materials"
-                self.ui_elements["materialComboBox"].setCurrentIndex(0)
+                # If the material is not found, default to bulk All Materials entry
+                cb.setCurrentIndex(0)
         else:
-            # If no material is specified, default to "All Materials"
-            self.ui_elements["materialComboBox"].setCurrentIndex(0)
+            # If no material is specified, default to bulk All Materials entry
+            cb.setCurrentIndex(0)
+
+        # Make the active material name pop (same cyan/green accent as UI)
+        try:
+            cb.setStyleSheet(self._get_combo_stylesheet(UI_ACCENT_CYAN))
+        except Exception:
+            pass
 
     def get_all_materials_sorted(self):
         """Gets all materials in the scene, sorted alphabetically, excluding specific default materials."""
@@ -3117,9 +3910,15 @@ class ImportTxTool(QtWidgets.QWidget):
         Populate the scroll area with texture entries from self.selected_textures.
         Clears current entries and creates new ones.
         Unassigned textures are ordered at the top.
+        In All Materials bulk mode, shows the same per-file rows grouped under collapsible material headers.
         """
         # Clear existing texture entries
         self._clear_texture_entries()
+
+        if self._is_all_materials_bulk_mode():
+            self._populate_bulk_mode_scroll()
+            self._update_import_button_label()
+            return
         
         # Create entries for unassigned textures first (at top)
         for texture_info in self.selected_textures["unassigned"]:
@@ -3612,20 +4411,12 @@ class ImportTxTool(QtWidgets.QWidget):
         
         for idx, combo in enumerate(widget_info["attribute_combos"]):
             attribute = combo.itemData(combo.currentIndex())
-            if attribute == "skip":
-                continue
-            
-            # Get checkboxes for this assignment
             checkboxes = widget_info["channel_checkboxes"][idx] if idx < len(widget_info["channel_checkboxes"]) else {}
-            
             channel = None
-            # Find checked channel
             for ch_name, cb in checkboxes.items():
                 if cb and cb.isChecked():
                     channel = ch_name.lower()
                     break
-            
-            # Use colorspace from main combobox (shared for all assignments of this texture)
             assignments.append({
                 "attribute": attribute,
                 "channel": channel,
@@ -3896,7 +4687,7 @@ QComboBox {{
 QComboBox QAbstractItemView {{
     background-color: #1e1e1e;
     border: 1px solid #3a3a3a;
-    color: #00f7c8;
+    color: {color};
     selection-background-color: #2f3f3f;
     selection-color: #ffffff;
 }}
@@ -4024,6 +4815,104 @@ QLabel {
 """
 
 
+class BulkImportReviewDialog(QtWidgets.QDialog):
+    """
+    Confirm bulk import from the main texture list (reflects current UI: slots, skip, channels).
+    Material names use the tool accent blue; rows with nothing to import (skip / no slot) are red.
+    """
+
+    def __init__(self, parent):
+        super(BulkImportReviewDialog, self).__init__(parent)
+        self.setWindowTitle("Review bulk texture import")
+        self.setModal(True)
+        self.resize(760, 620)
+
+        main = QtWidgets.QVBoxLayout(self)
+        main.setContentsMargins(10, 10, 10, 10)
+        main.setSpacing(8)
+
+        title = QtWidgets.QLabel(
+            "Review assignments from the list above (edits in the main window are included). "
+            "Red rows are skipped or have no import target. Confirm to import onto scene materials."
+        )
+        title.setWordWrap(True)
+        title.setStyleSheet(
+            "font-family: 'Segoe UI'; font-size: 14px; color: #d6d6d6;"
+        )
+        main.addWidget(title)
+
+        tree = QtWidgets.QTreeWidget()
+        tree.setAlternatingRowColors(True)
+        tree.setHeaderLabels(["Slot / packed", "File"])
+        tree.setStyleSheet(scroll_area_stylesheet)
+        tree.header().setStretchLastSection(True)
+
+        tool = parent
+        bulk_items = []
+        for status in ("unassigned", "assigned"):
+            for ti in tool.selected_textures.get(status, []):
+                if ti.get("target_material"):
+                    bulk_items.append(ti)
+
+        by_mat = {}
+        for ti in bulk_items:
+            by_mat.setdefault(ti["target_material"], []).append(ti)
+        for m in by_mat:
+            by_mat[m].sort(key=lambda x: os.path.basename(x.get("path") or "").lower())
+
+        mat_header_brush = QtGui.QBrush(QtGui.QColor(BULK_MATERIAL_HEADER_COLOR))
+        skip_red = QtGui.QBrush(QtGui.QColor("#ff3b3b"))
+
+        for mat in sorted(by_mat.keys(), key=lambda s: s.lower()):
+            parent_it = QtWidgets.QTreeWidgetItem([mat, ""])
+            parent_it.setFirstColumnSpanned(False)
+            font = parent_it.font(0)
+            font.setBold(True)
+            parent_it.setFont(0, font)
+            parent_it.setForeground(0, mat_header_brush)
+            tree.addTopLevelItem(parent_it)
+
+            for ti in by_mat[mat]:
+                assigns = ti.get("assignments", [])
+                active = [
+                    a for a in assigns
+                    if a.get("attribute") and a.get("attribute") != "skip"
+                ]
+                skipped_only = not active
+                if skipped_only:
+                    label = "— skip import —"
+                elif len(active) > 1:
+                    label = "Packed (%s)" % ", ".join(
+                        TextureSearchNamesUI.get_display_name(a["attribute"])
+                        for a in active
+                    )
+                else:
+                    label = TextureSearchNamesUI.get_display_name(active[0]["attribute"])
+                path = ti.get("path") or ""
+                child = QtWidgets.QTreeWidgetItem(
+                    parent_it,
+                    [label, os.path.basename(path)],
+                )
+                if skipped_only:
+                    for col in (0, 1):
+                        child.setForeground(col, skip_red)
+
+            parent_it.setExpanded(True)
+
+        main.addWidget(tree, 1)
+
+        btns = QtWidgets.QHBoxLayout()
+        btns.addStretch(1)
+        import_btn = QtWidgets.QPushButton("Import Textures")
+        cancel_btn = QtWidgets.QPushButton("Cancel")
+        btns.addWidget(import_btn)
+        btns.addWidget(cancel_btn)
+        main.addLayout(btns)
+
+        import_btn.clicked.connect(self.accept)
+        cancel_btn.clicked.connect(self.reject)
+
+
 class PreviewImportDialog(QtWidgets.QDialog):
     """
     Simple scrollable preview of what will be imported:
@@ -4104,8 +4993,9 @@ class PreviewImportDialog(QtWidgets.QDialog):
 class TextureSearchNamesUI(QtWidgets.QWidget):
     """
     Loads textureSearchnames.ui, then dynamically builds the scroll area content
-    for each texture type (label + line edit). Finally, it saves the entered keywords
-    into a JSON file under <script_dir>/settings/texture_search_names.json.
+    for each texture type (label + line edit). Keywords load from user JSON, legacy
+    Settings/, or texture_search_names_default.json; save writes only
+    <script_dir>/settings/texture_search_names.json.
     """
     
     @staticmethod
@@ -4268,13 +5158,13 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
                 QLabel {
                     font-family: 'Segoe UI';
                     font-size: 12px;
-                    color: #ffffff;
+                    color: %s;
                     background-color: #444444;
                     border: 2px solid #444444;
                     border-radius: 6px;
                     padding: 2px 6px;
                 }
-            """)
+            """ % UI_ACCENT_CYAN)
             row_layout.addWidget(label)
 
             # 4b) A QLineEdit with objectName "<textureType>TextureNameLineEdit"
@@ -4569,84 +5459,47 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
             plus_btn.clicked.connect(lambda: self._add_packed_assignment_row(parent_layout, assignment_rows_list))
             row_layout.addWidget(plus_btn)
         else:
-            # Add spacer to maintain alignment when plus button is not shown
-            spacer = QtWidgets.QSpacerItem(35, 24, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+            # Match first row: [+] is 24px fixed + ~3px from frame/border vs. bare spacer
+            spacer = QtWidgets.QSpacerItem(27, 24, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
             row_layout.addItem(spacer)
         
-        # Minus button to delete this row (skip for the primary row)
-        minus_btn = None
-        if not is_first_row:
-            minus_btn = QtWidgets.QPushButton("-")
-            minus_btn.setFixedWidth(24)
-            minus_btn.setFixedHeight(24)
-            minus_btn.setStyleSheet("""
-                QPushButton {
-                    font-family: 'Segoe UI';
-                    font-size: 14px;
-                    font-weight: bold;
-                    color: #ffffff;
-                    background-color: #666666;
-                    border: 2px solid #444444;
-                    border-radius: 4px;
-                }
-                QPushButton:hover {
-                    background-color: #888888;
-                }
-                QPushButton:pressed {
-                    background-color: #1a1a1a;
-                }
-            """)
-            minus_btn.clicked.connect(lambda: self._remove_packed_assignment_row(row_widget, parent_layout, assignment_rows_list))
-            row_layout.addWidget(minus_btn)
-        else:
-            minus_spacer = QtWidgets.QSpacerItem(24, 24, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-            row_layout.addItem(minus_spacer)
+        minus_btn = QtWidgets.QPushButton("-")
+        minus_btn.setFixedWidth(24)
+        minus_btn.setFixedHeight(24)
+        minus_btn.setStyleSheet("""
+            QPushButton {
+                font-family: 'Segoe UI';
+                font-size: 14px;
+                font-weight: bold;
+                color: #ffffff;
+                background-color: #666666;
+                border: 2px solid #444444;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #888888;
+            }
+            QPushButton:pressed {
+                background-color: #1a1a1a;
+            }
+            QPushButton:disabled {
+                color: #888888;
+                background-color: #555555;
+            }
+        """)
+        minus_btn.clicked.connect(
+            lambda: self._remove_packed_assignment_row(row_widget, parent_layout, assignment_rows_list)
+        )
+        row_layout.addWidget(minus_btn)
         
         # Disable wheel scrolling on combobox (since we're in a scroll area)
         class NoWheelComboBox(QtWidgets.QComboBox):
             def wheelEvent(self, event):
                 event.ignore()
         
-        # Attribute combobox
+        # Attribute combobox (same cyan accent as texture importer combos)
         attr_combo = NoWheelComboBox()
-        attr_combo.setStyleSheet("""
-            QComboBox {
-                font-family: 'Segoe UI';
-                font-size: 12px;
-                color: #f2f2f2;
-                background-color: #666666;
-                border: 1px solid #555555;
-                border-radius: 4px;
-                padding: 2px 6px;
-                min-height: 18px;
-            }
-            QComboBox:hover {
-                background-color: #777777;
-            }
-            QComboBox::drop-down {
-                border: none;
-                width: 20px;
-                background-color: transparent;
-            }
-            QComboBox::down-arrow {
-                image: none;
-                border-left: 5px solid transparent;
-                border-right: 5px solid transparent;
-                border-top: 6px solid #f2f2f2;
-                width: 0px;
-                height: 0px;
-                margin-right: 4px;
-            }
-            QComboBox::down-arrow:hover {
-                border-top-color: #ffffff;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #666666;
-                border: 1px solid #555555;
-                selection-background-color: #888888;
-                color: #f2f2f2;
-            }
-        """)
+        attr_combo.setStyleSheet(combo_stylesheet_template.format(color=UI_ACCENT_CYAN))
         attr_combo.setMinimumWidth(120)
         
         # Add "Select Attribute" as first item
@@ -4693,7 +5546,17 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         
         parent_layout.addWidget(row_widget)
         
+        self._update_packed_assignment_minus_enabled(assignment_rows_list)
+        
         return row_data
+
+    def _update_packed_assignment_minus_enabled(self, assignment_rows_list):
+        """Minus is shown on every row; disabled when only one row remains."""
+        can_remove = len(assignment_rows_list) > 1
+        for row_data in assignment_rows_list:
+            mb = row_data.get("minus_btn")
+            if mb:
+                mb.setEnabled(can_remove)
     
     def _remove_packed_assignment_row(self, row_widget, parent_layout, assignment_rows_list):
         """Remove a packed texture assignment row."""
@@ -4710,29 +5573,13 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         # Remove from layout and delete widget
         parent_layout.removeWidget(row_widget)
         row_widget.deleteLater()
+        self._update_packed_assignment_minus_enabled(assignment_rows_list)
 
     def _load_texture_search_names(self):
         """
-        Return a dict of {texture_type: [keywords,...]} from Settings/texture_search_names.json.
-        Falls back to legacy 'settings' path. Returns {} if not present or malformed.
+        Return raw dict from user JSON, legacy Settings path, or texture_search_names_default.json.
         """
-        base_dir = os.path.dirname(__file__)
-        candidates = [
-            os.path.join(base_dir, "Settings", "texture_search_names.json"),
-            os.path.join(base_dir, "settings", "texture_search_names.json"),  # legacy fallback
-        ]
-        for path in candidates:
-            try:
-                with open(path, "r") as f:
-                    data = json.load(f)
-                if isinstance(data, dict):
-                    return data
-                else:
-                    print(f"[DEBUG] texture_search_names.json contained non-dict data ({path}). Using defaults.")
-                    return {}
-            except Exception:
-                continue
-        return {}
+        return load_texture_search_names_raw_dict()
 
     def _apply_saved_texture_names(self):
         """
@@ -4807,6 +5654,7 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
                             attribute=attr,
                             channel=channel
                         )
+                    self._update_packed_assignment_minus_enabled(assignment_rows)
 
 
     def setup_connections(self):
@@ -5089,7 +5937,7 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         Gathers keywords from each "<textureType>TextureNameLineEdit", builds a dict:
           { "baseColor": [...], "roughness": [...], ... }
         Also saves packed texture data.
-        Then writes it out to "<script_dir>/Settings/texture_search_names.json".
+        Writes "<script_dir>/settings/texture_search_names.json" only (never default JSON).
         """
         texture_names = {}
         for ttype in self.texture_types:
@@ -5134,15 +5982,14 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         if packed_textures:
             texture_names["packedTextures"] = packed_textures
 
-        # Ensure Settings folder exists (match other readers/writers)
         script_dir = os.path.dirname(__file__)
-        settings_folder = os.path.join(script_dir, "Settings")
+        settings_folder = os.path.join(script_dir, "settings")
         if not os.path.isdir(settings_folder):
             os.makedirs(settings_folder)
 
-        save_path = os.path.join(settings_folder, "texture_search_names.json")
+        save_path = _texture_search_names_user_path()
         try:
-            with open(save_path, "w") as f:
+            with open(save_path, "w", encoding="utf-8") as f:
                 json.dump(texture_names, f, indent=4)
             cmds.confirmDialog(title="Success",
                                message="Texture search names saved successfully.",
@@ -5392,20 +6239,11 @@ class TextureImporterSettingsUI(QtWidgets.QWidget):
         self._update_custom_path_widgets()
 
     def _load_settings(self):
-        """Read JSON from main quick materials settings and return texture_importer section."""
-        path = os.path.join(os.path.dirname(__file__), "settings", "quick_materials_settings.json")
-        try:
-            with open(path, "r") as f:
-                all_settings = json.load(f)
-            if isinstance(all_settings, dict) and 'texture_importer' in all_settings:
-                print(f"[DEBUG] Loaded Texture Importer settings from main settings: {path}")
-                return all_settings['texture_importer']
-            else:
-                print(f"[DEBUG] Main settings JSON missing texture_importer section at {path}; using defaults.")
-                return {}
-        except Exception as e:
-            print(f"[DEBUG] Failed to read main settings at {path}: {e}")
-            return {}
+        """Read texture_importer section from user JSON, else packaged default JSON."""
+        all_settings = _load_quick_materials_all_settings()
+        if isinstance(all_settings, dict) and "texture_importer" in all_settings:
+            return all_settings["texture_importer"]
+        return {}
 
 
 
@@ -5449,14 +6287,13 @@ class TextureImporterSettingsUI(QtWidgets.QWidget):
             settings_dir = os.path.join(script_dir, "settings")
             os.makedirs(settings_dir, exist_ok=True)
             settings_path = os.path.join(settings_dir, "quick_materials_settings.json")
-            
-            # Load existing settings or create new structure
-            import json
+
             if os.path.exists(settings_path):
-                with open(settings_path, "r") as f:
+                with open(settings_path, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
             else:
-                all_settings = {
+                merged = _load_quick_materials_all_settings()
+                all_settings = merged if isinstance(merged, dict) and merged else {
                     'material_creator': {},
                     'material_list': {},
                     'texture_importer': {}
@@ -5466,7 +6303,7 @@ class TextureImporterSettingsUI(QtWidgets.QWidget):
             all_settings['texture_importer'] = data
             
             # Save back to file
-            with open(settings_path, "w") as f:
+            with open(settings_path, "w", encoding="utf-8") as f:
                 json.dump(all_settings, f, indent=2)
                 
             # Show yellow notification instead of dialog

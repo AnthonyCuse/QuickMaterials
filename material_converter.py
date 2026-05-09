@@ -107,6 +107,162 @@ TYPE_ATTRS = {
     ],
 }
 
+# Shaders the texture importer treats as "legacy" (mapped from Standard Surface slots)
+LEGACY_SHADER_TYPES = frozenset({"lambert", "blinn", "phong"})
+STANDARD_SHADER_FAMILY = frozenset({"standardSurface", "aiStandardSurface"})
+
+
+def resolve_texture_import_mapping(material, logical_texture_type, std_attr, kind):
+    """
+    Map a texture-importer logical slot (Standard Surface–oriented) onto the given
+    material. Mirrors STD_TO_LEGACY_COMMON / STD_TO_LEGACY_TARGET used elsewhere
+    in this module.
+
+    Returns a dict with:
+      target_attr: str or None — plug to connect (None = skip / use special path)
+      opacity_mode: None | "reverse_to_transparency" — opacity file → reverse → transparency
+      normal_utility: "aiNormalMap" | "bump2d" — Standard Surface uses aiNormalMap; legacy uses bump2d
+      warning: str or None — user-facing message (missing attribute or approximate mapping)
+      skip: bool — if True, do not create connections for this slot
+    """
+    out = {
+        "target_attr": std_attr,
+        "opacity_mode": None,
+        "normal_utility": "aiNormalMap",
+        "warning": None,
+        "skip": False,
+    }
+    try:
+        if not material or not cmds.objExists(material):
+            out["warning"] = "Material '%s' does not exist." % (material,)
+            out["skip"] = True
+            return out
+        shader_type = cmds.nodeType(material)
+    except Exception:
+        out["warning"] = "Could not query node type for material '%s'." % (material,)
+        out["skip"] = True
+        return out
+
+    if kind == "displacement" or std_attr is None:
+        out["target_attr"] = None
+        out["normal_utility"] = "aiNormalMap"
+        return out
+
+    if shader_type in STANDARD_SHADER_FAMILY:
+        out["normal_utility"] = "aiNormalMap"
+        if not _exists_attr(material, std_attr):
+            out["warning"] = (
+                "Texture import: %s.%s does not exist (shader: %s, slot %s)."
+                % (material, std_attr, shader_type, logical_texture_type)
+            )
+            out["skip"] = True
+        return out
+
+    if shader_type in LEGACY_SHADER_TYPES:
+        out["normal_utility"] = "bump2d"
+        target = None
+        warn = None
+        opacity_mode = None
+
+        if std_attr == "baseColor":
+            target = "color"
+        elif std_attr == "normalCamera":
+            target = "normalCamera"
+        elif std_attr == "specularRoughness":
+            if shader_type == "blinn":
+                target = "eccentricity"
+            elif shader_type == "phong":
+                target = "cosinePower"
+            else:
+                warn = (
+                    "Texture import: roughness skipped — Lambert has no roughness "
+                    "equivalent (%s)." % (material,)
+                )
+        elif std_attr == "opacity":
+            target = "transparency"
+            opacity_mode = "reverse_to_transparency"
+        elif std_attr == "metalness":
+            warn = (
+                "Texture import: metalness skipped — %s has no metalness input (%s)."
+                % (shader_type, material)
+            )
+        elif std_attr == "emission":
+            warn = (
+                "Texture import: emission weight skipped — %s has no separate "
+                "emission weight (%s)." % (shader_type, material)
+            )
+        elif std_attr == "emissionColor":
+            target = "incandescence"
+        elif std_attr == "specular":
+            if shader_type == "lambert":
+                warn = (
+                    "Texture import: specular weight skipped — Lambert has no specular "
+                    "channel (%s)." % (material,)
+                )
+            else:
+                target = "reflectivity"
+        elif std_attr == "specularColor":
+            if shader_type == "lambert":
+                warn = (
+                    "Texture import: specular color skipped — Lambert has no specular "
+                    "color (%s)." % (material,)
+                )
+            else:
+                target = "specularColor"
+        elif std_attr == "transmission":
+            target = "transparency"
+            warn = (
+                "Texture import: transmission weight mapped to %s.transparency "
+                "(approximate for %s)."
+                % (material, shader_type)
+            )
+        elif std_attr == "transmissionColor":
+            target = "transparency"
+            warn = (
+                "Texture import: transmission color mapped to %s.transparency "
+                "(approximate for %s)."
+                % (material, shader_type)
+            )
+        elif std_attr in (
+            "subsurface",
+            "subsurfaceColor",
+            "coat",
+            "coatRoughness",
+        ):
+            warn = (
+                "Texture import: %s skipped — not supported on %s (%s)."
+                % (logical_texture_type, shader_type, material)
+            )
+        else:
+            warn = (
+                "Texture import: %s (%s) has no mapping for %s; skipped."
+                % (logical_texture_type, std_attr, shader_type)
+            )
+
+        if target and not _exists_attr(material, target):
+            extra = " Attribute %s not found on %s." % (target, material)
+            warn = (warn + extra) if warn else ("Texture import:" + extra)
+            target = None
+
+        if not target:
+            out["skip"] = True
+        out["target_attr"] = target
+        out["opacity_mode"] = opacity_mode
+        if warn:
+            out["warning"] = warn
+        return out
+
+    # Unknown shader: try Standard Surface attribute names as-is; normals use Maya bump2d
+    out["normal_utility"] = "bump2d"
+    if _exists_attr(material, std_attr):
+        return out
+    out["warning"] = (
+        "Texture import: %s.%s does not exist (shader: %s, slot %s)."
+        % (material, std_attr, shader_type, logical_texture_type)
+    )
+    out["skip"] = True
+    return out
+
 
 def _phong_power_to_roughness(n):
     try:

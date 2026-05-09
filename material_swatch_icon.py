@@ -262,6 +262,34 @@ class MaterialSwatchIcon(QtWidgets.QLabel):
         
         # Make it clickable
         self.setCursor(QtCore.Qt.PointingHandCursor)
+
+    def set_icon_size(self, new_size):
+        """
+        Resize the widget and regenerate the swatch pixmap at the new resolution.
+        Avoids blurry scaling when list entry scale changes after initial load.
+        """
+        new_size = int(max(8, new_size))
+        if new_size == getattr(self, "icon_size", None) and getattr(self, "_swatch_loaded", False):
+            return
+        self.icon_size = new_size
+        self.setFixedSize(new_size, new_size)
+        r = max(1, new_size // 2)
+        bg = getattr(self, "_bg_color", "#3a3a3a")
+        self.setStyleSheet(
+            f"""
+            QLabel {{
+                background-color: {bg};
+                border: none;
+                border-radius: {r}px;
+            }}
+            """
+        )
+        self._swatch_pixmap = None
+        invalidate_swatch_cache(self.material_name)
+        try:
+            QtCore.QTimer.singleShot(0, self.load_swatch)
+        except Exception:
+            self.load_swatch()
     
     def load_swatch(self):
         """Load and display the shader swatch icon."""

@@ -1,0 +1,18 @@
+{
+  "material_creator": {
+    "name_prefix": "M_",
+    "name_suffix": "",
+    "attribute_frame_visible_colorPickerFrame": true,
+    "attribute_frame_visible_roughnessSliderFrame": true,
+    "attribute_frame_visible_metalnessSliderFrame": false,
+    "attribute_frame_visible_emissionSliderFrame": false,
+    "attribute_frame_visible_opacitySliderFrame": false,
+    "attribute_frame_visible_transmissionSliderFrame": false,
+    "attribute_frame_visible_subsurfaceSliderFrame": false
+  },
+  "material_list": {},
+  "texture_importer": {
+    "default_mode": "maya_file",
+    "custom_path": ""
+  }
+}

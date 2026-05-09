@@ -50,6 +50,9 @@ import weakref  # guarded owner refs when QPointer is unavailable
 import QuickMaterials.material_converter
 importlib.reload(QuickMaterials.material_converter)
 
+import QuickMaterials.uv_tile_preview
+importlib.reload(QuickMaterials.uv_tile_preview)
+
 # Import Material Swatch Icon
 try:
     from . import material_swatch_icon
@@ -102,6 +105,37 @@ except Exception:
 importlib.reload(texture_importer)
 ImportTxTool = texture_importer.ImportTxTool
 # ------------------------------------------------------------------------------
+
+
+def _qm_settings_dir():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings")
+
+
+def quick_materials_user_settings_path():
+    """Writable user settings (overwritten when the user saves)."""
+    return os.path.join(_qm_settings_dir(), "quick_materials_settings.json")
+
+
+def quick_materials_default_settings_path():
+    """Shipped defaults; never overwritten by the tool."""
+    return os.path.join(_qm_settings_dir(), "quick_materials_settings_default.json")
+
+
+def load_quick_materials_settings_full_dict():
+    """
+    Load merged settings: user JSON if present, else default JSON, else {}.
+    Saves always go to quick_materials_settings.json only.
+    """
+    for path in (quick_materials_user_settings_path(), quick_materials_default_settings_path()):
+        try:
+            if os.path.isfile(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            continue
+    return {}
 
 
 class LiveWidgetDict(dict):
@@ -2871,19 +2905,18 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
         cmds.inViewMessage(amg="<hl>✔ Settings restored to defaults</hl>", pos="topCenter", fade=True)
     
     def _reset_settings_file_to_defaults(self):
-        """Reset the settings file (quick_materials_settings.json) to defaults."""
+        """Reset the user settings file from quick_materials_settings_default.json (or built-in fallback)."""
         try:
             script_dir = os.path.dirname(__file__)
             settings_dir = os.path.join(script_dir, "settings")
             os.makedirs(settings_dir, exist_ok=True)
-            settings_path = os.path.join(settings_dir, "quick_materials_settings.json")
-            
-            # Default settings
-            default_settings = {
+            user_path = os.path.join(settings_dir, "quick_materials_settings.json")
+            packaged_default_path = os.path.join(settings_dir, "quick_materials_settings_default.json")
+
+            builtin_settings = {
                 'material_creator': {
                     'name_prefix': 'M_',
                     'name_suffix': '',
-                    # Only color and roughness visible by default
                     'attribute_frame_visible_colorPickerFrame': True,
                     'attribute_frame_visible_roughnessSliderFrame': True,
                     'attribute_frame_visible_metalnessSliderFrame': False,
@@ -2898,10 +2931,19 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
                     'custom_path': ''
                 }
             }
-            
-            # Write default settings to file
-            with open(settings_path, 'w') as f:
-                json.dump(default_settings, f, indent=2)
+
+            data = None
+            if os.path.isfile(packaged_default_path):
+                try:
+                    with open(packaged_default_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                except Exception:
+                    data = None
+            if not isinstance(data, dict):
+                data = builtin_settings
+
+            with open(user_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
         except Exception as e:
             print(f"[QuickMaterials] Failed to reset settings file to defaults: {e}")
     
@@ -2988,71 +3030,36 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
         # Apply material creator attribute frame visibility settings
         # Load from main settings JSON, not just texture_importer section
         try:
-            script_dir = os.path.dirname(__file__)
-            settings_path = os.path.join(script_dir, "settings", "quick_materials_settings.json")
-            if os.path.exists(settings_path):
-                with open(settings_path, "r") as f:
-                    all_settings = json.load(f)
-                    mc_settings = all_settings.get('material_creator', {})
-                    
-                    # Apply attribute frame visibility checkboxes
-                    if hasattr(self, '_attribute_checkbox_to_frame'):
-                        for checkbox_name, frame_name in self._attribute_checkbox_to_frame.items():
-                            setting_key = f"attribute_frame_visible_{frame_name}"
-                            if setting_key in mc_settings:
-                                cb = self.ui_elements.get(checkbox_name)
-                                if cb:
-                                    # Temporarily block signals to avoid triggering updates while loading
-                                    cb.blockSignals(True)
-                                    cb.setChecked(mc_settings[setting_key])
-                                    cb.blockSignals(False)
-                    # Apply material naming prefix/suffix if present
-                    prefix_le = self.ui_elements.get("materialNamingPrefixLineEdit")
-                    suffix_le = self.ui_elements.get("materialNamingSuffixLineEdit")
-                    if prefix_le:
-                        prefix_le.setText(mc_settings.get('name_prefix', 'M_'))
-                    if suffix_le:
-                        suffix_le.setText(mc_settings.get('name_suffix', ''))
+            all_settings = load_quick_materials_settings_full_dict()
+            if all_settings:
+                mc_settings = all_settings.get('material_creator', {})
+
+                # Apply attribute frame visibility checkboxes
+                if hasattr(self, '_attribute_checkbox_to_frame'):
+                    for checkbox_name, frame_name in self._attribute_checkbox_to_frame.items():
+                        setting_key = f"attribute_frame_visible_{frame_name}"
+                        if setting_key in mc_settings:
+                            cb = self.ui_elements.get(checkbox_name)
+                            if cb:
+                                cb.blockSignals(True)
+                                cb.setChecked(mc_settings[setting_key])
+                                cb.blockSignals(False)
+                prefix_le = self.ui_elements.get("materialNamingPrefixLineEdit")
+                suffix_le = self.ui_elements.get("materialNamingSuffixLineEdit")
+                if prefix_le:
+                    prefix_le.setText(mc_settings.get('name_prefix', 'M_'))
+                if suffix_le:
+                    suffix_le.setText(mc_settings.get('name_suffix', ''))
         except Exception as e:
             pass
 
     def _load_settings(self):
-        """Load texture importer settings from main quick materials settings JSON."""
-        path = os.path.join(os.path.dirname(__file__), "settings", "quick_materials_settings.json")
-        try:
-            with open(path, "r") as f:
-                all_settings = json.load(f)
-            if isinstance(all_settings, dict) and 'texture_importer' in all_settings:
-                return all_settings['texture_importer']
-            else:
-                return {}
-        except FileNotFoundError:
-            # Create default settings file
-            self._create_default_settings_file(path)
-            return {}
-        except Exception as e:
-            return {}
-
-    def _create_default_settings_file(self, path):
-        """Create a default settings file with empty texture importer settings."""
-        try:
-            script_dir = os.path.dirname(__file__)
-            settings_dir = os.path.join(script_dir, "settings")
-            os.makedirs(settings_dir, exist_ok=True)
-            
-            default_settings = {
-                'material_creator': {},
-                'material_list': {},
-                'texture_importer': {
-                    'default_mode': 'maya_file',
-                    'custom_path': ''
-                }
-            }
-            
-            with open(path, "w") as f:
-                json.dump(default_settings, f, indent=2)
-        except Exception as e:
-            pass
+        """Load texture importer section from user JSON, else packaged default JSON."""
+        all_settings = load_quick_materials_settings_full_dict()
+        ti = all_settings.get("texture_importer")
+        if isinstance(ti, dict):
+            return ti
+        return {}
 
     def _update_custom_path_widgets(self):
         """Enable/disable custom-path widgets based on checkbox state."""
@@ -3202,14 +3209,15 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
             script_dir = os.path.dirname(__file__)
             settings_dir = os.path.join(script_dir, "settings")
             os.makedirs(settings_dir, exist_ok=True)
-            settings_path = os.path.join(settings_dir, "quick_materials_settings.json")
-            
-            # Load existing settings or create new structure
+            settings_path = quick_materials_user_settings_path()
+
+            # Load existing settings, else start from packaged defaults (do not overwrite default file)
             if os.path.exists(settings_path):
-                with open(settings_path, "r") as f:
+                with open(settings_path, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
             else:
-                all_settings = {
+                merged = load_quick_materials_settings_full_dict()
+                all_settings = merged if isinstance(merged, dict) and merged else {
                     'material_creator': {},
                     'material_list': {},
                     'texture_importer': {}
@@ -3239,10 +3247,9 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
             except Exception as _e:
                 pass
             
-            # Save back to file
-            with open(settings_path, "w") as f:
+            with open(settings_path, "w", encoding="utf-8") as f:
                 json.dump(all_settings, f, indent=2)
-                
+
             # Show yellow notification instead of dialog
             cmds.inViewMessage(amg="<hl>✔ Quick Materials Settings Saved</hl>", pos="topCenter", fade=True)
             # Close the dialog after saving
@@ -3786,12 +3793,15 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             1: {'icon': 28, 'font': 12, 'spacing': 2, 'container_padding': 0, 'layout_margin': (0, 0, 0, 0)},  # Medium (reduced margins)
             2: {'icon': 36, 'font': 13, 'spacing': 2, 'container_padding': 0, 'layout_margin': (0, 0, 0, 0)}   # Large (reduced margins)
         }
+        # Multiplier on computed row heights + vertical grid spacing (1.0 = previous baseline).
+        self._material_list_row_density = 0.75
         
         # PERFORMANCE OPTIMIZATION: Debounced refresh timer
         self._refresh_timer = QtCore.QTimer()
         self._refresh_timer.setSingleShot(True)
         self._refresh_timer.timeout.connect(self._perform_actual_refresh)
         self._refresh_delay_ms = 150  # Refresh after 150ms of inactivity
+
         self._save_timer.setSingleShot(True)
         self._save_timer.timeout.connect(self._save_ui_state_immediate)
         self._save_delay_ms = 500  # Save after 500ms of inactivity
@@ -4367,24 +4377,13 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         self._setup_texture_importer_settings_section()
 
     def _settings_file_path(self):
-        return os.path.join(os.path.dirname(__file__), "settings", "quick_materials_settings.json")
+        return quick_materials_user_settings_path()
 
     def _load_settings_cache(self):
         if self._settings_cache is not None:
             return self._settings_cache
 
-        data = {}
-        path = self._settings_file_path()
-        try:
-            with open(path, "r") as f:
-                loaded = json.load(f)
-                if isinstance(loaded, dict):
-                    data = loaded
-        except FileNotFoundError:
-            data = {}
-        except Exception as exc:
-            print(f"[QuickMaterials] Warning: failed to read settings ({path}): {exc}")
-            data = {}
+        data = load_quick_materials_settings_full_dict()
 
         if not isinstance(data, dict):
             data = {}
@@ -4412,7 +4411,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         settings_dir = os.path.dirname(path)
         try:
             os.makedirs(settings_dir, exist_ok=True)
-            with open(path, "w") as f:
+            with open(path, "w", encoding="utf-8") as f:
                 json.dump(self._settings_cache, f, indent=2)
             self._settings_cache_dirty = False
         except Exception as exc:
@@ -5505,7 +5504,22 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         else:
             print("Error: materialConverterButton not found.")
 
-        
+        texture_baker_btn = self.ui_elements.get('textureBakerButton')
+        if texture_baker_btn:
+            texture_baker_btn.clicked.connect(self.open_texture_baker)
+        else:
+            print("Error: textureBakerButton not found.")
+
+        texture_importer_btn = self.ui_elements.get('textureImporterButton')
+        if texture_importer_btn:
+            texture_importer_btn.clicked.connect(self.open_texture_importer)
+        else:
+            print("Error: textureImporterButton not found.")
+
+        regenerate_uv_tiles_btn = self.ui_elements.get('regenerateUvTilesButton')
+        if regenerate_uv_tiles_btn:
+            regenerate_uv_tiles_btn.clicked.connect(self._on_regenerate_uv_tile_previews)
+
         # Connect list entry scaling buttons
         scale_down_btn = self._get_widget('scaleDownListEntriesButton', QtWidgets.QPushButton)
         scale_up_btn = self._get_widget('scaleUpListEntriesButton', QtWidgets.QPushButton)
@@ -5693,6 +5707,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                     n = f["checkbox"]
                     w = self._get_widget(n, QtWidgets.QCheckBox)
         QtCore.QTimer.singleShot(0, _verify_filters_once)
+        QtCore.QTimer.singleShot(0, self._sync_material_list_tab_button_icons)
 
         # --- Poll fallback: very cheap, only refreshes on change ---
         if not hasattr(self, "_material_poll_timer"):
@@ -5723,8 +5738,10 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         self._update_scale_button_states()
         # Save scale level (will be saved via _save_ui_state)
         self._save_ui_state()
-        # Refresh the list to apply new scale to all entries
-        self.refresh_materials_list()
+        # Apply scale in-place (avoid full list rebuild / Maya queries)
+        self._apply_list_entry_scale()
+        self._sync_material_list_tab_button_icons()
+        self._force_layout_update()
     
     def scale_down_list_entries(self):
         """Scale down list entries (large -> medium -> small)."""
@@ -5735,8 +5752,9 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         self._update_scale_button_states()
         # Save scale level (will be saved via _save_ui_state)
         self._save_ui_state()
-        # Refresh the list to apply new scale to all entries
-        self.refresh_materials_list()
+        self._apply_list_entry_scale()
+        self._sync_material_list_tab_button_icons()
+        self._force_layout_update()
     
     
     def _force_layout_update(self):
@@ -5770,8 +5788,112 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         except Exception:
             pass
     
+    def _show_icons_enabled(self):
+        """Whether the material list should reserve space for / render icons."""
+        try:
+            cb = getattr(self, "_cached_show_icons_cb", None)
+            if cb is None or not isValid(cb):
+                cb = self._get_widget('showIconsCheckbox', QtWidgets.QCheckBox)
+                self._cached_show_icons_cb = cb
+            return bool(cb and cb.isChecked())
+        except Exception:
+            return True
+
+    def _list_entry_row_height(self, material_widget, current_scale, icons_on):
+        """
+        Row height for one list entry (matches add_material_entry_optimized intent).
+        When icons are enabled, always reserve at least icon+padding so rows don't stay short
+        while swatches load asynchronously.
+        """
+        font_px = int(current_scale['font'])
+        icon_sz = int(current_scale['icon'])
+        font = QtGui.QFont()
+        if material_widget:
+            try:
+                font = QtGui.QFont(material_widget.font())
+            except Exception:
+                pass
+        font.setPixelSize(max(8, font_px))
+        fm = QtGui.QFontMetrics(font)
+        text_h = fm.height()
+        vertical_pad = 9
+        if icons_on:
+            raw = max(icon_sz + vertical_pad, text_h + vertical_pad)
+        else:
+            # Still tie row band to scale tier (icon size) so "scale up" grows rows without swatches
+            raw = max(
+                text_h + vertical_pad,
+                font_px + vertical_pad + 4,
+                icon_sz + vertical_pad,
+            )
+        density = float(getattr(self, "_material_list_row_density", 0.75))
+        h = max(16, int(round(raw * density)))
+        # Extra headroom at large scales (reduces swatch clipping at max tier)
+        return max(16, int(round(h * 1.05)))
+
+    def _material_list_tab_switch_icon_size(self):
+        """Pixel size for material-list tab strip icons (ties to list scale tier)."""
+        tier = int(self._list_entry_scale_sizes[self._list_entry_scale_level]['icon'])
+        return max(14, min(42, int(round(tier * 0.72))))
+
+    def _sync_material_list_tab_button_icons(self):
+        """
+        Tab buttons use stylesheet `image:` + qproperty-iconSize; list scale must patch iconSize
+        (setIconSize alone is not enough). Keeps switch icons in sync with entry scale.
+        """
+        import re
+        try:
+            from shiboken2 import isValid as _isv
+        except Exception:
+            try:
+                from shiboken6 import isValid as _isv
+            except Exception:
+                _isv = lambda o: bool(o)
+        side = self._material_list_tab_switch_icon_size()
+        qsz = QtCore.QSize(side, side)
+        pat = re.compile(r"qproperty-iconSize:\s*\d+px\s*\d+px", re.IGNORECASE)
+        repl = f"qproperty-iconSize: {side}px {side}px"
+        for name in (
+            "materialListShadersButton",
+            "materialListTexturesButton",
+            "materialListShadingGroupButton",
+            "materialListUtilitiesButton",
+        ):
+            btn = self._get_widget(name, QtWidgets.QPushButton)
+            if not btn or not _isv(btn):
+                continue
+            try:
+                ss = btn.styleSheet()
+                new_ss = pat.sub(repl, ss)
+                if new_ss != ss:
+                    btn.setStyleSheet(new_ss)
+                btn.setIconSize(qsz)
+                btn.setMinimumHeight(max(22, side + 8))
+            except Exception:
+                pass
+
+    def _material_list_entry_text_stylesheet(self, font_px, row_h, lock_max_height=False):
+        """
+        Per-entry inline QSS so we override scroll-area rules like QLineEdit { min-height: 22px }
+        (otherwise scale steps stay visually stuck at 22px when icons are hidden).
+        """
+        fp = int(font_px)
+        rh = int(row_h)
+        parts = [f"font-size: {fp}px !important;", f"min-height: {rh}px !important;"]
+        if lock_max_height:
+            parts.append(f"max-height: {rh}px !important;")
+        return "".join(parts)
+
+    def _effective_material_list_vertical_spacing(self):
+        """Vertical spacing between rows in the material list grid (density-adjusted)."""
+        current_scale = self._list_entry_scale_sizes[self._list_entry_scale_level]
+        density = float(getattr(self, "_material_list_row_density", 0.75))
+        return max(0, int(round(current_scale['spacing'] * density)))
+
     def _apply_list_entry_scale(self):
         """Apply current scale to all existing list entries (icons and text)."""
+        # Always sync grid spacing with scale level (even if list not built yet)
+        self._update_scroll_layout_spacing()
         if not hasattr(self, '_entry_list') or not self._entry_list:
             return
         
@@ -5788,27 +5910,32 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             except Exception:
                 isValid = lambda obj: bool(obj)
         
+        show_icons_on = self._show_icons_enabled()
+
         # Update all icons and text widgets
         for entry in self._entry_list:
             material = entry.get('material')
             if not material:
                 continue
             
+            container = entry.get('container')
+            if not container or not isValid(container):
+                container = None
+
             # Update swatch icon if it exists
             swatch = entry.get('swatch')
             if swatch and isValid(swatch):
                 try:
-                    swatch.setFixedSize(new_icon_size, new_icon_size)
-                    # Enable scaled contents for MaterialSwatchIcon so it scales without re-rendering
                     widget_class_name = swatch.__class__.__name__
-                    if widget_class_name == 'MaterialSwatchIcon':
-                        swatch.setScaledContents(True)
-                    # Update icon_size property if it exists
-                    if hasattr(swatch, 'icon_size'):
-                        swatch.icon_size = new_icon_size
-                    # For MaterialSwatchIcon, we may need to trigger a resize
-                    if hasattr(swatch, 'update'):
-                        swatch.update()
+                    # Regenerate pixmap at native resolution (avoids soft upscale / wrong look vs reload)
+                    if widget_class_name == "MaterialSwatchIcon" and hasattr(swatch, "set_icon_size"):
+                        swatch.set_icon_size(new_icon_size)
+                    else:
+                        swatch.setFixedSize(new_icon_size, new_icon_size)
+                        if hasattr(swatch, "icon_size"):
+                            swatch.icon_size = new_icon_size
+                        if hasattr(swatch, "update"):
+                            swatch.update()
                 except Exception as e:
                     print(f"[QuickMaterials] Failed to resize swatch for {material}: {e}")
             
@@ -5816,20 +5943,36 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             line_edit = entry.get('line_edit')
             if line_edit and isValid(line_edit):
                 try:
-                    font = line_edit.font()
-                    font.setPointSize(new_font_size)
+                    font_size_px = int(new_font_size)
+                    font = QtGui.QFont(line_edit.font())
+                    font.setPixelSize(max(8, font_size_px))
                     line_edit.setFont(font)
-                    # Also update minimum height to match font size
-                    line_edit.setMinimumHeight(max(22, new_icon_size + 2))
+                    row_h = self._list_entry_row_height(line_edit, current_scale, show_icons_on)
+                    nt = line_edit.property("nodeType")
+                    try:
+                        nt = "" if nt is None else str(nt)
+                    except Exception:
+                        nt = ""
+                    line_edit.setStyleSheet(self._material_list_entry_text_stylesheet(
+                        font_size_px, row_h, lock_max_height=(nt == "file_texture")))
+                    line_edit.setMinimumHeight(row_h)
+                    if nt == "file_texture":
+                        line_edit.setMaximumHeight(row_h)
+                    else:
+                        line_edit.setMaximumHeight(16777215)
                 except Exception as e:
                     print(f"[QuickMaterials] Failed to resize text for {material}: {e}")
             
             # Update container to accommodate larger icons
-            container = entry.get('container')
             if container and isValid(container):
                 try:
-                    # Update minimum height to match icon size
-                    container.setMinimumHeight(max(22, new_icon_size + 2))
+                    row_h = self._list_entry_row_height(
+                        line_edit if (line_edit and isValid(line_edit)) else None,
+                        current_scale,
+                        show_icons_on,
+                    )
+                    container.setMinimumHeight(row_h)
+                    container.setMaximumHeight(16777215)
                     # Update container padding based on scale
                     container.setContentsMargins(
                         current_scale['container_padding'],
@@ -5879,14 +6022,58 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                                             pass
                 except Exception:
                     pass
-        
-        # Update scroll layout spacing based on current scale
-        self._update_scroll_layout_spacing()
     
+    def _refresh_material_list_row_heights(self):
+        """
+        Re-apply row min/max heights and per-widget font stylesheet after style polish/unpolish
+        (e.g. selection) so rows don't snap back to smaller stylesheet-driven metrics.
+        """
+        if not getattr(self, "_entry_list", None):
+            return
+        current_scale = self._list_entry_scale_sizes[self._list_entry_scale_level]
+        show_icons_on = self._show_icons_enabled()
+        font_size_px = int(current_scale['font'])
+        cp = current_scale['container_padding']
+
+        for entry in self._entry_list:
+            le = entry.get("line_edit")
+            container = entry.get("container")
+            if le and isValid(le):
+                try:
+                    font = QtGui.QFont(le.font())
+                    font.setPixelSize(max(8, font_size_px))
+                    le.setFont(font)
+                    row_h = self._list_entry_row_height(le, current_scale, show_icons_on)
+                    nt = le.property("nodeType")
+                    try:
+                        nt = "" if nt is None else str(nt)
+                    except Exception:
+                        nt = ""
+                    le.setStyleSheet(self._material_list_entry_text_stylesheet(
+                        font_size_px, row_h, lock_max_height=(nt == "file_texture")))
+                    le.setMinimumHeight(row_h)
+                    if nt == "file_texture":
+                        le.setMaximumHeight(row_h)
+                    else:
+                        le.setMaximumHeight(16777215)
+                except Exception:
+                    pass
+            if container and isValid(container):
+                try:
+                    row_h = self._list_entry_row_height(
+                        le if (le and isValid(le)) else None,
+                        current_scale,
+                        show_icons_on,
+                    )
+                    container.setMinimumHeight(row_h)
+                    container.setMaximumHeight(16777215)
+                    container.setContentsMargins(cp, cp, cp, cp)
+                except Exception:
+                    pass
+
     def _update_scroll_layout_spacing(self):
         """Update spacing in all scroll layouts based on current scale level."""
-        current_scale = self._list_entry_scale_sizes[self._list_entry_scale_level]
-        new_spacing = current_scale['spacing']
+        new_spacing = self._effective_material_list_vertical_spacing()
         
         # Find all scroll areas and update their layouts
         try:
@@ -7702,41 +7889,32 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                         # Default if not in state
                         line_edit.setText('(selection)')
                 
-                # Load attribute frame visibility from settings (quick_materials_settings.json)
-                # Also check the settings file for attribute frame visibility
+                # Load attribute frame visibility from user settings or packaged defaults
                 try:
-                    script_dir = os.path.dirname(__file__)
-                    settings_path = os.path.join(script_dir, "settings", "quick_materials_settings.json")
-                    if os.path.exists(settings_path):
-                        with open(settings_path, "r") as f:
-                            all_settings = json.load(f)
-                            settings_mc = all_settings.get('material_creator', {})
-                            
-                            # Map frame names to setting keys
-                            attribute_frames = {
-                                'colorPickerFrame': 'attribute_frame_visible_colorPickerFrame',
-                                'roughnessSliderFrame': 'attribute_frame_visible_roughnessSliderFrame',
-                                'metalnessSliderFrame': 'attribute_frame_visible_metalnessSliderFrame',
-                                'emissionSliderFrame': 'attribute_frame_visible_emissionSliderFrame',
-                                'opacitySliderFrame': 'attribute_frame_visible_opacitySliderFrame',
-                                'transmissionSliderFrame': 'attribute_frame_visible_transmissionSliderFrame',
-                                'subsurfaceSliderFrame': 'attribute_frame_visible_subsurfaceSliderFrame'
-                            }
-                            
-                            for frame_name, setting_key in attribute_frames.items():
-                                if setting_key in settings_mc:
-                                    frame = self.findChild(QtWidgets.QWidget, frame_name)
-                                    if frame:
-                                        final_vis = bool(settings_mc[setting_key])
-                                        frame.setVisible(final_vis)
-                                        if not final_vis:
-                                            try:
-                                                self._reset_attribute_to_default(frame_name)
-                                            except Exception as exc:
-                                                pass
-                            
-                            # Refresh minimum size and snap after loading attribute frame visibility
-                            QtCore.QTimer.singleShot(200, self.snap_to_minimum)
+                    all_settings = load_quick_materials_settings_full_dict()
+                    if all_settings:
+                        settings_mc = all_settings.get('material_creator', {})
+                        attribute_frames = {
+                            'colorPickerFrame': 'attribute_frame_visible_colorPickerFrame',
+                            'roughnessSliderFrame': 'attribute_frame_visible_roughnessSliderFrame',
+                            'metalnessSliderFrame': 'attribute_frame_visible_metalnessSliderFrame',
+                            'emissionSliderFrame': 'attribute_frame_visible_emissionSliderFrame',
+                            'opacitySliderFrame': 'attribute_frame_visible_opacitySliderFrame',
+                            'transmissionSliderFrame': 'attribute_frame_visible_transmissionSliderFrame',
+                            'subsurfaceSliderFrame': 'attribute_frame_visible_subsurfaceSliderFrame'
+                        }
+                        for frame_name, setting_key in attribute_frames.items():
+                            if setting_key in settings_mc:
+                                frame = self.findChild(QtWidgets.QWidget, frame_name)
+                                if frame:
+                                    final_vis = bool(settings_mc[setting_key])
+                                    frame.setVisible(final_vis)
+                                    if not final_vis:
+                                        try:
+                                            self._reset_attribute_to_default(frame_name)
+                                        except Exception as exc:
+                                            pass
+                        QtCore.QTimer.singleShot(200, self.snap_to_minimum)
                 except Exception as e:
                     pass
 
@@ -7799,6 +7977,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                     self._list_entry_scale_level = max(0, min(2, int(scale_level)))
                     # Update button states
                     self._update_scale_button_states()
+                    QtCore.QTimer.singleShot(0, self._sync_material_list_tab_button_icons)
                 
                 # Utilities filter removed - always show only utilities connected to shaders
                 
@@ -8342,6 +8521,43 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             import maya.cmds as cmds
             cmds.warning(f"Material converter failed to open: {e}")
 
+    def open_texture_baker(self):
+        """
+        Open the Texture Baker (scan selection, bake procedural/projection nodes to UV textures).
+        """
+        try:
+            from QuickMaterials import texture_baker as _tex_baker
+            import importlib
+            importlib.reload(_tex_baker)
+            _tex_baker.show()
+        except Exception as e:
+            cmds.warning(f"Texture Baker failed to open: {e}")
+
+    def open_texture_importer(self):
+        """
+        Open the Texture Importer from the main UI with no textures pre-loaded.
+        The material combo defaults to 'All Materials'; user adds textures inside the tool.
+        """
+        if self.import_tx_tool:
+            if self.import_tx_tool.isVisible():
+                self.import_tx_tool.close()
+                self.import_tx_tool = None
+
+        self.import_tx_tool = ImportTxTool(
+            material=None, material_type=None, parent=maya_main_window()
+        )
+        self.import_tx_tool.show()
+
+    def _on_regenerate_uv_tile_previews(self):
+        """Regenerate OGS UV tile preview textures (Viewport 2.0)."""
+        try:
+            importlib.reload(QuickMaterials.uv_tile_preview)
+            QuickMaterials.uv_tile_preview.regenerate_all_uv_tile_previews(
+                reload_file_textures=True
+            )
+        except Exception as e:
+            cmds.warning(f"Regenerate UV tile previews failed: {e}")
+
 
 
 
@@ -8615,9 +8831,8 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             scroll_content.setStyleSheet(self.material_list_widget_style)
             layout = QtWidgets.QGridLayout(scroll_content)
             layout.setContentsMargins(3, 3, 3, 3)
-            # Use current scale for spacing
-            current_scale = self._list_entry_scale_sizes[self._list_entry_scale_level]
-            layout.setVerticalSpacing(current_scale['spacing'])
+            # Use current scale for spacing (same density factor as row heights)
+            layout.setVerticalSpacing(self._effective_material_list_vertical_spacing())
             layout.setHorizontalSpacing(3)
             row = 0
             consumed = self._add_active_filters_bar(layout, row)
@@ -8855,20 +9070,34 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
         # PERFORMANCE OPTIMIZATION: Batch-create icons asynchronously after UI is built
         if self._pending_icon_creations:
-            icon_count = len(self._pending_icon_creations)
-            swatch_count = sum(1 for icon in self._pending_icon_creations if icon.get('type') == 'swatch')
-            
-            # Initialize swatch timing tracking
-            if swatch_count > 0:
-                self._swatch_timing_start = time.perf_counter()
-                self._swatch_timing_count = 0
-                self._swatch_timing_total = 0.0
-                self._swatch_timing_texture_total = 0.0
-                self._swatch_timing_texture_count = 0
-                self._swatch_timing_expected = swatch_count
-            
-            # Defer icon creation to avoid blocking UI
-            QtCore.QTimer.singleShot(0, self._batch_create_icons)
+            # If show-icons is disabled, skip all icon work entirely.
+            show_icons = True
+            try:
+                cb = getattr(self, "_cached_show_icons_cb", None)
+                if cb is None or not isValid(cb):
+                    cb = self._get_widget('showIconsCheckbox', QtWidgets.QCheckBox)
+                    self._cached_show_icons_cb = cb
+                show_icons = bool(cb and cb.isChecked())
+            except Exception:
+                show_icons = True
+
+            if show_icons:
+                icon_count = len(self._pending_icon_creations)
+                swatch_count = sum(1 for icon in self._pending_icon_creations if icon.get('type') == 'swatch')
+                
+                # Initialize swatch timing tracking
+                if swatch_count > 0:
+                    self._swatch_timing_start = time.perf_counter()
+                    self._swatch_timing_count = 0
+                    self._swatch_timing_total = 0.0
+                    self._swatch_timing_texture_total = 0.0
+                    self._swatch_timing_texture_count = 0
+                    self._swatch_timing_expected = swatch_count
+                
+                # Defer icon creation to avoid blocking UI
+                QtCore.QTimer.singleShot(0, self._batch_create_icons)
+            else:
+                self._pending_icon_creations = []
         
         # PERFORMANCE OPTIMIZATION: Batch-create buttons asynchronously after UI is built
         # List buttons removed - no button creation needed
@@ -9102,7 +9331,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         scroll_content.setStyleSheet(self.material_list_widget_style)
         layout = QtWidgets.QGridLayout(scroll_content)
         layout.setContentsMargins(3, 3, 3, 3)
-        layout.setVerticalSpacing(2)
+        layout.setVerticalSpacing(self._effective_material_list_vertical_spacing())
         layout.setHorizontalSpacing(3)
         row = 0
         
@@ -9158,7 +9387,21 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         
         # Defer icon creation
         if self._pending_icon_creations:
-            QtCore.QTimer.singleShot(0, self._batch_create_icons)
+            # Respect the global show-icons toggle
+            show_icons = True
+            try:
+                cb = getattr(self, "_cached_show_icons_cb", None)
+                if cb is None or not isValid(cb):
+                    cb = self._get_widget('showIconsCheckbox', QtWidgets.QCheckBox)
+                    self._cached_show_icons_cb = cb
+                show_icons = bool(cb and cb.isChecked())
+            except Exception:
+                show_icons = True
+
+            if show_icons:
+                QtCore.QTimer.singleShot(0, self._batch_create_icons)
+            else:
+                self._pending_icon_creations = []
         
         # Defer signal connections
         if self._pending_signal_connections:
@@ -9678,23 +9921,6 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             current_scale = self._list_entry_scale_sizes[self._list_entry_scale_level]
             container_padding = current_scale['container_padding']
             container.setContentsMargins(container_padding, container_padding, container_padding, container_padding)
-            
-            # Set font size and height for non-material entries (file textures, procedural, etc.)
-            min_height = max(22, current_scale['icon'] + 2)
-            material_widget.setMinimumHeight(min_height)
-            if is_file_texture:
-                material_widget.setMaximumHeight(min_height)
-            # Set font size (works for both QLineEdit and QLabel)
-            # Use both setFont and setStyleSheet to ensure it overrides the base stylesheet
-            # Convert pt to px: use px directly to match base stylesheet
-            font_size_px = current_scale['font']
-            font = QtGui.QFont(material_widget.font())
-            font.setPixelSize(font_size_px)
-            material_widget.setFont(font)
-            # Also set via stylesheet with !important to override base stylesheet font-size (use px to match base)
-            material_widget.setStyleSheet(f"font-size: {font_size_px}px !important;")
-            # Force update to ensure font change is visible
-            material_widget.update()
         
         # Store the actual material name for operations
         material_widget._actual_material_name = material
@@ -9815,28 +10041,24 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         material_widget.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
                                       QtWidgets.QSizePolicy.Fixed)  # Fixed height fits style
 
-        # Use current scale for minimum height
         current_scale = self._list_entry_scale_sizes[self._list_entry_scale_level]
-        min_height = max(22, current_scale['icon'] + 2)
-        material_widget.setMinimumHeight(min_height)
-        # For file textures, lock the height to prevent rich text from expanding
-        if is_file_texture:
-            material_widget.setMaximumHeight(min_height)
-        
-        # Set font size based on current scale (for both QLineEdit and QLabel)
-        # Use both setFont and setStyleSheet to ensure it overrides the base stylesheet
-        # Convert pt to px: 1pt ≈ 1.33px at 96 DPI, but we'll use px directly to match base stylesheet
-        font_size_px = current_scale['font']
+        font_size_px = int(current_scale['font'])
         font = QtGui.QFont(material_widget.font())
-        font.setPixelSize(font_size_px)
+        font.setPixelSize(max(8, font_size_px))
         material_widget.setFont(font)
-        # Also set via stylesheet with !important to override base stylesheet font-size (use px to match base)
-        material_widget.setStyleSheet(f"font-size: {font_size_px}px !important;")
-        # Force update to ensure font change is visible
         material_widget.update()
 
-        # Use current scale for container padding
+        icons_on = self._show_icons_enabled()
+        row_h = self._list_entry_row_height(material_widget, current_scale, icons_on)
+        material_widget.setStyleSheet(self._material_list_entry_text_stylesheet(
+            font_size_px, row_h, lock_max_height=is_file_texture))
+        material_widget.setMinimumHeight(row_h)
+        if is_file_texture:
+            material_widget.setMaximumHeight(row_h)
+
+        # Use current scale for container padding + row height (must match _apply_list_entry_scale / selection polish)
         container_padding = current_scale['container_padding']
+        container.setMinimumHeight(row_h)
         container.setContentsMargins(container_padding, container_padding, container_padding, container_padding)
         
         # Set layout margins based on current scale for ALL entry types
@@ -9862,6 +10084,19 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         PERFORMANCE OPTIMIZATION: Batch-create all queued icons asynchronously.
         This is called after UI is built to avoid blocking the main UI creation.
         """
+        # If show-icons is disabled, clear any queued work and bail.
+        try:
+            cb = getattr(self, "_cached_show_icons_cb", None)
+            if cb is None or not isValid(cb):
+                cb = self._get_widget('showIconsCheckbox', QtWidgets.QCheckBox)
+                self._cached_show_icons_cb = cb
+            if cb and not cb.isChecked():
+                self._pending_icon_creations = []
+                self._check_swatch_timing_summary()
+                return
+        except Exception:
+            pass
+
         if not self._pending_icon_creations:
             # Check if we should report swatch timing summary
             self._check_swatch_timing_summary()
@@ -9895,7 +10130,12 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                 material = icon_info['material']
                 container = icon_info.get('container')
                 layout = icon_info.get('layout')
-                icon_size = icon_info.get('icon_size', 20)
+                # Always use live scale: queue entries snapshot icon_size at populate time; user may
+                # change entry scale before deferred creation runs (singleShot), which left icons stuck small.
+                try:
+                    icon_size = int(self._list_entry_scale_sizes[self._list_entry_scale_level]['icon'])
+                except Exception:
+                    icon_size = int(icon_info.get('icon_size', 20))
                 position = icon_info.get('position', -1)
                 
                 # Validate container and layout before creating icons
@@ -10205,25 +10445,43 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         total_ms = (end_ts - request_ts) * 1000.0 if request_ts else build_ms
         self._last_refresh_request_ts = 0.0
 
-    # Filter-as-you-type entrypoint; forwards to populate with search_text.
+    # Filter-as-you-type: incremental show/hide only (no list rebuild, no debounce).
     def filter_materials(self, search_text):
         """
-        PERFORMANCE OPTIMIZATION: Fast incremental search that only shows/hides widgets.
-        Uses debouncing to avoid filtering on every keystroke.
+        Filter rows immediately on every keystroke by toggling visibility of existing entries.
         """
-        # Store search text for incremental filtering
-        self._current_search_text = search_text
-        
-        # Cancel any pending search debounce
-        if hasattr(self, '_search_debounce_timer'):
-            self._search_debounce_timer.stop()
-        
-        # Debounce search - wait 150ms after user stops typing
-        self._search_debounce_timer = QtCore.QTimer()
-        self._search_debounce_timer.setSingleShot(True)
-        self._search_debounce_timer.timeout.connect(lambda: self._apply_search_filter(search_text))
-        self._search_debounce_timer.start(150)  # 150ms debounce
-    
+        txt = search_text if search_text is not None else ""
+        self._current_search_text = txt
+
+        # PERF/ROBUSTNESS: prevent re-entrant filtering when typing/deleting fast.
+        # If a filter is already running, remember only the latest text and run again
+        # on the next Qt tick (0ms) so the UI stays responsive and we never miss the
+        # final "empty string" reset.
+        if getattr(self, "_search_filter_running", False):
+            self._search_filter_pending_text = txt
+            if not getattr(self, "_search_filter_rerun_scheduled", False):
+                self._search_filter_rerun_scheduled = True
+                QtCore.QTimer.singleShot(0, self._rerun_search_filter_if_pending)
+            return
+
+        self._apply_search_filter(txt)
+
+    def _rerun_search_filter_if_pending(self):
+        """Run one pending incremental filter pass (coalesced)."""
+        self._search_filter_rerun_scheduled = False
+        if getattr(self, "_search_filter_running", False):
+            # Still running; schedule again.
+            self._search_filter_rerun_scheduled = True
+            QtCore.QTimer.singleShot(0, self._rerun_search_filter_if_pending)
+            return
+
+        pending = getattr(self, "_search_filter_pending_text", None)
+        if pending is None:
+            return
+        self._search_filter_pending_text = None
+        self._current_search_text = pending
+        self._apply_search_filter(pending)
+
     def _apply_search_filter(self, search_text):
         """
         Fast incremental search - only shows/hides existing widgets, no rebuild.
@@ -10236,6 +10494,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         
         # Get current filter flags (but don't rebuild for search-only changes)
         try:
+            self._search_filter_running = True
             flags = self._collect_filter_flags()
             search_lower = search_text.lower() if search_text else ""
             
@@ -10255,64 +10514,116 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             start_time = time.perf_counter()
             visible_count = 0
             hidden_count = 0
-            
-            for entry in self._entry_list:
-                material = entry.get('material')
-                container = entry.get('container')
-                
-                if not material or not container:
-                    continue
-                
-                # Fast text matching - check if material name matches search
-                matches_search = True
-                if search_lower:
-                    material_lower = material.lower()
-                    # Check if search text is in material name (case-insensitive)
-                    matches_search = search_lower in material_lower
-                
-                # Check selected filter (fast - uses cached selection data if available)
-                passes_selected_filter = True
-                if flags.get("selected", False) or flags.get("selectedOnly", False):
-                    if materials_from_selection is not None:
-                        passes_selected_filter = material in materials_from_selection
-                    else:
-                        # Fallback: check cache or compute on the fly
-                        cache = getattr(self, '_material_cache', {})
-                        if material in cache and cache[material].get('affects_selection') is not None:
-                            passes_selected_filter = cache[material]['affects_selection']
+
+            # Reduce relayout/paint churn while toggling many rows.
+            current_tab = self._get_current_tab_type()
+            scroll_area = self._get_tab_scroll_area(current_tab)
+            scroll_content = scroll_area.widget() if (scroll_area and scroll_area.widget()) else None
+            updates_frozen = False
+            if scroll_content:
+                try:
+                    scroll_content.setUpdatesEnabled(False)
+                    updates_frozen = True
+                except Exception:
+                    scroll_content = None
+
+            try:
+                for entry in self._entry_list:
+                    material = entry.get('material')
+                    container = entry.get('container')
+                    
+                    if not material or not container:
+                        continue
+
+                    # Entries can hold stale Qt refs after rebuilds; skip invalid widgets
+                    try:
+                        if not isValid(container):
+                            continue
+                    except Exception:
+                        # If isValid isn't available for some reason, proceed cautiously
+                        pass
+
+                    # Only touch entries in the current tab's scroll widget.
+                    # This avoids unnecessary work and prevents hidden tabs from keeping stale visibility.
+                    if scroll_content:
+                        try:
+                            if container.parent() is None:
+                                continue
+                            if container.parent() != scroll_content and not scroll_content.isAncestorOf(container):
+                                continue
+                        except Exception:
+                            pass
+                    
+                    # Fast text matching - check if material name matches search
+                    matches_search = True
+                    if search_lower:
+                        material_lower = entry.get("material_lower") or material.lower()
+                        entry["material_lower"] = material_lower
+                        # Check if search text is in material name (case-insensitive)
+                        matches_search = search_lower in material_lower
+                    
+                    # Check selected filter (fast - uses cached selection data if available)
+                    passes_selected_filter = True
+                    if flags.get("selected", False) or flags.get("selectedOnly", False):
+                        if materials_from_selection is not None:
+                            passes_selected_filter = material in materials_from_selection
                         else:
-                            # Quick check without full rebuild
-                            try:
-                                import maya.cmds as cmds
-                                sel_mats = set(cmds.ls(sl=True, materials=True) or [])
-                                passes_selected_filter = material in sel_mats
-                            except Exception:
-                                passes_selected_filter = True  # Show if check fails
-                
-                # Use cached node classification to avoid expensive API calls
-                node_type_category = getattr(self, '_node_type_classification_cache', {}).get(material)
-                if node_type_category is None:
-                    # Fallback: quick heuristic check (materials don't end with "SG")
-                    is_material = not material.endswith("SG")
-                else:
-                    is_material = (node_type_category == 'materials')
-                
-                # Check basic type filter
-                passes_basic_filters = True
-                if flags.get("showShadersOnly", False):
-                    passes_basic_filters = is_material
-                
-                # Show/hide based on search match, selected filter, and basic filters
-                should_show = matches_search and passes_selected_filter and passes_basic_filters
-                
-                if should_show:
-                    if not container.isVisible():
-                        container.setVisible(True)
+                            # Fallback: check cache or compute on the fly
+                            cache = getattr(self, '_material_cache', {})
+                            if material in cache and cache[material].get('affects_selection') is not None:
+                                passes_selected_filter = cache[material]['affects_selection']
+                            else:
+                                # Quick check without full rebuild
+                                try:
+                                    import maya.cmds as cmds
+                                    sel_mats = set(cmds.ls(sl=True, materials=True) or [])
+                                    passes_selected_filter = material in sel_mats
+                                except Exception:
+                                    passes_selected_filter = True  # Show if check fails
+                    
+                    # Use cached node classification to avoid expensive API calls
+                    node_type_category = getattr(self, '_node_type_classification_cache', {}).get(material)
+                    if node_type_category is None:
+                        # Fallback: quick heuristic check (materials don't end with "SG")
+                        is_material = not material.endswith("SG")
+                    else:
+                        is_material = (node_type_category == 'materials')
+                    
+                    # Check basic type filter
+                    passes_basic_filters = True
+                    if flags.get("showShadersOnly", False):
+                        passes_basic_filters = is_material
+                    
+                    # Show/hide based on search match, selected filter, and basic filters
+                    should_show = matches_search and passes_selected_filter and passes_basic_filters
+                    
+                    try:
+                        currently_visible = container.isVisible()
+                    except Exception:
+                        currently_visible = True
+
+                    if should_show:
+                        # Count every visible match (not only rows that transitioned hidden→visible).
                         visible_count += 1
-                else:
-                    if container.isVisible():
-                        container.setVisible(False)
-                        hidden_count += 1
+                        if not currently_visible:
+                            container.setVisible(True)
+                    else:
+                        if currently_visible:
+                            container.setVisible(False)
+                            hidden_count += 1
+            finally:
+                if scroll_content and updates_frozen:
+                    try:
+                        # If we just made many items visible again (common when deleting/backspacing),
+                        # force one layout pass so the scroll area's content height updates reliably.
+                        lay = scroll_content.layout()
+                        if lay:
+                            lay.invalidate()
+                        scroll_content.adjustSize()
+                        scroll_content.setUpdatesEnabled(True)
+                        scroll_content.update()
+                    except Exception:
+                        pass
             
             duration_ms = (time.perf_counter() - start_time) * 1000.0
             filter_desc = []
@@ -10335,6 +10646,8 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             # If incremental search fails, fall back to full rebuild
             pass
             self.refresh_materials_list()
+        finally:
+            self._search_filter_running = False
 
     def _show_search_no_results_message(self):
         """Show a 'no results' message when search returns no items."""
@@ -12131,6 +12444,8 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         idx = len(self._entry_list)
         self._entry_list.append({
             "material": material,
+            # PERF: incremental search uses this to avoid repeated lower() calls per keypress
+            "material_lower": (material.lower() if isinstance(material, str) else ""),
             "swatch": swatch,  # store direct refs in PySide2
             "line_edit": line_edit,  # guard with isValid() before use
             "is_default": bool(is_default),
@@ -12322,13 +12637,18 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             except Exception:
                 pass
 
-
             # swatch (visual only)
             if sw and isValid(sw) and hasattr(sw, "setSelected"):
                 try:
                     sw.setSelected(is_sel)
                 except Exception:
                     pass
+
+        # unpolish/polish can revert inline font-size / min-height; restore geometry from current scale
+        try:
+            self._refresh_material_list_row_heights()
+        except Exception:
+            pass
 
     # Toggle a single material selection (swatch-driven). Clears others unless extend=True.
     def toggle_material_from_checkbox(self, material, extend=False):
@@ -13890,6 +14210,22 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         
         if not materials_to_duplicate:
             cmds.warning("No materials selected to duplicate.")
+            return
+        
+        count = len(materials_to_duplicate)
+        noun = "material" if count == 1 else "materials"
+        confirm = QtWidgets.QMessageBox()
+        confirm.setWindowTitle("Duplicate Materials")
+        confirm.setText(f"Duplicate {count} {noun}?")
+        confirm.setIcon(QtWidgets.QMessageBox.Question)
+        btn_duplicate = confirm.addButton("Duplicate", QtWidgets.QMessageBox.AcceptRole)
+        confirm.addButton("Cancel", QtWidgets.QMessageBox.RejectRole)
+        confirm.setDefaultButton(btn_duplicate)
+        if QT_LIB == 2:
+            confirm.exec_()
+        else:
+            confirm.exec()
+        if confirm.clickedButton() != btn_duplicate:
             return
         
         duplicated_materials = []

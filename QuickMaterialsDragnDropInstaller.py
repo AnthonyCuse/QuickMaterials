@@ -335,8 +335,8 @@ maya.utils.executeDeferred(_load_quick_materials)
                 else:
                     self.log(f"Warning: {file_name} not found in package", "WARNING")
             
-            # Copy directories
-            dirs_to_copy = ["icons", "QtDesigner"]
+            # Copy directories (settings/ and Settings/ ship defaults: quick_materials_settings_default.json, texture names, etc.)
+            dirs_to_copy = ["icons", "QtDesigner", "settings", "Settings"]
             for dir_name in dirs_to_copy:
                 src = os.path.join(self.package_dir, dir_name)
                 if os.path.exists(src):
