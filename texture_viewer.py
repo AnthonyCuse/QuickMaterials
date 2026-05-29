@@ -1,8 +1,8 @@
 """
 Shader Texture Viewer
 ---------------------
-A UI that displays textures from materials/shaders in Maya.
-Select a shader/material in Maya and run this script to view its textures.
+Displays file textures from Maya materials or from a standalone file node.
+Material and Attribute combos list scene hook-ups so you can switch context without a separate UI mode.
 """
 
 import os
@@ -204,7 +204,7 @@ STYLE_IMAGE_LABEL = """
 """
 
 class ShaderTextureViewer(QtWidgets.QDialog):
-    """Window that displays textures from materials/shaders or individual file textures."""
+    """Window that displays textures from materials/shaders or from a file node (same Material/Attribute UI in both cases)."""
     
     def __init__(self, shader_node=None, parent=None, file_node=None, context='material'):
         # Get Maya main window as parent
@@ -441,27 +441,25 @@ class ShaderTextureViewer(QtWidgets.QDialog):
         
         # Context-specific setup
         if self._context == 'file' and file_node:
-            # Hide material/attribute controls
-            material_label.hide()
-            self.material_combo.hide()
-            attribute_label.hide()
-            self.attribute_combo.hide()
-            # Show UDIM All but hide "Display All Textures"
-            self.display_all_textures_checkbox.hide()
-            self.udim_display_all_checkbox.show()
-            # Load file node
-            self.load_texture(file_node)
+            # Same UI as material mode: combos stay visible; preselect a material/attribute if this file is wired up
+            self._prepare_ui_opened_from_texture_list(file_node)
         else:
-            # Populate materials and attributes
             self._populate_materials()
-            # If shader node provided, set it as selected
-            if shader_node:
-                index = self.material_combo.findText(shader_node)
-                if index >= 0:
-                    self.material_combo.setCurrentIndex(index)
+            self.material_combo.blockSignals(True)
+            try:
+                if shader_node:
+                    index = self.material_combo.findText(shader_node)
+                    if index >= 0:
+                        self.material_combo.setCurrentIndex(index)
+                        self._populate_attributes(shader_node)
+                elif self._materials_with_textures:
+                    self.material_combo.setCurrentIndex(0)
+                    self._populate_attributes(self._materials_with_textures[0])
+            finally:
+                self.material_combo.blockSignals(False)
     
-    def _populate_materials(self):
-        """Find all materials in the scene that have file texture nodes connected."""
+    def _scan_scene_material_textures(self):
+        """Find materials with file textures and fill self._material_attributes / self._materials_with_textures."""
         self._materials_with_textures = []
         self._material_attributes = {}
         
@@ -522,31 +520,84 @@ class ShaderTextureViewer(QtWidgets.QDialog):
                     self._material_attributes[material] = material_attrs
             except:
                 continue
-        
-        # Populate material combo box
+    
+    def _fill_material_combo(self):
+        """Fill material combo from self._materials_with_textures (sorted)."""
         self.material_combo.clear()
         for material in sorted(self._materials_with_textures):
             self.material_combo.addItem(material)
-        
-        # If we have materials, populate attributes for the first one
-        if self._materials_with_textures:
-            self._populate_attributes(self._materials_with_textures[0])
     
-    def _populate_attributes(self, material_name):
-        """Populate the attribute combo box for the given material."""
+    def _populate_materials(self):
+        """Scan scene and populate material combo (does not load a texture)."""
+        self._scan_scene_material_textures()
+        self._fill_material_combo()
+    
+    def _find_first_material_attribute_for_file(self, file_node):
+        """Pick one (material, attribute) pair that uses this file node (deterministic if multiple)."""
+        if not file_node:
+            return None
+        for material in sorted(self._material_attributes.keys()):
+            attrs = self._material_attributes[material]
+            for attr in sorted(attrs.keys()):
+                if attrs[attr] == file_node:
+                    return (material, attr)
+        return None
+    
+    def _prepare_ui_opened_from_texture_list(self, file_node):
+        """
+        Texture-tab / single-file open: same combos as material mode.
+        Preselect one material+attribute hook-up when possible; otherwise leave combos blank (index -1).
+        Image always loads from the file node passed in from the list.
+        """
+        self._scan_scene_material_textures()
+        self._fill_material_combo()
+        pair = self._find_first_material_attribute_for_file(file_node)
+        
+        self.material_combo.blockSignals(True)
+        self.attribute_combo.blockSignals(True)
+        
+        if pair:
+            mat_name, attr_name = pair
+            mi = self.material_combo.findText(mat_name)
+            if mi >= 0:
+                self.material_combo.setCurrentIndex(mi)
+            self._populate_attributes(mat_name, preferred_attr=attr_name, skip_load=True)
+        else:
+            try:
+                self.material_combo.setCurrentIndex(-1)
+            except Exception:
+                pass
+            self.attribute_combo.clear()
+        
+        self.material_combo.blockSignals(False)
+        self.attribute_combo.blockSignals(False)
+        
+        self.load_texture(file_node)
+    
+    def _populate_attributes(self, material_name, preferred_attr=None, skip_load=False):
+        """Populate the attribute combo for the given material and optionally load that texture."""
         self.attribute_combo.clear()
         
-        if material_name not in self._material_attributes:
+        if not material_name or material_name not in self._material_attributes:
             return
         
         attrs = self._material_attributes[material_name]
-        for attr in sorted(attrs.keys()):
+        attr_keys = sorted(attrs.keys())
+        for attr in attr_keys:
             self.attribute_combo.addItem(attr)
         
-        # If we have attributes, load the first one (preserving checkbox states)
-        if attrs:
-            first_attr = sorted(attrs.keys())[0]
-            self._load_texture_from_attribute(material_name, first_attr)
+        if not attr_keys:
+            return
+        
+        if preferred_attr and preferred_attr in attrs:
+            idx = attr_keys.index(preferred_attr)
+            self.attribute_combo.setCurrentIndex(idx)
+        else:
+            self.attribute_combo.setCurrentIndex(0)
+        
+        sel_attr = self.attribute_combo.currentText()
+        if sel_attr and not skip_load:
+            self._load_texture_from_attribute(material_name, sel_attr)
     
     def _on_material_changed(self, material_name):
         """Handle material combo box change."""
@@ -757,6 +808,7 @@ class ShaderTextureViewer(QtWidgets.QDialog):
     def load_texture(self, texture_node):
         """Load and display the texture from the given file node."""
         try:
+            self.texture_node = texture_node
             # Get the file path
             file_path = cmds.getAttr(f"{texture_node}.fileTextureName")
             
@@ -810,16 +862,11 @@ class ShaderTextureViewer(QtWidgets.QDialog):
                 self._setup_udim_navigation(texture_node, file_path, resolved_path)
                 # Update UDIM label with current tile
                 self._update_udim_label()
-                # Always hide "Display All Textures" in file-texture context
-                if self._context == 'file':
-                    self.display_all_textures_checkbox.hide()
-                
                 # Restore checkbox state if it was checked
                 if was_display_all_checked:
                     self.udim_display_all_checkbox.setChecked(True)
                     self._display_all_udims = True
-                    if self._context != 'file':
-                        self.display_all_textures_checkbox.show()
+                    self.display_all_textures_checkbox.show()
                     
                     # Restore "Display All Textures" state if it was checked
                     if was_display_all_textures_checked:
@@ -876,20 +923,14 @@ class ShaderTextureViewer(QtWidgets.QDialog):
                 self.udim_label.hide()
                 self.udim_next_button.hide()
                 self.udim_prefix_label.hide()
-                # In file context: hide the UDIM checkbox entirely when no UDIMs
-                # In material context: keep it visible so users can leave it checked across texture switches
-                if self._context == 'file':
-                    self.udim_display_all_checkbox.hide()
-                else:
-                    self.udim_display_all_checkbox.show()
+                self.udim_display_all_checkbox.show()
                 # Restore checkbox state (preserve it)
                 self.udim_display_all_checkbox.setChecked(was_display_all_checked)
                 self._display_all_udims = was_display_all_checked
                 
                 # Show/hide "Display All Textures" checkbox based on state
                 if was_display_all_checked:
-                    if self._context != 'file':
-                        self.display_all_textures_checkbox.show()
+                    self.display_all_textures_checkbox.show()
                     self.display_all_textures_checkbox.setChecked(was_display_all_textures_checked)
                     self._display_all_textures = was_display_all_textures_checked
                 else:
@@ -907,10 +948,6 @@ class ShaderTextureViewer(QtWidgets.QDialog):
             
                 # Scale image after a short delay to ensure UI is fully rendered
                 QtCore.QTimer.singleShot(100, self._scale_image_to_fit)
-            
-            # Final enforcement: never show "Display All Textures" when viewing a single file texture
-            if self._context == 'file':
-                self.display_all_textures_checkbox.hide()
             
         except Exception as e:
             error_msg = str(e)
@@ -1065,10 +1102,7 @@ class ShaderTextureViewer(QtWidgets.QDialog):
                         self.udim_next_button.hide()
                     # Show "Display All Textures" checkbox if "Display All UDIMs" is checked
                     if self._display_all_udims:
-                        if self._context != 'file':
-                            self.display_all_textures_checkbox.show()
-                        else:
-                            self.display_all_textures_checkbox.hide()
+                        self.display_all_textures_checkbox.show()
                     else:
                         self.display_all_textures_checkbox.hide()
         except Exception as e:
@@ -1146,21 +1180,14 @@ class ShaderTextureViewer(QtWidgets.QDialog):
         if hasattr(checked_state, 'value'):
             checked_state = checked_state.value
         self._display_all_udims = (state == checked_state or state == 2)
-        # Never show "Display All Textures" in file context
-        if self._context == 'file':
-            self.display_all_textures_checkbox.hide()
         
-        # If no UDIM tiles, update the info label warning state when toggled (material context)
+        # If no UDIM tiles, update the info label warning state when toggled
         if not self._udim_tiles:
             try:
-                # Only show the UDIM checkbox in material context without UDIMs
-                if self._context != 'file':
-                    # Update info label to reflect warning state
-                    texture_node = self.texture_node
-                    filename = os.path.basename(self.texture_path) if self.texture_path else ""
-                    colorspace = self._get_colorspace(texture_node) if texture_node else 'Raw'
-                    # show_warning only when the checkbox is checked
-                    self._update_info_label(texture_node, filename, 0, colorspace, show_warning=bool(self._display_all_udims))
+                texture_node = self.texture_node
+                filename = os.path.basename(self.texture_path) if self.texture_path else ""
+                colorspace = self._get_colorspace(texture_node) if texture_node else 'Raw'
+                self._update_info_label(texture_node, filename, 0, colorspace, show_warning=bool(self._display_all_udims))
             except Exception:
                 pass
             return
@@ -1178,8 +1205,7 @@ class ShaderTextureViewer(QtWidgets.QDialog):
         
         # Show/hide "Display All Textures" checkbox based on "Display All UDIMs" state
         if self._display_all_udims:
-            if self._context != 'file':
-                self.display_all_textures_checkbox.show()
+            self.display_all_textures_checkbox.show()
         
         if not self._udim_tiles:
             # No UDIM tiles, but checkbox is visible - just don't change display
@@ -1208,8 +1234,6 @@ class ShaderTextureViewer(QtWidgets.QDialog):
     
     def _on_display_all_textures_changed(self, state):
         """Handle checkbox state change for displaying all textures from all attributes."""
-        if self._context == 'file':
-            return  # Not available in file-texture context
         if not self._display_all_udims:
             return  # Only works when Display All UDIMs is checked
         
@@ -1959,7 +1983,7 @@ def show_texture_viewer_for_material(material_node):
     return window
 
 def show_texture_viewer_for_file_node(file_node):
-    """Open viewer in file-texture context for a given file node (hides material/attribute UI)."""
+    """Open viewer focused on a file node; material/attribute combos match material mode (preselect one hook-up if any)."""
     if hasattr(show_texture_viewer_for_file_node, '_window') and show_texture_viewer_for_file_node._window is not None:
         try:
             show_texture_viewer_for_file_node._window.close()

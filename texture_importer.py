@@ -22,7 +22,11 @@ import maya.mel as mel
 import random
 import re
 import json
+import importlib
 from collections import Counter
+
+import QuickMaterials.help_doc_viewer
+importlib.reload(QuickMaterials.help_doc_viewer)
 
 
 def _load_quick_materials_all_settings():
@@ -170,7 +174,7 @@ TEXTURE_RULES = {
 
 # Bulk folder import (All Materials mode)
 BULK_ALL_MATERIALS_LABEL = (
-    "All Materials (Import all matching textures to all matching materials)"
+    "All Materials (Import all matching textures to all materials)"
 )
 BULK_FOLDER_SKIP_DIRS = frozenset({"old", "archive"})
 BULK_FOLDER_MAX_DEPTH = 6
@@ -219,14 +223,16 @@ class ImportTxTool(QtWidgets.QWidget):
         self._minimum_width_baseline = 700
         self._base_min_height = 330
         self._settings_frame_extra_height = 220
-        self._search_mode_object_names = {
-            "maya_file": "textureSearchMayaFileCheckbox",
-            "sourceimages": "textureSearchMayaSourceimagesCheckbox",
-            "custom": "textureSearchCustomPathCheckbox",
-        }
-        self._search_mode_checkboxes = {}
-        self._search_mode_lock = False
-        self._current_search_mode = "maya_file"
+        # DEPRECATED: Textures folder default location functionality removed.
+        # The file dialog remembers the last-used folder, making this redundant.
+        # self._search_mode_object_names = {
+        #     "maya_file": "textureSearchMayaFileCheckbox",
+        #     "sourceimages": "textureSearchMayaSourceimagesCheckbox",
+        #     "custom": "textureSearchCustomPathCheckbox",
+        # }
+        # self._search_mode_checkboxes = {}
+        # self._search_mode_lock = False
+        # self._current_search_mode = "maya_file"
 
         # Bulk folder scan (All Materials mode) — must exist before init_ui/setup_connections
         self._bulk_match_cache = {}
@@ -273,7 +279,8 @@ class ImportTxTool(QtWidgets.QWidget):
 
         self.populate_material_combo_box()
 
-        self.auto_populate_search_folder()
+        # DEPRECATED: Textures folder default location
+        # self.auto_populate_search_folder()
 
         self.setup_scroll_area_ui()
 
@@ -434,6 +441,17 @@ class ImportTxTool(QtWidgets.QWidget):
         else:
             self._debug_print("editTextureSearchNamesButton not found in UI elements.")
 
+        # Help doc button
+        help_btn = self.ui_elements.get("textureImporterHelpButton")
+        if help_btn:
+            try:
+                help_btn.clicked.disconnect()
+            except Exception:
+                pass
+            help_btn.clicked.connect(
+                lambda: QuickMaterials.help_doc_viewer.show_help_doc("textureImporterHelpButton")
+            )
+
         # Hook up Use UDIM checkbox (objectName must be 'useUdimCheckbox' in the .ui)
         use_udim_cb = self.ui_elements.get("useUdimCheckbox")  # <-- new
         if use_udim_cb:
@@ -458,15 +476,16 @@ class ImportTxTool(QtWidgets.QWidget):
             mat_cb.currentIndexChanged.connect(self._on_material_combo_changed)
             self._debug_print("Connected materialComboBox to _on_material_combo_changed")
 
-        self._init_search_mode_checkboxes()
+        # DEPRECATED: Textures folder default location
+        # self._init_search_mode_checkboxes()
 
-        set_btn = self.ui_elements.get("textureSearchCustomPathSetButton")
-        if set_btn and isValid(set_btn):
-            try:
-                set_btn.clicked.disconnect()
-            except Exception:
-                pass
-            set_btn.clicked.connect(self._on_custom_path_set_button_clicked)
+        # set_btn = self.ui_elements.get("textureSearchCustomPathSetButton")
+        # if set_btn and isValid(set_btn):
+        #     try:
+        #         set_btn.clicked.disconnect()
+        #     except Exception:
+        #         pass
+        #     set_btn.clicked.connect(self._on_custom_path_set_button_clicked)
 
         self.connections_initialized = True  # Mark connections as initialized
 
@@ -543,194 +562,167 @@ class ImportTxTool(QtWidgets.QWidget):
 
         return btn, frame
 
-    def _on_custom_path_set_button_clicked(self):
-        """Replicate legacy behavior for the custom-path Set button."""
-        line_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
-        if not line_edit or not isValid(line_edit):
-            return
+    # DEPRECATED: Textures folder default location functionality removed.
+    # The file dialog remembers the last-used folder, making this redundant.
+    #
+    # def _on_custom_path_set_button_clicked(self):
+    #     """Replicate legacy behavior for the custom-path Set button."""
+    #     line_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
+    #     if not line_edit or not isValid(line_edit):
+    #         return
+    #     current_path = line_edit.text().strip()
+    #     if current_path:
+    #         resolved_path = self._resolve_custom_path_keys(current_path)
+    #         if resolved_path:
+    #             if os.path.exists(resolved_path):
+    #                 self._open_folder(resolved_path)
+    #             else:
+    #                 create_cb = self.ui_elements.get("createIfDoesntExistCheckbox")
+    #                 should_create = bool(create_cb and isValid(create_cb) and create_cb.isChecked())
+    #                 if should_create:
+    #                     try:
+    #                         os.makedirs(resolved_path, exist_ok=True)
+    #                         self._open_folder(resolved_path)
+    #                     except Exception as exc:
+    #                         cmds.warning(f"Failed to create folder '{resolved_path}': {exc}")
+    #                 else:
+    #                     cmds.warning(
+    #                         f"Folder does not exist: {resolved_path}\n"
+    #                         "Enable 'Create if doesn't exist' to create it automatically."
+    #                     )
+    #         else:
+    #             cmds.warning(f"Invalid path template: {current_path}")
+    #     else:
+    #         start_dir = cmds.workspace(q=True, rootDirectory=True) or ""
+    #         folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Texture Folder", start_dir)
+    #         if folder:
+    #             line_edit.setText(folder)
+    #             self._set_search_mode("custom")
+    #
+    # def _open_folder(self, path):
+    #     """Open the given path in the OS file browser."""
+    #     if os.name == 'nt':
+    #         os.startfile(path)
+    #     elif os.name == 'posix':
+    #         try:
+    #             if hasattr(os, "uname") and os.uname().sysname == 'Darwin':
+    #                 os.system(f'open "{path}"')
+    #             else:
+    #                 os.system(f'xdg-open "{path}"')
+    #         except Exception:
+    #             pass
+    #
+    # def _resolve_custom_path_keys(self, path_template):
+    #     """Resolve key substitution in custom path template."""
+    #     if not path_template:
+    #         return None
+    #     try:
+    #         scene_path = cmds.file(q=True, sn=True) or ""
+    #         scene_dir = os.path.dirname(scene_path) if scene_path else ""
+    #         project_path = cmds.workspace(q=True, rootDirectory=True) or ""
+    #         project_dir = project_path.rstrip("/\\") if project_path else ""
+    #         resolved = path_template
+    #         resolved = resolved.replace("(scene)", scene_dir)
+    #         resolved = resolved.replace("(project)", project_dir)
+    #         resolved = os.path.normpath(resolved)
+    #         return resolved
+    #     except Exception as e:
+    #         print(f"[DEBUG] Error resolving path template '{path_template}': {e}")
+    #         return None
 
-        current_path = line_edit.text().strip()
-        if current_path:
-            resolved_path = self._resolve_custom_path_keys(current_path)
-            if resolved_path:
-                if os.path.exists(resolved_path):
-                    self._open_folder(resolved_path)
-                else:
-                    create_cb = self.ui_elements.get("createIfDoesntExistCheckbox")
-                    should_create = bool(create_cb and isValid(create_cb) and create_cb.isChecked())
-                    if should_create:
-                        try:
-                            os.makedirs(resolved_path, exist_ok=True)
-                            self._open_folder(resolved_path)
-                        except Exception as exc:
-                            cmds.warning(f"Failed to create folder '{resolved_path}': {exc}")
-                    else:
-                        cmds.warning(
-                            f"Folder does not exist: {resolved_path}\n"
-                            "Enable 'Create if doesn't exist' to create it automatically."
-                        )
-            else:
-                cmds.warning(f"Invalid path template: {current_path}")
-        else:
-            start_dir = cmds.workspace(q=True, rootDirectory=True) or ""
-            folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Texture Folder", start_dir)
-            if folder:
-                line_edit.setText(folder)
-                self._set_search_mode("custom")
-
-    def _open_folder(self, path):
-        """Open the given path in the OS file browser."""
-        if os.name == 'nt':
-            os.startfile(path)
-        elif os.name == 'posix':
-            try:
-                if hasattr(os, "uname") and os.uname().sysname == 'Darwin':
-                    os.system(f'open "{path}"')
-                else:
-                    os.system(f'xdg-open "{path}"')
-            except Exception:
-                pass
-
-    def _resolve_custom_path_keys(self, path_template):
-        """
-        Resolve key substitution in custom path template.
-        
-        Supported keys:
-        - (scene) → current Maya file folder
-        - (project) → current Maya project folder
-        
-        Everything after the key is treated as regular path components.
-        
-        Examples:
-        - (scene)/textures → [maya file folder]/textures
-        - (project)/sourceimages/materials → [project folder]/sourceimages/materials
-        
-        Returns the resolved path or None if invalid.
-        """
-        if not path_template:
-            return None
-            
-        try:
-            # Get current scene path
-            scene_path = cmds.file(q=True, sn=True) or ""
-            scene_dir = os.path.dirname(scene_path) if scene_path else ""
-            
-            # Get current project path
-            project_path = cmds.workspace(q=True, rootDirectory=True) or ""
-            project_dir = project_path.rstrip("/\\") if project_path else ""
-            
-            # Replace keys
-            resolved = path_template
-            resolved = resolved.replace("(scene)", scene_dir)
-            resolved = resolved.replace("(project)", project_dir)
-            
-            # Normalize path separators
-            resolved = os.path.normpath(resolved)
-            
-            return resolved
-            
-        except Exception as e:
-            print(f"[DEBUG] Error resolving path template '{path_template}': {e}")
-            return None
-
-    def _init_search_mode_checkboxes(self):
-        """Ensure the three search-path checkboxes behave exclusively."""
-        for mode in list(self._search_mode_object_names.keys()):
-            cb = self._get_search_checkbox(mode)
-            if not cb:
-                continue
-            try:
-                cb.toggled.disconnect()
-            except Exception:
-                pass
-            cb.toggled.connect(lambda checked, m=mode: self._on_search_mode_checkbox_toggled(m, checked))
-
-        initial_mode = None
-        for mode in self._search_mode_object_names.keys():
-            cb = self._get_search_checkbox(mode)
-            if cb and cb.isChecked():
-                initial_mode = mode
-                break
-        if not initial_mode:
-            initial_mode = "maya_file"
-        self._set_search_mode(initial_mode, force=True)
-
-    def _on_search_mode_checkbox_toggled(self, mode, checked):
-        if self._search_mode_lock:
-            return
-        if checked:
-            self._set_search_mode(mode)
-            return
-
-        # Prevent all checkboxes from being unchecked
-        any_other_checked = any(
-            cb.isChecked()
-            for m, cb in self._search_mode_checkboxes.items()
-            if m != mode and cb and isValid(cb)
-        )
-        if not any_other_checked:
-            self._set_search_mode(mode)
-
-    def _set_search_mode(self, mode, force=False):
-        target_cb = self._get_search_checkbox(mode)
-        if not target_cb:
-            return
-        if not force and self._current_search_mode == mode:
-            # still refresh custom-path widgets in case line edit pointers changed
-            self._update_custom_path_widgets()
-            return
-
-        self._search_mode_lock = True
-        for m in self._search_mode_object_names.keys():
-            checkbox = self._get_search_checkbox(m)
-            if checkbox:
-                checkbox.setChecked(m == mode)
-        self._search_mode_lock = False
-        self._current_search_mode = mode
-        self._update_custom_path_widgets()
-
-    def _get_search_checkbox(self, mode):
-        """Return the checkbox widget for a search mode, refreshing stale refs."""
-        obj_name = self._search_mode_object_names.get(mode)
-        if not obj_name:
-            return None
-
-        cb = self._search_mode_checkboxes.get(mode)
-        if not cb or not isValid(cb):
-            cb = self.ui_elements.get(obj_name)
-            if not cb or not isValid(cb):
-                cb = self.findChild(QtWidgets.QCheckBox, obj_name)
-                if cb:
-                    self.ui_elements[obj_name] = cb
-            if cb and isValid(cb):
-                self._search_mode_checkboxes[mode] = cb
-            else:
-                cb = None
-        return cb
-
-    def _update_custom_path_widgets(self):
-        """Enable/disable custom-path widgets based on current search mode."""
-        custom_on = (self._current_search_mode == "custom")
-        widget_names = [
-            "textureSearchCustomPathLineEdit",
-            "textureSearchCustomPathSetButton",
-            "customSearchFolderPathLabel",
-            "createIfDoesntExistCheckbox",
-        ]
-
-        for widget_name in widget_names:
-            w = self.ui_elements.get(widget_name)
-            if not w or not isValid(w):
-                w = self.findChild(QtWidgets.QWidget, widget_name)
-                if w:
-                    self.ui_elements[widget_name] = w
-            if w and isValid(w):
-                w.setEnabled(custom_on)
-
-        if not custom_on:
-            line_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
-            if line_edit and isValid(line_edit):
-                line_edit.clearFocus()
+    # DEPRECATED: Textures folder default location — search mode checkboxes and
+    # custom-path enable/disable logic removed.
+    #
+    # def _init_search_mode_checkboxes(self):
+    #     """Ensure the three search-path checkboxes behave exclusively."""
+    #     for mode in list(self._search_mode_object_names.keys()):
+    #         cb = self._get_search_checkbox(mode)
+    #         if not cb:
+    #             continue
+    #         try:
+    #             cb.toggled.disconnect()
+    #         except Exception:
+    #             pass
+    #         cb.toggled.connect(lambda checked, m=mode: self._on_search_mode_checkbox_toggled(m, checked))
+    #     initial_mode = None
+    #     for mode in self._search_mode_object_names.keys():
+    #         cb = self._get_search_checkbox(mode)
+    #         if cb and cb.isChecked():
+    #             initial_mode = mode
+    #             break
+    #     if not initial_mode:
+    #         initial_mode = "maya_file"
+    #     self._set_search_mode(initial_mode, force=True)
+    #
+    # def _on_search_mode_checkbox_toggled(self, mode, checked):
+    #     if self._search_mode_lock:
+    #         return
+    #     if checked:
+    #         self._set_search_mode(mode)
+    #         return
+    #     any_other_checked = any(
+    #         cb.isChecked()
+    #         for m, cb in self._search_mode_checkboxes.items()
+    #         if m != mode and cb and isValid(cb)
+    #     )
+    #     if not any_other_checked:
+    #         self._set_search_mode(mode)
+    #
+    # def _set_search_mode(self, mode, force=False):
+    #     target_cb = self._get_search_checkbox(mode)
+    #     if not target_cb:
+    #         return
+    #     if not force and self._current_search_mode == mode:
+    #         self._update_custom_path_widgets()
+    #         return
+    #     self._search_mode_lock = True
+    #     for m in self._search_mode_object_names.keys():
+    #         checkbox = self._get_search_checkbox(m)
+    #         if checkbox:
+    #             checkbox.setChecked(m == mode)
+    #     self._search_mode_lock = False
+    #     self._current_search_mode = mode
+    #     self._update_custom_path_widgets()
+    #
+    # def _get_search_checkbox(self, mode):
+    #     """Return the checkbox widget for a search mode, refreshing stale refs."""
+    #     obj_name = self._search_mode_object_names.get(mode)
+    #     if not obj_name:
+    #         return None
+    #     cb = self._search_mode_checkboxes.get(mode)
+    #     if not cb or not isValid(cb):
+    #         cb = self.ui_elements.get(obj_name)
+    #         if not cb or not isValid(cb):
+    #             cb = self.findChild(QtWidgets.QCheckBox, obj_name)
+    #             if cb:
+    #                 self.ui_elements[obj_name] = cb
+    #         if cb and isValid(cb):
+    #             self._search_mode_checkboxes[mode] = cb
+    #         else:
+    #             cb = None
+    #     return cb
+    #
+    # def _update_custom_path_widgets(self):
+    #     """Enable/disable custom-path widgets based on current search mode."""
+    #     custom_on = (self._current_search_mode == "custom")
+    #     widget_names = [
+    #         "textureSearchCustomPathLineEdit",
+    #         "textureSearchCustomPathSetButton",
+    #         "customSearchFolderPathLabel",
+    #         "createIfDoesntExistCheckbox",
+    #     ]
+    #     for widget_name in widget_names:
+    #         w = self.ui_elements.get(widget_name)
+    #         if not w or not isValid(w):
+    #             w = self.findChild(QtWidgets.QWidget, widget_name)
+    #             if w:
+    #                 self.ui_elements[widget_name] = w
+    #         if w and isValid(w):
+    #             w.setEnabled(custom_on)
+    #     if not custom_on:
+    #         line_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
+    #         if line_edit and isValid(line_edit):
+    #             line_edit.clearFocus()
 
     def _load_settings(self):
         """Return dict from settings/texture_importer_settings.json or {}."""
@@ -3251,7 +3243,7 @@ class ImportTxTool(QtWidgets.QWidget):
 
     def get_all_materials_sorted(self):
         """Gets all materials in the scene, sorted alphabetically, excluding specific default materials."""
-        default_materials = {'lambert1', 'standardSurface1', 'particleCloud1'}
+        default_materials = {'lambert1', 'standardSurface1', 'particleCloud1', 'openPBR_shader1'}
         all_materials = cmds.ls(materials=True)
         filtered_materials = sorted([mat for mat in all_materials if mat not in default_materials])
         return filtered_materials
@@ -3280,56 +3272,35 @@ class ImportTxTool(QtWidgets.QWidget):
     #     """Auto-search functionality removed - use file dialog instead."""
     #     pass
 
-    def auto_populate_search_folder(self):
-        """
-        Populate searchFolderLineEdit based on Settings JSON, with debug output.
-        """
-        search_line_edit = self.ui_elements.get("searchFolderLineEdit")
-        if not search_line_edit:
-            # searchFolderLineEdit is deprecated - silently skip
-            return
-
-        # ---------------- read settings ----------------
-        settings = self._load_settings()
-        mode = settings.get("default_mode", "maya_file")
-        custom_path = settings.get("custom_path", "")
-        use_relative = settings.get("relative", False)
-        proj_root = self._project_root()
-
-        self._debug_print(f"[SETTINGS] mode={mode}, custom_path='{custom_path}', relative={use_relative}")
-        self._debug_print(f"[PROJECT]  root='{proj_root}'")
-
-        # ---------------- resolve absolute folder ----------------
-        abs_folder = ""
-        if mode == "maya_file":
-            scene = cmds.file(q=True, sceneName=True)
-            if scene:
-                abs_folder = os.path.dirname(scene)
-            self._debug_print(f"[RESOLVE] maya_file ➜ '{abs_folder}'")
-        elif mode == "sourceimages":
-            abs_folder = os.path.join(proj_root, "sourceimages") if proj_root else ""
-            self._debug_print(f"[RESOLVE] sourceimages ➜ '{abs_folder}'")
-        elif mode == "custom" and custom_path:
-            # Handle key substitution for custom path
-            resolved_path = self._resolve_custom_path_keys(custom_path)
-            abs_folder = resolved_path if resolved_path else ""
-            self._debug_print(f"[RESOLVE] custom ➜ '{abs_folder}'")
-
-        # ---------------- decide display path ----------------
-        display_path = ""
-        if use_relative and abs_folder and proj_root:
-            try:
-                display_path = os.path.relpath(abs_folder, proj_root)
-                self._debug_print(f"[DISPLAY] relative requested; showing '{display_path}'")
-            except ValueError:
-                display_path = abs_folder
-                self._debug_print(f"[DISPLAY] relpath failed; showing absolute path '{display_path}'")
-        else:
-            self._debug_print(f"[DISPLAY] relative not requested; showing absolute path '{display_path}'")
-
-        # ---------------- apply to UI ----------------
-        search_line_edit.setText(display_path)
-        self.search_folder_path = abs_folder
+    # DEPRECATED: Textures folder default location — auto_populate_search_folder removed.
+    # def auto_populate_search_folder(self):
+    #     """Populate searchFolderLineEdit based on Settings JSON, with debug output."""
+    #     search_line_edit = self.ui_elements.get("searchFolderLineEdit")
+    #     if not search_line_edit:
+    #         return
+    #     settings = self._load_settings()
+    #     mode = settings.get("default_mode", "maya_file")
+    #     custom_path = settings.get("custom_path", "")
+    #     use_relative = settings.get("relative", False)
+    #     proj_root = self._project_root()
+    #     abs_folder = ""
+    #     if mode == "maya_file":
+    #         scene = cmds.file(q=True, sceneName=True)
+    #         if scene:
+    #             abs_folder = os.path.dirname(scene)
+    #     elif mode == "sourceimages":
+    #         abs_folder = os.path.join(proj_root, "sourceimages") if proj_root else ""
+    #     elif mode == "custom" and custom_path:
+    #         resolved_path = self._resolve_custom_path_keys(custom_path)
+    #         abs_folder = resolved_path if resolved_path else ""
+    #     display_path = ""
+    #     if use_relative and abs_folder and proj_root:
+    #         try:
+    #             display_path = os.path.relpath(abs_folder, proj_root)
+    #         except ValueError:
+    #             display_path = abs_folder
+    #     search_line_edit.setText(display_path)
+    #     self.search_folder_path = abs_folder
 
     def _project_root(self):
         """Return the active project folder with no trailing slash, or '' if unset."""
@@ -6040,9 +6011,9 @@ class TextureImporterSettingsUI(QtWidgets.QWidget):
         self.setFixedSize(self.sizeHint())
 
         # ---------- load saved settings and prime widgets ----------
-        self._apply_saved_settings()
-        self._update_custom_path_widgets()  # ensure enable/disable matches state
-
+        # DEPRECATED: Textures folder default location
+        # self._apply_saved_settings()
+        # self._update_custom_path_widgets()
 
         # 4) Wire up exclusivity & enabling logic
         self._setup_logic()
@@ -6061,45 +6032,41 @@ class TextureImporterSettingsUI(QtWidgets.QWidget):
 
     def _setup_logic(self):
         """Wire up UI interactions (no exclusivity code—done in Qt Designer)."""
-        # Connect each default-path checkbox to our toggle handler
-        for name in (
-            "textureSearchMayaFileCheckbox",
-            "textureSearchMayaSourceimagesCheckbox",
-            "textureSearchCustomPathCheckbox"
-        ):
-            cb = self.ui_elements.get(name)
-            if cb:
-                cb.toggled.connect(self._update_custom_path_widgets)
-
-        # Initial enable/disable pass
-        self._update_custom_path_widgets()
-        
-        # Set up tooltip for custom path line edit
-        custom_path_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
-        if custom_path_edit:
-            tooltip_text = (
-                "Custom texture search path with dynamic key substitution.\n\n"
-                "Available keys:\n"
-                "• (scene) - Current Maya file folder\n"
-                "• (project) - Current Maya project folder\n\n"
-                "Add any path after the key:\n"
-                "• (scene)/textures\n"
-                "• (scene)/assets/textures\n"
-                "• (project)/sourceimages\n"
-                "• (project)/sourceimages/materials"
-            )
-            custom_path_edit.setToolTip(tooltip_text)
-
+        # DEPRECATED: Textures folder default location — checkbox and custom path wiring removed.
+        # for name in (
+        #     "textureSearchMayaFileCheckbox",
+        #     "textureSearchMayaSourceimagesCheckbox",
+        #     "textureSearchCustomPathCheckbox"
+        # ):
+        #     cb = self.ui_elements.get(name)
+        #     if cb:
+        #         cb.toggled.connect(self._update_custom_path_widgets)
+        # self._update_custom_path_widgets()
+        #
+        # custom_path_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
+        # if custom_path_edit:
+        #     tooltip_text = (
+        #         "Custom texture search path with dynamic key substitution.\n\n"
+        #         "Available keys:\n"
+        #         "• (scene) - Current Maya file folder\n"
+        #         "• (project) - Current Maya project folder\n\n"
+        #         "Add any path after the key:\n"
+        #         "• (scene)/textures\n"
+        #         "• (scene)/assets/textures\n"
+        #         "• (project)/sourceimages\n"
+        #         "• (project)/sourceimages/materials"
+        #     )
+        #     custom_path_edit.setToolTip(tooltip_text)
 
         # Save button
         save_btn = self.ui_elements.get("textureImporterSaveSettings")
         if save_btn:
             save_btn.clicked.connect(self._save_settings)
 
-        # Set-button (browse for custom folder)
-        set_btn = self.ui_elements.get("textureSearchCustomPathSetButton")
-        if set_btn:
-            set_btn.clicked.connect(self._choose_custom_path)
+        # DEPRECATED: Textures folder default location
+        # set_btn = self.ui_elements.get("textureSearchCustomPathSetButton")
+        # if set_btn:
+        #     set_btn.clicked.connect(self._choose_custom_path)
 
         # Open Texture Search Names from Settings
         names_btn = self.ui_elements.get("editTextureSearchNamesButton")
@@ -6111,120 +6078,20 @@ class TextureImporterSettingsUI(QtWidgets.QWidget):
             names_btn.clicked.connect(self.open_texture_search_names_ui)
 
 
-    def _update_custom_path_widgets(self):
-        """Enable/disable custom-path widgets based on checkbox state."""
-        custom_cb = self._search_mode_checkboxes.get("custom") or self.ui_elements.get("textureSearchCustomPathCheckbox")
-        if not self._search_mode_checkboxes and self._search_mode_object_names:
-            self._init_search_mode_checkboxes()
-
-        custom_cb = self._get_search_checkbox("custom")
-        custom_on = bool(custom_cb and custom_cb.isChecked())
-        for widget_name in (
-            "textureSearchCustomPathLineEdit",
-            "textureSearchCustomPathSetButton",
-            "customSearchFolderPathLabel",
-            "createIfDoesntExistCheckbox"
-        ):
-            w = self.ui_elements.get(widget_name)
-            if w:
-                w.setEnabled(custom_on)
-
-        # If custom path is off, remove focus so the cursor isn't blinking
-        if not custom_on:
-            line_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
-            if line_edit and isValid(line_edit):
-                line_edit.clearFocus()
-
-
-    def _choose_custom_path(self):
-        """
-        Enhanced custom path handling with key substitution and folder creation.
-        
-        If there's a custom path with keys, resolve it and open/create the folder.
-        If no custom path, open folder dialog to select a new path.
-        """
-        current_path = self.ui_elements["textureSearchCustomPathLineEdit"].text().strip()
-        
-        if current_path:
-            # Resolve the path with key substitution
-            resolved_path = self._resolve_custom_path_keys(current_path)
-            
-            if resolved_path:
-                # Check if path exists
-                if os.path.exists(resolved_path):
-                    # Open existing folder in file explorer
-                    if os.name == 'nt':  # Windows
-                        os.startfile(resolved_path)
-                    elif os.name == 'posix':  # macOS and Linux
-                        os.system(f'open "{resolved_path}"' if os.uname().sysname == 'Darwin' else f'xdg-open "{resolved_path}"')
-                    print(f"[DEBUG] Opened folder: {resolved_path}")
-                else:
-                    # Path doesn't exist - ask if we should create it
-                    create_if_not_exists = self.ui_elements.get("createIfDoesntExistCheckbox")
-                    if create_if_not_exists and create_if_not_exists.isChecked():
-                        try:
-                            os.makedirs(resolved_path, exist_ok=True)
-                            print(f"[DEBUG] Created folder: {resolved_path}")
-                            
-                            # Open the newly created folder
-                            if os.name == 'nt':  # Windows
-                                os.startfile(resolved_path)
-                            elif os.name == 'posix':  # macOS and Linux
-                                os.system(f'open "{resolved_path}"' if os.uname().sysname == 'Darwin' else f'xdg-open "{resolved_path}"')
-                        except Exception as e:
-                            cmds.warning(f"Failed to create folder '{resolved_path}': {e}")
-                    else:
-                        cmds.warning(f"Folder does not exist: {resolved_path}\nEnable 'Create if doesn't exist' to create it automatically.")
-            else:
-                cmds.warning(f"Invalid path template: {current_path}")
-        else:
-            # No custom path set - open folder dialog to select one
-            start_dir = cmds.workspace(q=True, rootDirectory=True) or ""
-            folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Texture Folder", start_dir)
-            if folder:
-                self.ui_elements["textureSearchCustomPathLineEdit"].setText(folder)
-
-    def _resolve_custom_path_keys(self, path_template):
-        """
-        Resolve key substitution in custom path template.
-        
-        Supported keys:
-        - (scene) → current Maya file folder
-        - (project) → current Maya project folder
-        
-        Everything after the key is treated as regular path components.
-        
-        Examples:
-        - (scene)/textures → [maya file folder]/textures
-        - (project)/sourceimages/materials → [project folder]/sourceimages/materials
-        
-        Returns the resolved path or None if invalid.
-        """
-        if not path_template:
-            return None
-            
-        try:
-            # Get current scene path
-            scene_path = cmds.file(q=True, sn=True) or ""
-            scene_dir = os.path.dirname(scene_path) if scene_path else ""
-            
-            # Get current project path
-            project_path = cmds.workspace(q=True, rootDirectory=True) or ""
-            project_dir = project_path.rstrip("/\\") if project_path else ""
-            
-            # Replace keys
-            resolved = path_template
-            resolved = resolved.replace("(scene)", scene_dir)
-            resolved = resolved.replace("(project)", project_dir)
-            
-            # Normalize path separators
-            resolved = os.path.normpath(resolved)
-            
-            return resolved
-            
-        except Exception as e:
-            print(f"[DEBUG] Error resolving path template '{path_template}': {e}")
-            return None
+    # DEPRECATED: Textures folder default location — all custom path and search mode
+    # widget methods removed from TextureImporterSettingsUI.
+    #
+    # def _update_custom_path_widgets(self):
+    #     """Enable/disable custom-path widgets based on checkbox state."""
+    #     ...
+    #
+    # def _choose_custom_path(self):
+    #     """Enhanced custom path handling with key substitution and folder creation."""
+    #     ...
+    #
+    # def _resolve_custom_path_keys(self, path_template):
+    #     """Resolve key substitution in custom path template."""
+    #     ...
 
     def open_texture_search_names_ui(self):
         """Launch the TextureSearchNamesUI from the Settings window."""
@@ -6233,81 +6100,63 @@ class TextureImporterSettingsUI(QtWidgets.QWidget):
         self._texture_search_names_ui.show()
         self._texture_search_names_ui.raise_()
 
-    def reload_from_disk(self):
-        """Re-read JSON and re-apply to widgets (call before showing the window)."""
-        self._apply_saved_settings()
-        self._update_custom_path_widgets()
+    # DEPRECATED: Textures folder default location
+    # def reload_from_disk(self):
+    #     """Re-read JSON and re-apply to widgets (call before showing the window)."""
+    #     self._apply_saved_settings()
+    #     self._update_custom_path_widgets()
 
-    def _load_settings(self):
-        """Read texture_importer section from user JSON, else packaged default JSON."""
-        all_settings = _load_quick_materials_all_settings()
-        if isinstance(all_settings, dict) and "texture_importer" in all_settings:
-            return all_settings["texture_importer"]
-        return {}
+    # def _load_settings(self):
+    #     """Read texture_importer section from user JSON, else packaged default JSON."""
+    #     all_settings = _load_quick_materials_all_settings()
+    #     if isinstance(all_settings, dict) and "texture_importer" in all_settings:
+    #         return all_settings["texture_importer"]
+    #     return {}
 
+    # def _apply_saved_settings(self):
+    #     """Tick checkboxes / line-edits from stored JSON."""
+    #     s = self._load_settings() or {}
+    #     mode = s.get("default_mode", "maya_file")
+    #     self.ui_elements["textureSearchMayaFileCheckbox"].setChecked(mode == "maya_file")
+    #     self.ui_elements["textureSearchMayaSourceimagesCheckbox"].setChecked(mode == "sourceimages")
+    #     self.ui_elements["textureSearchCustomPathCheckbox"].setChecked(mode == "custom")
+    #     self.ui_elements["textureSearchCustomPathLineEdit"].setText(s.get("custom_path", ""))
+    #     create_if_not_exists = self.ui_elements.get("createIfDoesntExistCheckbox")
+    #     if create_if_not_exists:
+    #         create_if_not_exists.setChecked(s.get("create_if_doesnt_exist", False))
 
-
-    def _apply_saved_settings(self):
-        """Tick checkboxes / line-edits from stored JSON."""
-        s = self._load_settings() or {}
-        mode = s.get("default_mode", "maya_file")
-        self.ui_elements["textureSearchMayaFileCheckbox"].setChecked(mode == "maya_file")
-        self.ui_elements["textureSearchMayaSourceimagesCheckbox"].setChecked(mode == "sourceimages")
-        self.ui_elements["textureSearchCustomPathCheckbox"].setChecked(mode == "custom")
-        self.ui_elements["textureSearchCustomPathLineEdit"].setText(s.get("custom_path", ""))
-        
-        # Create if doesn't exist checkbox
-        create_if_not_exists = self.ui_elements.get("createIfDoesntExistCheckbox")
-        if create_if_not_exists:
-            create_if_not_exists.setChecked(s.get("create_if_doesnt_exist", False))
-
-
-
-    def _save_settings(self):
-        """Write settings to the main quick materials settings JSON."""
-        mode = "maya_file" if self.ui_elements["textureSearchMayaFileCheckbox"].isChecked() else \
-            "sourceimages" if self.ui_elements["textureSearchMayaSourceimagesCheckbox"].isChecked() else \
-                "custom"
-        data = {
-            "default_mode": mode,  # maya_file | sourceimages | custom
-            "custom_path": self.ui_elements["textureSearchCustomPathLineEdit"].text(),
-            # Recursive search settings removed - no longer needed without auto texture pathing
-        }
-        
-        # Add create if doesn't exist setting
-        create_if_not_exists = self.ui_elements.get("createIfDoesntExistCheckbox")
-        if create_if_not_exists:
-            data["create_if_doesnt_exist"] = create_if_not_exists.isChecked()
-        
-        # Save to main quick materials settings JSON
-        try:
-            # Import the main quick materials module to access the settings file path
-            import os
-            script_dir = os.path.dirname(__file__)
-            settings_dir = os.path.join(script_dir, "settings")
-            os.makedirs(settings_dir, exist_ok=True)
-            settings_path = os.path.join(settings_dir, "quick_materials_settings.json")
-
-            if os.path.exists(settings_path):
-                with open(settings_path, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-            else:
-                merged = _load_quick_materials_all_settings()
-                all_settings = merged if isinstance(merged, dict) and merged else {
-                    'material_creator': {},
-                    'material_list': {},
-                    'texture_importer': {}
-                }
-            
-            # Update texture importer section
-            all_settings['texture_importer'] = data
-            
-            # Save back to file
-            with open(settings_path, "w", encoding="utf-8") as f:
-                json.dump(all_settings, f, indent=2)
-                
-            # Show yellow notification instead of dialog
-            cmds.inViewMessage(amg="<hl>✔ Quick Materials Settings Saved</hl>", pos="topCenter", fade=True)
-        except Exception as e:
-            cmds.confirmDialog(title="Error", message=f"Failed to save settings: {e}", button=["OK"])
+    # def _save_settings(self):
+    #     """Write settings to the main quick materials settings JSON."""
+    #     mode = "maya_file" if self.ui_elements["textureSearchMayaFileCheckbox"].isChecked() else \
+    #         "sourceimages" if self.ui_elements["textureSearchMayaSourceimagesCheckbox"].isChecked() else \
+    #             "custom"
+    #     data = {
+    #         "default_mode": mode,
+    #         "custom_path": self.ui_elements["textureSearchCustomPathLineEdit"].text(),
+    #     }
+    #     create_if_not_exists = self.ui_elements.get("createIfDoesntExistCheckbox")
+    #     if create_if_not_exists:
+    #         data["create_if_doesnt_exist"] = create_if_not_exists.isChecked()
+    #     try:
+    #         import os
+    #         script_dir = os.path.dirname(__file__)
+    #         settings_dir = os.path.join(script_dir, "settings")
+    #         os.makedirs(settings_dir, exist_ok=True)
+    #         settings_path = os.path.join(settings_dir, "quick_materials_settings.json")
+    #         if os.path.exists(settings_path):
+    #             with open(settings_path, "r", encoding="utf-8") as f:
+    #                 all_settings = json.load(f)
+    #         else:
+    #             merged = _load_quick_materials_all_settings()
+    #             all_settings = merged if isinstance(merged, dict) and merged else {
+    #                 'material_creator': {},
+    #                 'material_list': {},
+    #                 'texture_importer': {}
+    #             }
+    #         all_settings['texture_importer'] = data
+    #         with open(settings_path, "w", encoding="utf-8") as f:
+    #             json.dump(all_settings, f, indent=2)
+    #         cmds.inViewMessage(amg="<hl>✔ Quick Materials Settings Saved</hl>", pos="topCenter", fade=True)
+    #     except Exception as e:
+    #         cmds.confirmDialog(title="Error", message=f"Failed to save settings: {e}", button=["OK"])
 

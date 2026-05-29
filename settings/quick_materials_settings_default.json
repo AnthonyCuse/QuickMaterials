@@ -1,4 +1,7 @@
 {
+  "quick_materials": {
+    "open_on_launch": false
+  },
   "material_creator": {
     "name_prefix": "M_",
     "name_suffix": "",
@@ -11,8 +14,13 @@
     "attribute_frame_visible_subsurfaceSliderFrame": false
   },
   "material_list": {},
-  "texture_importer": {
-    "default_mode": "maya_file",
-    "custom_path": ""
+  "texture_importer": {},
+  "material_tools": {
+    "material_tool_visible_TextureImporterButtonFrame": true,
+    "material_tool_visible_materialConverterButtonFrame": true,
+    "material_tool_visible_textureBakerButtonFrame": true,
+    "material_tool_visible_sendToSubstanceButtonFrame": true,
+    "material_tool_visible_deleteUnusedMaterialsButtonFrame": true,
+    "material_tool_visible_regenerateUvTilesButtonFrame": true
   }
 }

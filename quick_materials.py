@@ -53,6 +53,9 @@ importlib.reload(QuickMaterials.material_converter)
 import QuickMaterials.uv_tile_preview
 importlib.reload(QuickMaterials.uv_tile_preview)
 
+import QuickMaterials.help_doc_viewer
+importlib.reload(QuickMaterials.help_doc_viewer)
+
 # Import Material Swatch Icon
 try:
     from . import material_swatch_icon
@@ -136,6 +139,67 @@ def load_quick_materials_settings_full_dict():
         except Exception:
             continue
     return {}
+
+
+def is_open_on_launch_enabled():
+    """
+    Whether Maya should open Quick Materials on startup (userSetup deferred loader).
+    Read from quick_materials_settings.json; safe to call before the UI exists.
+    """
+    qm = load_quick_materials_settings_full_dict().get('quick_materials') or {}
+    return bool(qm.get('open_on_launch', False))
+
+
+def apply_open_on_launch_workspace_policy():
+    """
+    When open-on-launch is disabled, hide the saved workspace panel so Quick Materials
+    does not appear in the layout after Maya starts (workspace uiScript / saved layout).
+    Returns True if launch is enabled, False if the panel was suppressed.
+    """
+    if is_open_on_launch_enabled():
+        return True
+
+    wc = QuickMaterialsUI.workspace_control_name
+    try:
+        if not cmds.workspaceControl(wc, exists=True):
+            return False
+    except Exception:
+        return False
+
+    try:
+        cmds.workspaceControl(wc, edit=True, visible=False, retain=False)
+    except Exception:
+        try:
+            cmds.workspaceControl(wc, edit=True, visible=False)
+        except Exception:
+            pass
+
+    inst = QuickMaterialsUI.quick_materials_ui_instance
+    if inst:
+        try:
+            inst.hide()
+        except Exception:
+            pass
+    return False
+
+
+def schedule_open_on_launch_policy_enforcement():
+    """Deferred + idle enforcement so a workspace-saved dock is hidden after layout restore."""
+    def _apply():
+        apply_open_on_launch_workspace_policy()
+
+    mutils.executeDeferred(_apply)
+    try:
+        cmds.scriptJob(event=['idle', _apply], runOnce=True, killWithScene=False)
+    except Exception:
+        mutils.executeDeferred(_apply)
+
+
+def deferred_workspace_panel_on_maya_start():
+    """Maya workspace uiScript entry: restore UI only when open-on-launch is enabled."""
+    if not apply_open_on_launch_workspace_policy():
+        return
+    QuickMaterialsUI.restore_from_workspace()
 
 
 class LiveWidgetDict(dict):
@@ -530,6 +594,39 @@ class TextureIcon(QtWidgets.QLabel):
             super(TextureIcon, self).mousePressEvent(e)
         except Exception:
             super(TextureIcon, self).mousePressEvent(e)
+
+    def contextMenuEvent(self, event):
+        """Same file-texture actions as the filename label (right-click was missing on the icon only)."""
+        owner = self._owner_ref() if getattr(self, "_owner_ref", None) else None
+        if not (owner and isValid(owner)):
+            return
+        mat = getattr(self, "_actual_material_name", None) or self._qm_material_name
+        menu = QtWidgets.QMenu(_qm_context_menu_parent(self))
+        menu.setStyleSheet(context_menu_style)
+        owner._populate_file_texture_row_menu(menu, mat)
+
+        selected_mats = getattr(owner, "selected_materials_list", [])
+        if len(selected_mats) > 1:
+            menu.addSeparator()
+
+            def _safe_call(fn_name, *args, **kwargs):
+                try:
+                    fn = getattr(owner, fn_name, None)
+                    if callable(fn):
+                        fn(*args, **kwargs)
+                except Exception:
+                    pass
+
+            batch_graph = menu.addAction(f"Graph All Selected ({len(selected_mats)} items)")
+            batch_graph.triggered.connect(lambda: _safe_call("graph_selected_materials"))
+
+        try:
+            if QT_LIB == 6:
+                menu.exec(event.globalPos())
+            else:
+                menu.exec_(event.globalPos())
+        except Exception:
+            pass
 
 
 class ProceduralTextureIcon(QtWidgets.QLabel):
@@ -1424,7 +1521,7 @@ class TextureDisplayLabel(QtWidgets.QLabel):
         is_shading_group = (node_type_prop == "shading_group")
         is_texture = is_file_texture or is_procedural_texture  # Legacy check
         
-        menu = QtWidgets.QMenu(self)
+        menu = QtWidgets.QMenu(_qm_context_menu_parent(self))
         menu.setStyleSheet(context_menu_style)
         
         def _safe_call(fn_name, *args, **kwargs):
@@ -1436,44 +1533,7 @@ class TextureDisplayLabel(QtWidgets.QLabel):
                 pass
         
         if is_file_texture:
-            act_open = menu.addAction("Open File Location")
-            act_open.triggered.connect(lambda: _safe_call("open_file_texture_folder", mat))
-            
-            # View in Texture Viewer (file context)
-            act_view = menu.addAction("View")
-            def _open_view_file():
-                try:
-                    import importlib
-                    import QuickMaterials.texture_viewer as _qm_tv
-                    _qm_tv = importlib.reload(_qm_tv)
-                    _qm_tv.show_texture_viewer_for_file_node(mat)
-                except Exception as e:
-                    pass
-            act_view.triggered.connect(_open_view_file)
-            
-            menu.addSeparator()
-            
-            # Graph action for file textures
-            act_graph = menu.addAction("Graph")
-            act_graph.triggered.connect(lambda: _safe_call("graph_material_network", mat))
-            
-            menu.addSeparator()
-            
-            # Colorspace submenu
-            cs_menu = menu.addMenu("Colorspace")
-            cs_menu.setStyleSheet(context_menu_style)
-            try:
-                current_cs = owner._get_file_texture_colorspace(mat)
-                colorspaces = ['sRGB', 'Raw', 'ACEScg']
-                
-                for cs in colorspaces:
-                    cs_action = cs_menu.addAction(cs)
-                    if cs == current_cs:
-                        cs_action.setCheckable(True)
-                        cs_action.setChecked(True)
-                    cs_action.triggered.connect(lambda checked=False, colorspace=cs: _safe_call("_set_file_texture_colorspace", mat, colorspace))
-            except Exception:
-                pass
+            owner._populate_file_texture_row_menu(menu, mat)
         
         elif is_procedural_texture:
             # Procedural texture menu: Graph only
@@ -1489,7 +1549,13 @@ class TextureDisplayLabel(QtWidgets.QLabel):
             batch_graph = menu.addAction(f"Graph All Selected ({len(selected_mats)} items)")
             batch_graph.triggered.connect(lambda: _safe_call("graph_selected_materials"))
         
-        menu.exec_(self.mapToGlobal(event.pos()))
+        try:
+            if QT_LIB == 6:
+                menu.exec(event.globalPos())
+            else:
+                menu.exec_(event.globalPos())
+        except Exception:
+            pass
 
 
 class LeftClipLineEdit(QtWidgets.QLineEdit):
@@ -1547,7 +1613,7 @@ class LeftClipLineEdit(QtWidgets.QLineEdit):
         is_texture = is_file_texture or is_procedural_texture  # Legacy check
 
         # Build the menu
-        menu = QtWidgets.QMenu(self)
+        menu = QtWidgets.QMenu(_qm_context_menu_parent(self))
         menu.setStyleSheet(context_menu_style)
         
         # Wire actions to existing QuickMaterialsUI methods
@@ -1560,45 +1626,7 @@ class LeftClipLineEdit(QtWidgets.QLineEdit):
                 pass
 
         if is_file_texture:
-            # File texture menu
-            act_open = menu.addAction("Open File Location")
-            act_open.triggered.connect(lambda: _safe_call("open_file_texture_folder", mat))
-
-            # View in Texture Viewer (file context)
-            act_view = menu.addAction("View")
-            def _open_view_file():
-                try:
-                    import importlib
-                    import QuickMaterials.texture_viewer as _qm_tv
-                    _qm_tv = importlib.reload(_qm_tv)
-                    _qm_tv.show_texture_viewer_for_file_node(mat)
-                except Exception as e:
-                    pass
-            act_view.triggered.connect(_open_view_file)
-            
-            menu.addSeparator()
-            
-            # Graph action for file textures
-            act_graph = menu.addAction("Graph")
-            act_graph.triggered.connect(lambda: _safe_call("graph_material_network", mat))
-            
-            menu.addSeparator()
-            
-            # Colorspace submenu
-            cs_menu = menu.addMenu("Colorspace")
-            cs_menu.setStyleSheet(context_menu_style)
-            try:
-                current_cs = owner._get_file_texture_colorspace(mat)
-                colorspaces = ['sRGB', 'Raw', 'ACEScg']
-                
-                for cs in colorspaces:
-                    cs_action = cs_menu.addAction(cs)
-                    if cs == current_cs:
-                        cs_action.setCheckable(True)
-                        cs_action.setChecked(True)
-                    cs_action.triggered.connect(lambda checked=False, colorspace=cs: _safe_call("_set_file_texture_colorspace", mat, colorspace))
-            except Exception:
-                pass
+            owner._populate_file_texture_row_menu(menu, mat)
                 
         elif is_procedural_texture:
             # Procedural texture menu: Graph only
@@ -2530,6 +2558,23 @@ QMenu::separator {
 }
 """
 
+
+def _qm_context_menu_parent(anchor_widget):
+    """
+    Parent for QMenu so popups paint above scroll areas instead of being clipped to the list viewport.
+    Menus parented to QLabel/QLineEdit rows inside QScrollArea are clipped (worse at larger list scales).
+    """
+    try:
+        if anchor_widget is None:
+            return None
+        win = anchor_widget.window()
+        if win is not None and isValid(win):
+            return win
+    except Exception:
+        pass
+    return None
+
+
 material_filters_button_style = """
 QPushButton {
     font-family: 'Segoe UI';
@@ -2736,24 +2781,12 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
         # 4) Load saved settings
         self._apply_saved_settings()
         
-        # 5) Set up tooltip for custom path line edit
-        custom_path_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
-        if custom_path_edit:
-            tooltip_text = (
-                "Custom texture search path with dynamic key substitution.\n\n"
-                "Available keys:\n"
-                "• (scene) - Current Maya file folder\n"
-                "• (project) - Current Maya project folder\n\n"
-                "Add any path after the key:\n"
-                "• (scene)/textures\n"
-                "• (scene)/assets/textures\n"
-                "• (project)/sourceimages\n"
-                "• (project)/sourceimages/materials"
-            )
-            custom_path_edit.setToolTip(tooltip_text)
-        
-        # 6) Ensure custom path widgets are properly enabled/disabled based on initial state
-        self._update_custom_path_widgets()
+        # DEPRECATED: Textures folder default location
+        # custom_path_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
+        # if custom_path_edit:
+        #     tooltip_text = (...)
+        #     custom_path_edit.setToolTip(tooltip_text)
+        # self._update_custom_path_widgets()
     
     def showEvent(self, event):
         """Override showEvent to prevent auto-focus on materialNamingPrefixLineEdit."""
@@ -2786,20 +2819,19 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
         if close_btn:
             close_btn.clicked.connect(self.close)
             
-        # Connect texture importer settings checkboxes
-        for name in (
-            "textureSearchMayaFileCheckbox",
-            "textureSearchMayaSourceimagesCheckbox", 
-            "textureSearchCustomPathCheckbox"
-        ):
-            cb = self.ui_elements.get(name)
-            if cb:
-                cb.toggled.connect(self._update_custom_path_widgets)
-        
-        # Connect custom path set button
-        set_btn = self.ui_elements.get("textureSearchCustomPathSetButton")
-        if set_btn:
-            set_btn.clicked.connect(self._choose_custom_path)
+        # DEPRECATED: Textures folder default location
+        # for name in (
+        #     "textureSearchMayaFileCheckbox",
+        #     "textureSearchMayaSourceimagesCheckbox", 
+        #     "textureSearchCustomPathCheckbox"
+        # ):
+        #     cb = self.ui_elements.get(name)
+        #     if cb:
+        #         cb.toggled.connect(self._update_custom_path_widgets)
+        #
+        # set_btn = self.ui_elements.get("textureSearchCustomPathSetButton")
+        # if set_btn:
+        #     set_btn.clicked.connect(self._choose_custom_path)
         
         # Connect edit texture search names button
         names_btn = self.ui_elements.get("editTextureSearchNamesButton")
@@ -2851,15 +2883,15 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
         if result != "Yes":
             return
         
-        # Restore texture importer defaults
-        if "textureSearchMayaFileCheckbox" in self.ui_elements:
-            self.ui_elements["textureSearchMayaFileCheckbox"].setChecked(True)
-        if "textureSearchMayaSourceimagesCheckbox" in self.ui_elements:
-            self.ui_elements["textureSearchMayaSourceimagesCheckbox"].setChecked(False)
-        if "textureSearchCustomPathCheckbox" in self.ui_elements:
-            self.ui_elements["textureSearchCustomPathCheckbox"].setChecked(False)
-        if "textureSearchCustomPathLineEdit" in self.ui_elements:
-            self.ui_elements["textureSearchCustomPathLineEdit"].setText("")
+        # DEPRECATED: Textures folder default location
+        # if "textureSearchMayaFileCheckbox" in self.ui_elements:
+        #     self.ui_elements["textureSearchMayaFileCheckbox"].setChecked(True)
+        # if "textureSearchMayaSourceimagesCheckbox" in self.ui_elements:
+        #     self.ui_elements["textureSearchMayaSourceimagesCheckbox"].setChecked(False)
+        # if "textureSearchCustomPathCheckbox" in self.ui_elements:
+        #     self.ui_elements["textureSearchCustomPathCheckbox"].setChecked(False)
+        # if "textureSearchCustomPathLineEdit" in self.ui_elements:
+        #     self.ui_elements["textureSearchCustomPathLineEdit"].setText("")
         
         # Restore material creator attribute frame visibility defaults (only color and roughness visible)
         if hasattr(self, '_attribute_checkbox_to_frame'):
@@ -2892,8 +2924,8 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
         if suffix_le:
             suffix_le.setText("")
         
-        # Update custom path widgets state
-        self._update_custom_path_widgets()
+        # DEPRECATED: Textures folder default location
+        # self._update_custom_path_widgets()
         
         # Reset settings file to defaults
         self._reset_settings_file_to_defaults()
@@ -2926,9 +2958,14 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
                     'attribute_frame_visible_subsurfaceSliderFrame': False
                 },
                 'material_list': {},
-                'texture_importer': {
-                    'default_mode': 'maya_file',
-                    'custom_path': ''
+                'texture_importer': {},
+                'material_tools': {
+                    'material_tool_visible_TextureImporterButtonFrame': True,
+                    'material_tool_visible_materialConverterButtonFrame': True,
+                    'material_tool_visible_textureBakerButtonFrame': True,
+                    'material_tool_visible_sendToSubstanceButtonFrame': True,
+                    'material_tool_visible_deleteUnusedMaterialsButtonFrame': True,
+                    'material_tool_visible_regenerateUvTilesButtonFrame': True,
                 }
             }
 
@@ -2992,9 +3029,9 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
                     'toggleMaterialManagerVis': True,
                     'active_tab': 'shaders'
                 },
-                'texture_importer': {
-                    'default_mode': 'maya_file',
-                    'custom_path': ''
+                'texture_importer': {},
+                'material_tools': {
+                    'material_tools_settings_visible': True,
                 }
             }
             
@@ -3014,18 +3051,16 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
         """Load settings from main quick materials settings JSON and apply to UI."""
         settings = self._load_settings()
         
-        # Apply texture importer settings
-        mode = settings.get("default_mode", "maya_file")
-        
-        # Set checkboxes based on mode
-        if "textureSearchMayaFileCheckbox" in self.ui_elements:
-            self.ui_elements["textureSearchMayaFileCheckbox"].setChecked(mode == "maya_file")
-        if "textureSearchMayaSourceimagesCheckbox" in self.ui_elements:
-            self.ui_elements["textureSearchMayaSourceimagesCheckbox"].setChecked(mode == "sourceimages")
-        if "textureSearchCustomPathCheckbox" in self.ui_elements:
-            self.ui_elements["textureSearchCustomPathCheckbox"].setChecked(mode == "custom")
-        if "textureSearchCustomPathLineEdit" in self.ui_elements:
-            self.ui_elements["textureSearchCustomPathLineEdit"].setText(settings.get("custom_path", ""))
+        # DEPRECATED: Textures folder default location
+        # mode = settings.get("default_mode", "maya_file")
+        # if "textureSearchMayaFileCheckbox" in self.ui_elements:
+        #     self.ui_elements["textureSearchMayaFileCheckbox"].setChecked(mode == "maya_file")
+        # if "textureSearchMayaSourceimagesCheckbox" in self.ui_elements:
+        #     self.ui_elements["textureSearchMayaSourceimagesCheckbox"].setChecked(mode == "sourceimages")
+        # if "textureSearchCustomPathCheckbox" in self.ui_elements:
+        #     self.ui_elements["textureSearchCustomPathCheckbox"].setChecked(mode == "custom")
+        # if "textureSearchCustomPathLineEdit" in self.ui_elements:
+        #     self.ui_elements["textureSearchCustomPathLineEdit"].setText(settings.get("custom_path", ""))
         
         # Apply material creator attribute frame visibility settings
         # Load from main settings JSON, not just texture_importer section
@@ -3061,18 +3096,19 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
             return ti
         return {}
 
-    def _update_custom_path_widgets(self):
-        """Enable/disable custom-path widgets based on checkbox state."""
-        custom_on = self.ui_elements.get("textureSearchCustomPathCheckbox", {}).isChecked()
-        for widget_name in (
-            "textureSearchCustomPathLineEdit",
-            "textureSearchCustomPathSetButton",
-            "customSearchFolderPathLabel",
-            "createIfDoesntExistCheckbox"
-        ):
-            w = self.ui_elements.get(widget_name)
-            if w:
-                w.setEnabled(custom_on)
+    # DEPRECATED: Textures folder default location
+    # def _update_custom_path_widgets(self):
+    #     """Enable/disable custom-path widgets based on checkbox state."""
+    #     custom_on = self.ui_elements.get("textureSearchCustomPathCheckbox", {}).isChecked()
+    #     for widget_name in (
+    #         "textureSearchCustomPathLineEdit",
+    #         "textureSearchCustomPathSetButton",
+    #         "customSearchFolderPathLabel",
+    #         "createIfDoesntExistCheckbox"
+    #     ):
+    #         w = self.ui_elements.get(widget_name)
+    #         if w:
+    #             w.setEnabled(custom_on)
     
     def _on_attribute_checkbox_toggled(self, checkbox_name, checked):
         """Handle material attribute frame visibility checkbox toggling."""
@@ -3098,111 +3134,32 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
                 # Refresh minimum size and snap to it to account for visibility change
                 QtCore.QTimer.singleShot(0, main_ui.snap_to_minimum)
 
-    def _choose_custom_path(self):
-        """
-        Enhanced custom path handling with key substitution and folder creation.
-        
-        If there's a custom path with keys, resolve it and open/create the folder.
-        If no custom path, open folder dialog to select a new path.
-        """
-        current_path = self.ui_elements.get("textureSearchCustomPathLineEdit", {}).text().strip()
-        
-        if current_path:
-            # Resolve the path with key substitution
-            resolved_path = self._resolve_custom_path_keys(current_path)
-            
-            if resolved_path:
-                # Check if path exists
-                if os.path.exists(resolved_path):
-                    # Open existing folder in file explorer
-                    if os.name == 'nt':  # Windows
-                        os.startfile(resolved_path)
-                    elif os.name == 'posix':  # macOS and Linux
-                        os.system(f'open "{resolved_path}"' if os.uname().sysname == 'Darwin' else f'xdg-open "{resolved_path}"')
-                else:
-                    # Path doesn't exist - ask if we should create it
-                    create_if_not_exists = self.ui_elements.get("createIfDoesntExistCheckbox")
-                    if create_if_not_exists and create_if_not_exists.isChecked():
-                        try:
-                            os.makedirs(resolved_path, exist_ok=True)
-                            
-                            # Open the newly created folder
-                            if os.name == 'nt':  # Windows
-                                os.startfile(resolved_path)
-                            elif os.name == 'posix':  # macOS and Linux
-                                os.system(f'open "{resolved_path}"' if os.uname().sysname == 'Darwin' else f'xdg-open "{resolved_path}"')
-                        except Exception as e:
-                            cmds.warning(f"Failed to create folder '{resolved_path}': {e}")
-                    else:
-                        cmds.warning(f"Folder does not exist: {resolved_path}\nEnable 'Create if doesn't exist' to create it automatically.")
-            else:
-                cmds.warning(f"Invalid path template: {current_path}")
-        else:
-            # No custom path set - open folder dialog to select one
-            start_dir = cmds.workspace(q=True, rootDirectory=True) or ""
-            folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Texture Folder", start_dir)
-            if folder:
-                self.ui_elements.get("textureSearchCustomPathLineEdit", {}).setText(folder)
-
-    def _resolve_custom_path_keys(self, path_template):
-        """
-        Resolve key substitution in custom path template.
-        
-        Supported keys:
-        - (scene) → current Maya file folder
-        - (project) → current Maya project folder
-        
-        Everything after the key is treated as regular path components.
-        
-        Examples:
-        - (scene)/textures → [maya file folder]/textures
-        - (project)/sourceimages/materials → [project folder]/sourceimages/materials
-        
-        Returns the resolved path or None if invalid.
-        """
-        if not path_template:
-            return None
-            
-        try:
-            # Get current scene path
-            scene_path = cmds.file(q=True, sn=True) or ""
-            scene_dir = os.path.dirname(scene_path) if scene_path else ""
-            
-            # Get current project path
-            project_path = cmds.workspace(q=True, rootDirectory=True) or ""
-            project_dir = project_path.rstrip("/\\") if project_path else ""
-            
-            # Replace keys
-            resolved = path_template
-            resolved = resolved.replace("(scene)", scene_dir)
-            resolved = resolved.replace("(project)", project_dir)
-            
-            # Normalize path separators
-            resolved = os.path.normpath(resolved)
-            
-            return resolved
-            
-        except Exception as e:
-            return None
+    # DEPRECATED: Textures folder default location
+    # def _choose_custom_path(self):
+    #     """Enhanced custom path handling with key substitution and folder creation."""
+    #     ...
+    #
+    # def _resolve_custom_path_keys(self, path_template):
+    #     """Resolve key substitution in custom path template."""
+    #     ...
 
     def _save_settings(self):
         """Save settings to main quick materials settings JSON."""
-        mode = "maya_file"
-        if "textureSearchMayaFileCheckbox" in self.ui_elements and self.ui_elements["textureSearchMayaFileCheckbox"].isChecked():
-            mode = "maya_file"
-        elif "textureSearchMayaSourceimagesCheckbox" in self.ui_elements and self.ui_elements["textureSearchMayaSourceimagesCheckbox"].isChecked():
-            mode = "sourceimages"
-        elif "textureSearchCustomPathCheckbox" in self.ui_elements and self.ui_elements["textureSearchCustomPathCheckbox"].isChecked():
-            mode = "custom"
-        
-        custom_path = ""
-        if "textureSearchCustomPathLineEdit" in self.ui_elements:
-            custom_path = self.ui_elements["textureSearchCustomPathLineEdit"].text()
-        
-        data = {
-            "default_mode": mode,
-            "custom_path": custom_path,
-        }
+        # DEPRECATED: Textures folder default location — no longer reading mode/custom_path from UI
+        # mode = "maya_file"
+        # if "textureSearchMayaFileCheckbox" in self.ui_elements and self.ui_elements["textureSearchMayaFileCheckbox"].isChecked():
+        #     mode = "maya_file"
+        # elif "textureSearchMayaSourceimagesCheckbox" in self.ui_elements and self.ui_elements["textureSearchMayaSourceimagesCheckbox"].isChecked():
+        #     mode = "sourceimages"
+        # elif "textureSearchCustomPathCheckbox" in self.ui_elements and self.ui_elements["textureSearchCustomPathCheckbox"].isChecked():
+        #     mode = "custom"
+        # custom_path = ""
+        # if "textureSearchCustomPathLineEdit" in self.ui_elements:
+        #     custom_path = self.ui_elements["textureSearchCustomPathLineEdit"].text()
+        # data = {
+        #     "default_mode": mode,
+        #     "custom_path": custom_path,
+        # }
         
         # Save to main quick materials settings JSON
         try:
@@ -3223,8 +3180,8 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
                     'texture_importer': {}
                 }
             
-            # Update texture importer section
-            all_settings['texture_importer'] = data
+            # DEPRECATED: Textures folder default location
+            # all_settings['texture_importer'] = data
             
             # Save material creator attribute frame visibility settings
             if not 'material_creator' in all_settings:
@@ -3260,8 +3217,8 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
     def reload_from_disk(self):
         """Re-read JSON and re-apply to widgets (call before showing the window)."""
         self._apply_saved_settings()
-        # Ensure custom path widgets are properly enabled/disabled after reloading settings
-        self._update_custom_path_widgets()
+        # DEPRECATED: Textures folder default location
+        # self._update_custom_path_widgets()
     
     def open_texture_search_names_ui(self):
         """Launch the TextureSearchNamesUI from the Settings window."""
@@ -3527,6 +3484,16 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         # by tab buttons (materialListShadersButton, materialListTexturesButton, materialListShadingGroupButton, materialListUtilitiesButton)
         # instead of checkboxes in the options menu.
     ]
+
+    # Material Tools panel: settings checkboxes -> button container frames (order = grid order in UI).
+    MATERIAL_TOOLS_CHECKBOX_TO_FRAME = (
+        ('TextureImporterFrameCheckbox', 'TextureImporterButtonFrame'),
+        ('materialConverterFrameCheckbox', 'materialConverterButtonFrame'),
+        ('textureBakerFrameCheckbox', 'textureBakerButtonFrame'),
+        ('sendToSubstanceFrameCheckbox', 'sendToSubstanceButtonFrame'),
+        ('deleteUnusedMaterialsFrameCheckbox', 'deleteUnusedMaterialsButtonFrame'),
+        ('regenerateUvTilesFrameCheckbox', 'regenerateUvTilesButtonFrame'),
+    )
 
     MATERIAL_TABS = {
         'shaders': {
@@ -3906,7 +3873,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             "import maya.utils as _mutils\n"
             "import QuickMaterials.quick_materials as _qm\n"
             "try:\n"
-            "    _mutils.executeDeferred(_qm.QuickMaterialsUI.restore_from_workspace)\n"
+            "    _mutils.executeDeferred(_qm.deferred_workspace_panel_on_maya_start)\n"
             "except:\n"
             "    pass\n"
         )
@@ -3919,6 +3886,10 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             import maya.utils as mutils
             import maya.OpenMayaUI as omui
         except ImportError:
+            return
+
+        if not is_open_on_launch_enabled():
+            apply_open_on_launch_workspace_policy()
             return
 
         if not cmds.workspaceControl(cls.workspace_control_name, exists=True):
@@ -4368,13 +4339,49 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         self._material_name_prefix = self._material_creator_settings.get('name_prefix', 'M_') or ''
         self._material_name_suffix = self._material_creator_settings.get('name_suffix', '') or ''
 
-        # Ensure texture importer defaults exist for downstream reads
-        self._texture_importer_settings.setdefault('default_mode', 'maya_file')
-        self._texture_importer_settings.setdefault('custom_path', '')
-        self._texture_importer_settings.setdefault('create_if_doesnt_exist', False)
+        # DEPRECATED: Textures folder default location
+        # self._texture_importer_settings.setdefault('default_mode', 'maya_file')
+        # self._texture_importer_settings.setdefault('custom_path', '')
+        # self._texture_importer_settings.setdefault('create_if_doesnt_exist', False)
 
+        self._material_tools_settings = settings.setdefault('material_tools', {})
+
+        self._setup_quick_materials_settings_section()
         self._setup_material_creator_settings_section()
         self._setup_texture_importer_settings_section()
+        self._setup_material_tools_settings_section()
+
+    def _setup_quick_materials_settings_section(self):
+        """Wire the top-level Quick Materials settings gear panel."""
+        self._wire_settings_frame_toggle(
+            button_name='quickMaterialsSettingsButton',
+            frame_name='quickmaterialsSettingsFrame',
+            default_visible=False,
+        )
+
+        self._quick_materials_settings = self._load_settings_cache().setdefault('quick_materials', {})
+        open_cb = self.ui_elements.get('openOnLaunchCheckbox')
+        if not open_cb:
+            open_cb = self.findChild(QtWidgets.QCheckBox, 'openOnLaunchCheckbox')
+            if open_cb:
+                self.ui_elements['openOnLaunchCheckbox'] = open_cb
+        if open_cb:
+            open_on_launch = bool(self._quick_materials_settings.get('open_on_launch', False))
+            open_cb.blockSignals(True)
+            open_cb.setChecked(open_on_launch)
+            open_cb.blockSignals(False)
+            open_cb.toggled.connect(self._on_open_on_launch_toggled)
+
+    def _on_open_on_launch_toggled(self, checked):
+        self._quick_materials_settings['open_on_launch'] = bool(checked)
+        self._mark_settings_dirty()
+        if checked:
+            try:
+                self._update_retain_state()
+            except Exception:
+                pass
+        else:
+            apply_open_on_launch_workspace_policy()
 
     def _settings_file_path(self):
         return quick_materials_user_settings_path()
@@ -4388,9 +4395,11 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         if not isinstance(data, dict):
             data = {}
 
+        data.setdefault('quick_materials', {})
         data.setdefault('material_creator', {})
         data.setdefault('material_list', {})
         data.setdefault('texture_importer', {})
+        data.setdefault('material_tools', {})
         self._settings_cache = data
         return self._settings_cache
 
@@ -4512,7 +4521,10 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
         if trigger_snap:
             # Use a small delay to ensure layout has processed, then snap smoothly
-            QtCore.QTimer.singleShot(50, self.snap_to_minimum)
+            if button_name == 'materialToolsSettingsButton':
+                QtCore.QTimer.singleShot(50, self._material_tools_snap_or_fixup)
+            else:
+                QtCore.QTimer.singleShot(50, self.snap_to_minimum)
 
     def _get_settings_frame_checked(self, button_name):
         btn, _ = self._ensure_settings_toggle_refs(button_name)
@@ -4589,180 +4601,215 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             default_visible=False
         )
 
-        self._texture_mode_checkboxes = {
-            'maya_file': 'textureSearchMayaFileCheckbox',
-            'sourceimages': 'textureSearchMayaSourceimagesCheckbox',
-            'custom': 'textureSearchCustomPathCheckbox'
-        }
-
-        selected_mode = self._texture_importer_settings.get('default_mode', 'maya_file')
-        for mode, widget_name in self._texture_mode_checkboxes.items():
-            cb = self.ui_elements.get(widget_name)
-            if not cb:
-                continue
-            cb.blockSignals(True)
-            cb.setChecked(mode == selected_mode)
-            cb.blockSignals(False)
-            cb.toggled.connect(lambda checked, m=mode: self._on_texture_search_mode_toggled(m, checked))
-
-        custom_path_edit = self.ui_elements.get('textureSearchCustomPathLineEdit')
-        if custom_path_edit:
-            custom_path_edit.blockSignals(True)
-            custom_path_edit.setText(self._texture_importer_settings.get('custom_path', ''))
-            custom_path_edit.blockSignals(False)
-            custom_path_edit.editingFinished.connect(self._on_custom_path_changed)
-
-        create_cb = self.ui_elements.get('createIfDoesntExistCheckbox')
-        if create_cb:
-            create_cb.blockSignals(True)
-            create_cb.setChecked(bool(self._texture_importer_settings.get('create_if_doesnt_exist', False)))
-            create_cb.blockSignals(False)
-            create_cb.stateChanged.connect(lambda _: self._save_texture_importer_settings_from_widgets())
-
-        set_btn = self.ui_elements.get('textureSearchCustomPathSetButton')
-        if set_btn:
-            set_btn.clicked.connect(self._handle_texture_custom_path_button)
+        # DEPRECATED: Textures folder default location — search mode checkboxes,
+        # custom path, and create-if-doesn't-exist wiring removed.
+        # self._texture_mode_checkboxes = {
+        #     'maya_file': 'textureSearchMayaFileCheckbox',
+        #     'sourceimages': 'textureSearchMayaSourceimagesCheckbox',
+        #     'custom': 'textureSearchCustomPathCheckbox'
+        # }
+        # selected_mode = self._texture_importer_settings.get('default_mode', 'maya_file')
+        # for mode, widget_name in self._texture_mode_checkboxes.items():
+        #     cb = self.ui_elements.get(widget_name)
+        #     if not cb:
+        #         continue
+        #     cb.blockSignals(True)
+        #     cb.setChecked(mode == selected_mode)
+        #     cb.blockSignals(False)
+        #     cb.toggled.connect(lambda checked, m=mode: self._on_texture_search_mode_toggled(m, checked))
+        #
+        # custom_path_edit = self.ui_elements.get('textureSearchCustomPathLineEdit')
+        # if custom_path_edit:
+        #     custom_path_edit.blockSignals(True)
+        #     custom_path_edit.setText(self._texture_importer_settings.get('custom_path', ''))
+        #     custom_path_edit.blockSignals(False)
+        #     custom_path_edit.editingFinished.connect(self._on_custom_path_changed)
+        #
+        # create_cb = self.ui_elements.get('createIfDoesntExistCheckbox')
+        # if create_cb:
+        #     create_cb.blockSignals(True)
+        #     create_cb.setChecked(bool(self._texture_importer_settings.get('create_if_doesnt_exist', False)))
+        #     create_cb.blockSignals(False)
+        #     create_cb.stateChanged.connect(lambda _: self._save_texture_importer_settings_from_widgets())
+        #
+        # set_btn = self.ui_elements.get('textureSearchCustomPathSetButton')
+        # if set_btn:
+        #     set_btn.clicked.connect(self._handle_texture_custom_path_button)
 
         names_btn = self.ui_elements.get('editTextureSearchNamesButton')
         if names_btn:
             names_btn.clicked.connect(self.open_texture_search_names_ui)
 
-        self._update_custom_path_widgets()
-        self._save_texture_importer_settings_from_widgets()
+        # DEPRECATED: Textures folder default location
+        # self._update_custom_path_widgets()
+        # self._save_texture_importer_settings_from_widgets()
 
-    def _current_texture_search_mode(self):
-        for mode, widget_name in self._texture_mode_checkboxes.items():
-            cb = self.ui_elements.get(widget_name)
-            if cb and cb.isChecked():
-                return mode
-        return 'maya_file'
+    def _compact_material_tools_settings_layout(self):
+        """
+        gridLayout_2 uses rowstretch 1,1,1,1 but checkboxes sit on rows 0,1,2,4,6,7 — row 3 is
+        empty with stretch, which creates a visible gap in the settings panel when the frame grows.
+        """
+        grid = self.findChild(QtWidgets.QGridLayout, 'gridLayout_2')
+        if grid:
+            for row in range(grid.rowCount()):
+                grid.setRowStretch(row, 0)
 
-    def _on_texture_search_mode_toggled(self, mode, checked):
-        if self._updating_texture_mode:
+        sf = self.ui_elements.get('materialToolsSettingsFrame')
+        if not sf or not isValid(sf):
+            sf = self.findChild(QtWidgets.QWidget, 'materialToolsSettingsFrame')
+            if sf:
+                self.ui_elements['materialToolsSettingsFrame'] = sf
+        if sf and isValid(sf):
+            pol = sf.sizePolicy()
+            pol.setVerticalPolicy(QtWidgets.QSizePolicy.Minimum)
+            pol.setHorizontalPolicy(QtWidgets.QSizePolicy.MinimumExpanding)
+            sf.setSizePolicy(pol)
+            for layout_name in ('verticalLayout_21', 'verticalLayout_23'):
+                inner = sf.findChild(QtWidgets.QLayout, layout_name)
+                if inner:
+                    for i in range(inner.count()):
+                        inner.setStretch(i, 0)
+
+        v4 = self.findChild(QtWidgets.QVBoxLayout, 'verticalLayout_4')
+        if v4:
+            for i in range(v4.count()):
+                v4.setStretch(i, 0)
+
+    def _sync_material_tools_vertical_fit(self):
+        """
+        Keep materialToolsFrame at its content height so slack is not pushed into the settings
+        grid (empty stretched rows) or the settings/buttons stack.
+
+        Avoid temporarily clearing maximumHeight (that caused visible jumping); sizeHint does
+        not require uncapping to shrink, and we only relax the cap when growing past cur_max.
+        """
+        self._compact_material_tools_settings_layout()
+
+        tf = self.ui_elements.get('materialToolsFrame')
+        if not tf or not isValid(tf):
+            tf = self.findChild(QtWidgets.QWidget, 'materialToolsFrame')
+            if tf:
+                self.ui_elements['materialToolsFrame'] = tf
+        if not tf or not isValid(tf) or not tf.isVisible():
             return
-        self._updating_texture_mode = True
-        try:
-            if checked:
-                for other_mode, widget_name in self._texture_mode_checkboxes.items():
-                    if other_mode == mode:
-                        continue
-                    cb = self.ui_elements.get(widget_name)
-                    if cb and cb.isChecked():
-                        cb.blockSignals(True)
-                        cb.setChecked(False)
-                        cb.blockSignals(False)
-                self._texture_importer_settings['default_mode'] = mode
-            else:
-                # Prevent scenario where all modes are unchecked
-                any_checked = False
-                for widget_name in self._texture_mode_checkboxes.values():
-                    cb = self.ui_elements.get(widget_name)
-                    if cb and cb.isChecked():
-                        any_checked = True
-                        break
-                if not any_checked:
-                    cb = self.ui_elements.get(self._texture_mode_checkboxes.get(mode))
-                    if cb:
-                        cb.blockSignals(True)
-                        cb.setChecked(True)
-                        cb.blockSignals(False)
-                    self._texture_importer_settings['default_mode'] = mode
-            self._update_custom_path_widgets()
-            self._save_texture_importer_settings_from_widgets()
-        finally:
-            self._updating_texture_mode = False
 
-    def _update_custom_path_widgets(self):
-        """Enable/disable custom-path widgets based on checkbox state."""
-        custom_cb_name = self._texture_mode_checkboxes.get('custom')
-        custom_cb = self.ui_elements.get(custom_cb_name) if custom_cb_name else None
-        custom_on = bool(custom_cb.isChecked()) if custom_cb else False
-        for widget_name in (
-            "textureSearchCustomPathLineEdit",
-            "textureSearchCustomPathSetButton",
-            "customSearchFolderPathLabel",
-            "createIfDoesntExistCheckbox"
-        ):
-            w = self.ui_elements.get(widget_name)
-            if w:
-                w.setEnabled(custom_on)
+        sf = self.ui_elements.get('materialToolsSettingsFrame')
+        if not sf or not isValid(sf):
+            sf = self.findChild(QtWidgets.QWidget, 'materialToolsSettingsFrame')
+            if sf:
+                self.ui_elements['materialToolsSettingsFrame'] = sf
+        tf.updateGeometry()
+        app = QtWidgets.QApplication.instance()
+        if app:
+            app.sendPostedEvents(tf, 0)
 
-    def _on_custom_path_changed(self):
-        line_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
-        if not line_edit:
+        hint = tf.sizeHint().height()
+        if hint <= 0:
+            hint = tf.minimumSizeHint().height()
+        if hint <= 0:
             return
-        self._texture_importer_settings['custom_path'] = line_edit.text().strip()
-        self._save_texture_importer_settings_from_widgets()
 
-    def _handle_texture_custom_path_button(self):
-        line_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
-        if not line_edit:
-            return
-        current_path = line_edit.text().strip()
+        grid = self.findChild(QtWidgets.QGridLayout, 'materialToolsLayout')
+        if grid:
+            grid.setRowStretch(0, 0)
+            grid.setColumnStretch(0, 0)
 
-        if current_path:
-            resolved_path = self._resolve_custom_path_keys(current_path)
-            if resolved_path:
-                if os.path.exists(resolved_path):
-                    if os.name == 'nt':
-                        os.startfile(resolved_path)
-                    elif os.name == 'posix':
-                        if hasattr(os, 'uname') and os.uname().sysname == 'Darwin':
-                            os.system(f'open "{resolved_path}"')
-                        else:
-                            os.system(f'xdg-open "{resolved_path}"')
-                else:
-                    create_cb = self.ui_elements.get("createIfDoesntExistCheckbox")
-                    if create_cb and create_cb.isChecked():
-                        try:
-                            os.makedirs(resolved_path, exist_ok=True)
-                            if os.name == 'nt':
-                                os.startfile(resolved_path)
-                            elif os.name == 'posix':
-                                if hasattr(os, 'uname') and os.uname().sysname == 'Darwin':
-                                    os.system(f'open "{resolved_path}"')
-                                else:
-                                    os.system(f'xdg-open "{resolved_path}"')
-                        except Exception as exc:
-                            cmds.warning(f"Failed to create folder '{resolved_path}': {exc}")
-                    else:
-                        cmds.warning(f"Folder does not exist: {resolved_path}\nEnable 'Create if doesn't exist' to create it automatically.")
-            else:
-                cmds.warning(f"Invalid path template: {current_path}")
-        else:
-            start_dir = cmds.workspace(q=True, rootDirectory=True) or ""
-            folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Texture Folder", start_dir)
-            if folder:
-                line_edit.setText(folder)
-                self._on_custom_path_changed()
+        cur_max = tf.maximumHeight()
+        # Growing: only uncap if Qt/layout still thinks we're capped below needed height
+        if cur_max < 16777215 and hint > cur_max:
+            tf.setMaximumHeight(16777215)
+            tf.updateGeometry()
+            if app:
+                app.sendPostedEvents(tf, 0)
+            hint = tf.sizeHint().height()
+            if hint <= 0:
+                hint = tf.minimumSizeHint().height()
+            if hint <= 0:
+                return
 
-    def _resolve_custom_path_keys(self, path_template):
-        if not path_template:
-            return None
-        try:
-            scene_path = cmds.file(q=True, sn=True) or ""
-            scene_dir = os.path.dirname(scene_path) if scene_path else ""
+        new_max = max(int(hint), 1)
+        if tf.maximumHeight() != new_max:
+            tf.setMaximumHeight(new_max)
 
-            project_path = cmds.workspace(q=True, rootDirectory=True) or ""
-            project_dir = project_path.rstrip("/\\") if project_path else ""
+    def _material_tools_post_layout_fixup(self):
+        """After tool rows or settings visibility change, clamp tools column then snap window."""
+        self._sync_material_tools_vertical_fit()
+        self.snap_to_minimum()
 
-            resolved = path_template
-            resolved = resolved.replace("(scene)", scene_dir)
-            resolved = resolved.replace("(project)", project_dir)
-            return os.path.normpath(resolved)
-        except Exception as exc:
-            print(f"[DEBUG] Error resolving path template '{path_template}': {exc}")
-            return None
+    def _material_tools_snap_or_fixup(self):
+        """Clamp tools column to content, then snap window minimum (same deferred timing as creator)."""
+        self._material_tools_post_layout_fixup()
 
-    def _save_texture_importer_settings_from_widgets(self):
-        self._texture_importer_settings['default_mode'] = self._current_texture_search_mode()
-        line_edit = self.ui_elements.get("textureSearchCustomPathLineEdit")
-        if line_edit:
-            self._texture_importer_settings['custom_path'] = line_edit.text().strip()
-        create_cb = self.ui_elements.get("createIfDoesntExistCheckbox")
-        if create_cb:
-            self._texture_importer_settings['create_if_doesnt_exist'] = create_cb.isChecked()
+    @staticmethod
+    def _material_tool_visible_settings_key(frame_name):
+        return f'material_tool_visible_{frame_name}'
+
+    def _setup_material_tools_settings_section(self):
+        """Wire the Material Tools settings gear panel and per-tool visibility checkboxes."""
+        self._wire_settings_frame_toggle(
+            button_name='materialToolsSettingsButton',
+            frame_name='materialToolsSettingsFrame',
+            default_visible=None,
+        )
+        self._compact_material_tools_settings_layout()
+        for checkbox_name, frame_name in self.MATERIAL_TOOLS_CHECKBOX_TO_FRAME:
+            cb = self.ui_elements.get(checkbox_name)
+            if not cb:
+                continue
+            key = self._material_tool_visible_settings_key(frame_name)
+            stored = self._material_tools_settings.get(key)
+            if stored is None:
+                stored = cb.isChecked()
+                self._material_tools_settings[key] = bool(stored)
+            cb.blockSignals(True)
+            cb.setChecked(bool(stored))
+            cb.blockSignals(False)
+            cb.toggled.connect(
+                lambda checked, fn=frame_name: self._on_material_tool_checkbox_toggled(fn, checked)
+            )
+            self._apply_material_tool_frame_visibility(frame_name, bool(stored), invoke_snap=False)
+        QtCore.QTimer.singleShot(50, self._material_tools_snap_or_fixup)
+
+    def _apply_material_tool_frame_visibility(self, frame_name, visible, invoke_snap=True):
+        frame = self.findChild(QtWidgets.QWidget, frame_name)
+        if frame and isValid(frame):
+            frame.setVisible(bool(visible))
+        if invoke_snap:
+            QtCore.QTimer.singleShot(50, self._material_tools_snap_or_fixup)
+
+    def _on_material_tool_checkbox_toggled(self, frame_name, checked):
+        key = self._material_tool_visible_settings_key(frame_name)
+        self._material_tools_settings[key] = bool(checked)
+        self._apply_material_tool_frame_visibility(frame_name, bool(checked))
         self._mark_settings_dirty()
+
+    # DEPRECATED: Textures folder default location — all search mode, custom path,
+    # and settings-from-widgets methods removed.
+    #
+    # def _current_texture_search_mode(self):
+    #     for mode, widget_name in self._texture_mode_checkboxes.items():
+    #         cb = self.ui_elements.get(widget_name)
+    #         if cb and cb.isChecked():
+    #             return mode
+    #     return 'maya_file'
+    #
+    # def _on_texture_search_mode_toggled(self, mode, checked):
+    #     ...
+    #
+    # def _update_custom_path_widgets(self):
+    #     ...
+    #
+    # def _on_custom_path_changed(self):
+    #     ...
+    #
+    # def _handle_texture_custom_path_button(self):
+    #     ...
+    #
+    # def _resolve_custom_path_keys(self, path_template):
+    #     ...
+    #
+    # def _save_texture_importer_settings_from_widgets(self):
+    #     ...
 
     def open_texture_search_names_ui(self):
         """Launch the TextureSearchNamesUI from the embedded settings."""
@@ -4791,10 +4838,12 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             "base_width": 300,  # base min width even if all sections hidden
             "base_height": 50,  # base min height even if all sections hidden (reduced from 100)
             "sections": {
+                "quickmaterialsSettingsFrame": 130,
                 "materialCreatorFrame": 250,  # visible => add this many pixels of min height (reduced from 210)
                 "materialCreatorSettingsFrame": 320,
                 "textureImporterSettingsFrame": 160,
                 "materialToolsFrame": 75,
+                "materialToolsSettingsFrame": 200,
                 "materialListFrame": 200,
                 "materialListSettingsFrame": 220,
                 "materialListFiltersFrame": 150,
@@ -4884,6 +4933,18 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                         if frame_height <= 0:
                             min_hint = w.minimumSizeHint()
                             frame_height = min_hint.height() if min_hint.height() > 0 else int(add_h)
+                        frame_height = max(int(add_h), int(frame_height))
+                        min_h += int(frame_height)
+                    elif frame_name == "materialToolsSettingsFrame":
+                        self._compact_material_tools_settings_layout()
+                        w.updateGeometry()
+                        min_hint = w.minimumSizeHint()
+                        frame_height = min_hint.height() if min_hint.height() > 0 else 0
+                        if frame_height <= 0:
+                            hint = w.sizeHint()
+                            frame_height = hint.height() if hint.height() > 0 else 0
+                        if frame_height <= 0:
+                            frame_height = int(add_h)
                         frame_height = max(int(add_h), int(frame_height))
                         min_h += int(frame_height)
                     elif frame_name == "materialCreatorFrame":
@@ -5365,8 +5426,11 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             except Exception:
                 pass
             
-            # Only retain (save to workspace) when docked, not when floating
-            retain_value = not is_floating
+            # Only retain (save to workspace) when docked and open-on-launch is enabled
+            if not is_open_on_launch_enabled():
+                retain_value = False
+            else:
+                retain_value = not is_floating
             
             try:
                 cmds.workspaceControl(
@@ -5516,9 +5580,24 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         else:
             print("Error: textureImporterButton not found.")
 
+        send_to_substance_btn = self.ui_elements.get('sendToSubstanceButton')
+        if send_to_substance_btn:
+            send_to_substance_btn.clicked.connect(self.open_send_to_substance)
+        else:
+            print("Error: sendToSubstanceButton not found.")
+
         regenerate_uv_tiles_btn = self.ui_elements.get('regenerateUvTilesButton')
         if regenerate_uv_tiles_btn:
             regenerate_uv_tiles_btn.clicked.connect(self._on_regenerate_uv_tile_previews)
+
+        # Help doc buttons
+        for btn_name in ("quickMaterialsHelpButton", "matericalCreatorHelpButton",
+                         "materialToolsHelpButton", "materialListHelpButton"):
+            btn = self.ui_elements.get(btn_name)
+            if btn:
+                btn.clicked.connect(
+                    lambda _checked=False, _n=btn_name: QuickMaterials.help_doc_viewer.show_help_doc(_n)
+                )
 
         # Connect list entry scaling buttons
         scale_down_btn = self._get_widget('scaleDownListEntriesButton', QtWidgets.QPushButton)
@@ -6249,7 +6328,12 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         # Recompute min size and snap after the event loop processes the visibility change
         # Use a small delay when hiding to ensure layout has fully processed the change
         delay = 10 if not visible else 0  # 10ms delay when hiding, immediate when showing
-        QtCore.QTimer.singleShot(delay, self.snap_to_minimum)
+
+        def _after_panel_toggle():
+            self._sync_material_tools_vertical_fit()
+            self.snap_to_minimum()
+
+        QtCore.QTimer.singleShot(delay, _after_panel_toggle)
 
         if layout_name == "materialCreatorLayout":
             QtCore.QTimer.singleShot(
@@ -6308,7 +6392,12 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         # Recompute min size and snap after the event loop processes the visibility change
         # Use a small delay when hiding to ensure layout has fully processed the change
         delay = 10 if not visible else 0  # 10ms delay when hiding, immediate when showing
-        QtCore.QTimer.singleShot(delay, self.snap_to_minimum)
+
+        def _after_panel_set():
+            self._sync_material_tools_vertical_fit()
+            self.snap_to_minimum()
+
+        QtCore.QTimer.singleShot(delay, _after_panel_set)
 
         if layout_name == "materialCreatorLayout":
             QtCore.QTimer.singleShot(
@@ -6825,8 +6914,13 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
             # Check if we're dealing with component selections
             has_components = any(unit.get('is_component', False) for unit in selection_units)
-            
-            # Use the current displayed color for material creation
+
+            rh_cb = self.ui_elements.get('randomHueCheckbox')
+            rh_checked = rh_cb and rh_cb.isChecked()
+            # Apply random hue before sampling color so new materials use that hue (not the pre-click picker).
+            if rh_checked:
+                self.set_random_hue_color()
+
             color_rgb = self.get_current_color_rgb()
 
             if is_single_material_for_all:
@@ -7391,13 +7485,8 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
     def update_color_display_after_creation(self):
         """Update the color display and sliders after creating a material."""
-        # If user wants a new random hue after creation, use the canonical path
-        # that already updates the hue slider and button consistently.
-        rh_cb = self.ui_elements.get('randomHueCheckbox')
-        if rh_cb and rh_cb.isChecked():
-            self.set_random_hue_color()  # updates selected_color, hue slider, and button
-
-        # Ensure the saturation slider gradient matches whatever hue/value we now have
+        # Random hue is applied at the start of create_material so the shader matches the picker;
+        # only refresh gradients here.
         self.update_saturation_slider_gradient()
 
 
@@ -7924,6 +8013,15 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                         bool(mc_state['material_creator_settings_visible']),
                         trigger_snap=False
                     )
+
+            if 'quick_materials' in state:
+                qm_state = state['quick_materials']
+                if 'quick_materials_settings_visible' in qm_state:
+                    self._set_settings_frame_visibility(
+                        'quickMaterialsSettingsButton',
+                        bool(qm_state['quick_materials_settings_visible']),
+                        trigger_snap=False,
+                    )
             
             # Load material list settings
             if 'material_list' in state:
@@ -8003,6 +8101,15 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                     self._set_settings_frame_visibility(
                         'textureImporterSettingsButton',
                         bool(ti_state['texture_importer_settings_visible']),
+                        trigger_snap=False
+                    )
+
+            if 'material_tools' in state:
+                mt_state = state['material_tools']
+                if 'material_tools_settings_visible' in mt_state:
+                    self._set_settings_frame_visibility(
+                        'materialToolsSettingsButton',
+                        bool(mt_state['material_tools_settings_visible']),
                         trigger_snap=False
                     )
             
@@ -8095,11 +8202,18 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         # Debug: print(f"[UI_STATE] Saving UI state to: {self.state_file_path}")
         try:
             state = {
+                'quick_materials': {},
                 'material_creator': {},
                 'material_list': {},
-                'texture_importer': {}
+                'texture_importer': {},
+                'material_tools': {},
             }
             
+            qm_state = state['quick_materials']
+            qm_state['quick_materials_settings_visible'] = self._get_settings_frame_checked(
+                'quickMaterialsSettingsButton'
+            )
+
             # Save material creator settings
             mc_state = state['material_creator']
             
@@ -8197,11 +8311,15 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             
             # Save texture importer settings
             ti_state = state['texture_importer']
-            ti_settings = getattr(self, '_texture_importer_settings', {}) or {}
-            ti_state['default_mode'] = ti_settings.get('default_mode', 'maya_file')
-            ti_state['custom_path'] = ti_settings.get('custom_path', '')
-            ti_state['create_if_doesnt_exist'] = ti_settings.get('create_if_doesnt_exist', False)
+            # DEPRECATED: Textures folder default location
+            # ti_settings = getattr(self, '_texture_importer_settings', {}) or {}
+            # ti_state['default_mode'] = ti_settings.get('default_mode', 'maya_file')
+            # ti_state['custom_path'] = ti_settings.get('custom_path', '')
+            # ti_state['create_if_doesnt_exist'] = ti_settings.get('create_if_doesnt_exist', False)
             ti_state['texture_importer_settings_visible'] = self._get_settings_frame_checked('textureImporterSettingsButton')
+
+            mt_state = state['material_tools']
+            mt_state['material_tools_settings_visible'] = self._get_settings_frame_checked('materialToolsSettingsButton')
 
             # Write to file
             with open(self.state_file_path, 'w') as f:
@@ -8547,6 +8665,16 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             material=None, material_type=None, parent=maya_main_window()
         )
         self.import_tx_tool.show()
+
+    def open_send_to_substance(self):
+        """Open Send to Substance Painter (export selection, push to Painter via remote API or CLI)."""
+        try:
+            from QuickMaterials import send_to_substance as _sts
+            import importlib
+            importlib.reload(_sts)
+            _sts.show()
+        except Exception as e:
+            cmds.warning("Send to Substance failed to open: {}".format(e))
 
     def _on_regenerate_uv_tile_previews(self):
         """Regenerate OGS UV tile preview textures (Viewport 2.0)."""
@@ -9599,8 +9727,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                     info = self._get_file_texture_display_info(actual_name)
                     if info and info['filename']:
                         display_text = f'<span style="color: #e0e0e0;">{info["filename"]}</span>'
-                        if info['udim_count'] > 1:
-                            display_text += f'  <span style="color: #6fa3d8;">({info["udim_count"]} tiles)</span>'
+                        display_text += self._html_texture_udim_tile_suffix(info['udim_count'])
                         if info['colorspace']:
                             display_text += f'  <span style="color: #999999;">({info["colorspace"]})</span>'
                         if isinstance(material_widget, QtWidgets.QLabel):
@@ -9779,11 +9906,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                     # - UDIM count: blue (#6fa3d8)
                     # - Colorspace: grey (#999999)
                     display_text = f'<span style="color: #e0e0e0;">{info["filename"]}</span>'
-                    
-                    # Add UDIM count if applicable (in blue)
-                    if info['udim_count'] > 1:
-                        display_text += f'  <span style="color: #6fa3d8;">({info["udim_count"]} tiles)</span>'
-                    
+                    display_text += self._html_texture_udim_tile_suffix(info['udim_count'])
                     # Add colorspace in brackets (in grey)
                     if info['colorspace']:
                         display_text += f'  <span style="color: #999999;">({info["colorspace"]})</span>'
@@ -14114,19 +14237,20 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         Duplicate a material along with its entire shading network.
         Handles reference materials by unlocking duplicated nodes to ensure they can be assigned.
         """
+        if not cmds.objExists(material):
+            cmds.warning(f"Material '{material}' does not exist.")
+            return
+        
+        # Get the shading engine connected to this material
+        sgs = cmds.listConnections(material, type='shadingEngine', destination=True) or []
+        if not sgs:
+            cmds.warning(f"No shading group found for material '{material}'.")
+            return
+        
+        sg = sgs[0]
+        
+        cmds.undoInfo(openChunk=True)
         try:
-            if not cmds.objExists(material):
-                cmds.warning(f"Material '{material}' does not exist.")
-                return
-            
-            # Get the shading engine connected to this material
-            sgs = cmds.listConnections(material, type='shadingEngine', destination=True) or []
-            if not sgs:
-                cmds.warning(f"No shading group found for material '{material}'.")
-                return
-            
-            sg = sgs[0]
-            
             # Duplicate the entire shading network
             # This includes the material, its shading group, and all connected texture nodes
             duplicated = cmds.duplicate(sg, upstreamNodes=True)
@@ -14189,6 +14313,8 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         except Exception as e:
             cmds.warning(f"Failed to duplicate material '{material}': {e}")
             print(f"[QM] Duplicate error: {e}")
+        finally:
+            cmds.undoInfo(closeChunk=True)
     
     def duplicate_selected_materials(self):
         """
@@ -14228,69 +14354,73 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         if confirm.clickedButton() != btn_duplicate:
             return
         
-        duplicated_materials = []
-        for material in materials_to_duplicate:
-            try:
-                # Get the shading engine connected to this material
-                sgs = cmds.listConnections(material, type='shadingEngine', destination=True) or []
-                if not sgs:
-                    continue
-                
-                sg = sgs[0]
-                
-                # Duplicate the entire shading network
-                duplicated = cmds.duplicate(sg, upstreamNodes=True)
-                if not duplicated:
-                    continue
-                
-                new_sg = duplicated[0]
-                
-                # Unlock all duplicated nodes to ensure they can be connected to scene geometry
-                # This is especially important for reference materials where duplicated nodes
-                # may still have locked attributes preventing connections
-                for node in duplicated:
+        cmds.undoInfo(openChunk=True)
+        try:
+            duplicated_materials = []
+            for material in materials_to_duplicate:
+                try:
+                    # Get the shading engine connected to this material
+                    sgs = cmds.listConnections(material, type='shadingEngine', destination=True) or []
+                    if not sgs:
+                        continue
+                    
+                    sg = sgs[0]
+                    
+                    # Duplicate the entire shading network
+                    duplicated = cmds.duplicate(sg, upstreamNodes=True)
+                    if not duplicated:
+                        continue
+                    
+                    new_sg = duplicated[0]
+                    
+                    # Unlock all duplicated nodes to ensure they can be connected to scene geometry
+                    # This is especially important for reference materials where duplicated nodes
+                    # may still have locked attributes preventing connections
+                    for node in duplicated:
+                        try:
+                            # Check if node is locked and unlock it
+                            if cmds.lockNode(node, query=True, lock=True)[0]:
+                                cmds.lockNode(node, lock=False)
+                            # Unlock all attributes on the node
+                            attrs = cmds.listAttr(node, locked=True) or []
+                            for attr in attrs:
+                                try:
+                                    attr_full = f"{node}.{attr}"
+                                    cmds.setAttr(attr_full, lock=False)
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                    
+                    # Specifically ensure the shading group's dagSetMembers attribute is unlocked
+                    # This is critical for being able to assign geometry to the shading group
                     try:
-                        # Check if node is locked and unlock it
-                        if cmds.lockNode(node, query=True, lock=True)[0]:
-                            cmds.lockNode(node, lock=False)
-                        # Unlock all attributes on the node
-                        attrs = cmds.listAttr(node, locked=True) or []
-                        for attr in attrs:
-                            try:
-                                attr_full = f"{node}.{attr}"
-                                cmds.setAttr(attr_full, lock=False)
-                            except Exception:
-                                pass
+                        dag_members_attr = f"{new_sg}.dagSetMembers"
+                        if cmds.objExists(dag_members_attr):
+                            cmds.setAttr(dag_members_attr, lock=False)
                     except Exception:
                         pass
-                
-                # Specifically ensure the shading group's dagSetMembers attribute is unlocked
-                # This is critical for being able to assign geometry to the shading group
-                try:
-                    dag_members_attr = f"{new_sg}.dagSetMembers"
-                    if cmds.objExists(dag_members_attr):
-                        cmds.setAttr(dag_members_attr, lock=False)
-                except Exception:
-                    pass
-                
-                # Find the new material
-                new_materials = cmds.listConnections(f"{new_sg}.surfaceShader", source=True) or []
-                if new_materials:
-                    duplicated_materials.append(new_materials[0])
-            except Exception as e:
-                print(f"[QM] Failed to duplicate '{material}': {e}")
-        
-        if duplicated_materials:
-            print(f"[QM] Duplicated {len(duplicated_materials)} material(s)")
+                    
+                    # Find the new material
+                    new_materials = cmds.listConnections(f"{new_sg}.surfaceShader", source=True) or []
+                    if new_materials:
+                        duplicated_materials.append(new_materials[0])
+                except Exception as e:
+                    print(f"[QM] Failed to duplicate '{material}': {e}")
             
-            # Refresh the list to show the new materials
-            self._invalidate_material_cache()
-            self.refresh_materials_list()
-            
-            # Select the new materials in Maya
-            cmds.select(duplicated_materials, replace=True)
-        else:
-            cmds.warning("Failed to duplicate any materials.")
+            if duplicated_materials:
+                print(f"[QM] Duplicated {len(duplicated_materials)} material(s)")
+                
+                # Refresh the list to show the new materials
+                self._invalidate_material_cache()
+                self.refresh_materials_list()
+                
+                # Select the new materials in Maya
+                cmds.select(duplicated_materials, replace=True)
+            else:
+                cmds.warning("Failed to duplicate any materials.")
+        finally:
+            cmds.undoInfo(closeChunk=True)
 
     # Open Node Editor and graph the material + upstream + SGs; frame selection.
     def graph_material_network(self, material, hops_up=6, step_delay_ms=40, open_timeout_ms=1500, include_downstream=True, filter_geometry=False):
@@ -15331,6 +15461,87 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         cache[material] = shader_type
         return shader_type
 
+    def _resolve_file_texture_disk_path(self, file_path):
+        """Resolve fileTextureName to a path that exists on disk when possible (handles <UDIM>)."""
+        if not file_path:
+            return None
+        try:
+            if '<UDIM>' in file_path or '<udim>' in file_path:
+                base_path = file_path.replace('<UDIM>', '1001').replace('<udim>', '1001')
+                try:
+                    resolved_path = cmds.workspace(expandName=base_path)
+                except Exception:
+                    resolved_path = base_path
+                if resolved_path and os.path.exists(resolved_path):
+                    return resolved_path
+                if os.path.exists(base_path):
+                    return base_path
+                return resolved_path
+            try:
+                resolved_path = cmds.workspace(expandName=file_path)
+            except Exception:
+                resolved_path = file_path
+            if resolved_path and os.path.exists(resolved_path):
+                return resolved_path
+            if os.path.exists(file_path):
+                return file_path
+        except Exception:
+            pass
+        return None
+
+    def _count_udim_tiles_for_file_texture(self, texture_node, file_path, resolved_path):
+        """Count UDIM tiles on disk (same rules as ShaderTextureViewer._count_udim_tiles)."""
+        try:
+            use_udim = cmds.getAttr(f"{texture_node}.uvTilingMode")
+            if use_udim != 3:
+                return 0
+            if '<UDIM>' in file_path or '<udim>' in file_path:
+                if resolved_path and os.path.exists(resolved_path):
+                    dir_path = os.path.dirname(resolved_path)
+                    base_name = os.path.basename(resolved_path)
+                    udim_match = re.search(r'\.(\d{4})\.', base_name)
+                    if udim_match:
+                        udim_num = udim_match.group(1)
+                        parts = base_name.split(f'.{udim_num}.')
+                        if len(parts) == 2:
+                            prefix, ext = parts
+                            if os.path.isdir(dir_path):
+                                tiles = []
+                                for f in os.listdir(dir_path):
+                                    match = re.match(rf'^{re.escape(prefix)}\.(\d{{4}})\.{re.escape(ext)}$', f)
+                                    if match:
+                                        tile_num = int(match.group(1))
+                                        if 1001 <= tile_num <= 1999:
+                                            tiles.append(tile_num)
+                                return len(tiles)
+            elif resolved_path:
+                dir_path = os.path.dirname(resolved_path)
+                base_name = os.path.basename(resolved_path)
+                udim_match = re.search(r'\.(\d{4})\.', base_name)
+                if udim_match:
+                    udim_num = udim_match.group(1)
+                    parts = base_name.split(f'.{udim_num}.')
+                    if len(parts) == 2:
+                        prefix, ext = parts
+                        if os.path.isdir(dir_path):
+                            tiles = []
+                            for f in os.listdir(dir_path):
+                                match = re.match(rf'^{re.escape(prefix)}\.(\d{{4}})\.{re.escape(ext)}$', f)
+                                if match:
+                                    tile_num = int(match.group(1))
+                                    if 1001 <= tile_num <= 1999:
+                                        tiles.append(tile_num)
+                            return len(tiles)
+        except Exception as e:
+            print(f"[QM] UDIM detection error: {e}")
+        return 0
+
+    def _html_texture_udim_tile_suffix(self, udim_count):
+        """Rich-text fragment: blue 'N tiles' before colorspace (only when multiple UDIM tiles)."""
+        if udim_count < 2:
+            return ''
+        return f'  <span style="color: #6fa3d8;">{udim_count} tiles</span>'
+
     def _get_file_texture_display_info(self, file_node):
         """
         Get display information for a file texture.
@@ -15362,39 +15573,14 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             if file_path:
                 info['filename'] = os.path.basename(file_path)
             
-            # Check for UDIMs
+            # UDIM tile count (resolved path handles <UDIM> tokens Maya stores on file nodes)
             try:
-                use_udim = cmds.getAttr(f"{file_node}.uvTilingMode")
-                if use_udim == 3:  # UDIM mode
-                    # Count UDIM tiles by checking the directory for matching files
-                    if file_path and os.path.exists(file_path):
-                        dir_path = os.path.dirname(file_path)
-                        base_name = os.path.basename(file_path)
-                        
-                        # Check if the filename contains a UDIM pattern (1001-1999)
-                        import re
-                        udim_match = re.search(r'\.(\d{4})\.', base_name)
-                        if udim_match:
-                            # Extract parts: "texture.1001.exr" -> "texture", "1001", ".exr"
-                            udim_num = udim_match.group(1)
-                            # Split filename around the UDIM number
-                            parts = base_name.split(f'.{udim_num}.')
-                            if len(parts) == 2:
-                                prefix, ext = parts
-                                # Count all files matching: prefix.XXXX.ext (where XXXX is 1001-1999)
-                                if os.path.isdir(dir_path):
-                                    tiles = []
-                                    for f in os.listdir(dir_path):
-                                        # Match pattern: prefix.XXXX.ext
-                                        match = re.match(rf'^{re.escape(prefix)}\.(\d{{4}})\.{re.escape(ext)}$', f)
-                                        if match:
-                                            tile_num = int(match.group(1))
-                                            if 1001 <= tile_num <= 1999:  # Valid UDIM range
-                                                tiles.append(tile_num)
-                                    info['udim_count'] = len(tiles)
+                resolved_path = self._resolve_file_texture_disk_path(file_path) if file_path else None
+                info['udim_count'] = self._count_udim_tiles_for_file_texture(
+                    file_node, file_path or '', resolved_path
+                )
             except Exception as e:
                 print(f"[QM] UDIM detection error: {e}")
-                pass
             
             # Get colorspace
             try:
@@ -15786,11 +15972,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                 info = self._get_file_texture_display_info(file_node)
                 if info and info['filename']:
                     display_text = f'<span style="color: #e0e0e0;">{info["filename"]}</span>'
-                    
-                    # Add UDIM count if applicable (in blue)
-                    if info['udim_count'] > 1:
-                        display_text += f'  <span style="color: #6fa3d8;">({info["udim_count"]} tiles)</span>'
-                    
+                    display_text += self._html_texture_udim_tile_suffix(info['udim_count'])
                     # Add colorspace in brackets (in grey) - use new_colorspace directly
                     if new_colorspace:
                         display_text += f'  <span style="color: #999999;">({new_colorspace})</span>'
@@ -15815,6 +15997,58 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             print(f"[QM] Failed to refresh single entry: {e}")
             import traceback
             traceback.print_exc()
+
+    def _populate_file_texture_row_menu(self, menu, mat):
+        """
+        Shared right-click actions for file texture rows (filename label or tile icon).
+        """
+        def _safe_call(fn_name, *args, **kwargs):
+            try:
+                fn = getattr(self, fn_name, None)
+                if callable(fn):
+                    fn(*args, **kwargs)
+            except Exception:
+                pass
+
+        act_open = menu.addAction("Open File Location")
+        act_open.triggered.connect(lambda: _safe_call("open_file_texture_folder", mat))
+
+        act_view = menu.addAction("View Texture")
+        act_view.setToolTip("Open Shader Texture Viewer for this file texture")
+
+        def _open_view_file():
+            try:
+                import importlib
+                import QuickMaterials.texture_viewer as _qm_tv
+                _qm_tv = importlib.reload(_qm_tv)
+                _qm_tv.show_texture_viewer_for_file_node(mat)
+            except Exception:
+                pass
+
+        act_view.triggered.connect(_open_view_file)
+
+        menu.addSeparator()
+
+        act_graph = menu.addAction("Graph")
+        act_graph.triggered.connect(lambda: _safe_call("graph_material_network", mat))
+
+        menu.addSeparator()
+
+        cs_menu = menu.addMenu("Colorspace")
+        cs_menu.setStyleSheet(context_menu_style)
+        try:
+            current_cs = self._get_file_texture_colorspace(mat)
+            colorspaces = ['sRGB', 'Raw', 'ACEScg']
+            for cs in colorspaces:
+                cs_action = cs_menu.addAction(cs)
+                if cs == current_cs:
+                    cs_action.setCheckable(True)
+                    cs_action.setChecked(True)
+                cs_action.triggered.connect(
+                    lambda checked=False, colorspace=cs: _safe_call("_set_file_texture_colorspace", mat, colorspace)
+                )
+        except Exception:
+            pass
 
     def open_file_texture_folder(self, file_node):
         """Open the folder containing the file texture in the system file browser."""
@@ -15852,8 +16086,8 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             
             current_colorspace = self._get_file_texture_colorspace(file_node)
             
-            # Create menu with button as parent (already validated above)
-            menu = QtWidgets.QMenu(button)
+            # Parent to top-level window so the menu is not clipped inside scroll areas / scaled lists
+            menu = QtWidgets.QMenu(_qm_context_menu_parent(button))
             menu.setStyleSheet(context_menu_style)
             
             # Common colorspaces
@@ -15866,8 +16100,14 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                     action.setChecked(True)
                 action.triggered.connect(lambda checked=False, colorspace=cs: self._set_file_texture_colorspace(file_node, colorspace))
             
-            # Show menu at button position
-            menu.exec_(button.mapToGlobal(button.rect().bottomLeft()))
+            pos = button.mapToGlobal(button.rect().bottomLeft())
+            try:
+                if QT_LIB == 6:
+                    menu.exec(pos)
+                else:
+                    menu.exec_(pos)
+            except Exception:
+                pass
             
         except (RuntimeError, AttributeError) as e:
             # Widget was deleted - silently ignore

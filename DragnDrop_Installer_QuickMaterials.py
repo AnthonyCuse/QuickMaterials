@@ -6,7 +6,7 @@ Drop this file into Maya viewport to install QuickMaterials.
 
 This installer will:
 1. Detect the QuickMaterials package location (works in development and distribution)
-2. Copy files to Maya scripts directory
+2. Copy all package Python modules and asset folders to Maya scripts directory
 3. Create a shelf button
 4. Optionally update userSetup.py for auto-loading
 
@@ -178,40 +178,54 @@ class QuickMaterialsInstaller:
     # QuickMaterials loader code for userSetup.py
     LOADER_CODE = '''
 # QuickMaterials Auto-Loader (Added by QuickMaterials Installer)
-# The installer adds this to userSetup.py so the package is available.
-# Quick Materials restores automatically when workspace control exists (from saved workspace).
+# Opens Quick Materials on Maya launch only when enabled in Quick Materials settings
+# (openOnLaunchCheckbox -> quick_materials.open_on_launch in quick_materials_settings.json).
 import maya.utils
-import maya.cmds as cmds
 
 def _load_quick_materials():
-    """Restore QuickMaterials if workspace control exists (from saved workspace)."""
     try:
         import QuickMaterials.quick_materials as qm
-        import importlib
-        importlib.reload(qm)
-        
-        # Check if workspace control exists (means it was saved in workspace)
-        control_name = qm.QuickMaterialsUI.workspace_control_name
-        if cmds.workspaceControl(control_name, exists=True):
-            # Check if it's docked (not floating) - only restore if docked
-            is_floating = False
-            try:
-                is_floating = cmds.workspaceControl(control_name, query=True, floating=True)
-            except Exception:
-                pass
-            
-            if not is_floating:
-                # Workspace control exists and is docked - restore the UI
-                qm.QuickMaterialsUI.restore_from_workspace()
+        if qm.is_open_on_launch_enabled():
+            qm.QuickMaterialsUI.show_ui()
+        else:
+            # Saved workspace layouts still create the dock; hide it after layout restore.
+            qm.schedule_open_on_launch_policy_enforcement()
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print("[QuickMaterials] Failed to initialize QuickMaterials:", e)
+        print("[QuickMaterials] Failed to apply launch policy:", e)
 
 maya.utils.executeDeferred(_load_quick_materials)
 '''
     
     LOADER_MARKER = "# QuickMaterials Auto-Loader (Added by QuickMaterials Installer)"
+
+    # Drag-and-drop installer scripts live beside the package but are not part of it.
+    INSTALLER_SCRIPT_NAMES = frozenset({
+        "DragnDrop_Installer_QuickMaterials.py",
+        "QuickMaterialsDragnDropInstaller.py",
+    })
+
+    # Directories shipped with the package (add new asset folders here).
+    PACKAGE_DATA_DIRS = (
+        "icons",
+        "QtDesigner",
+        "settings",
+        "Settings",
+        "helpDocs",
+    )
+
+    # Must exist in the package source; install fails if any are missing after copy.
+    REQUIRED_PACKAGE_FILES = frozenset({
+        "__init__.py",
+        "quick_materials.py",
+        "material_converter.py",
+        "texture_importer.py",
+        "texture_viewer.py",
+        "uv_tile_preview.py",
+        "help_doc_viewer.py",
+        "icons_rc.py",
+    })
     
     def __init__(self, package_dir, log_callback=None):
         """
@@ -289,7 +303,20 @@ maya.utils.executeDeferred(_load_quick_materials)
                 return True
         
         return False
-    
+
+    def _package_python_files(self):
+        """All .py modules in the package folder (excludes drag-and-drop installer scripts)."""
+        if not self.package_dir or not os.path.isdir(self.package_dir):
+            return []
+        names = []
+        for name in os.listdir(self.package_dir):
+            if not name.endswith(".py"):
+                continue
+            if name in self.INSTALLER_SCRIPT_NAMES:
+                continue
+            names.append(name)
+        return sorted(names)
+
     def install_files(self):
         """Copy QuickMaterials package to Maya scripts directory."""
         if not self.user_scripts_dir:
@@ -312,18 +339,12 @@ maya.utils.executeDeferred(_load_quick_materials)
             
             os.makedirs(self.quick_materials_dir, exist_ok=True)
             
-            # Files to copy
-            files_to_copy = [
-                "quick_materials.py",
-                "material_converter.py",
-                "texture_importer.py",
-                "texture_viewer.py",
-                "material_swatch_icon.py",
-                "icons_rc.py",
-                "__init__.py",
-            ]
-            
-            # Copy files
+            files_to_copy = self._package_python_files()
+            if not files_to_copy:
+                self.log("No Python modules found in package directory", "ERROR")
+                return False
+
+            # Copy all package .py modules (keeps installer in sync when new tools are added).
             copied_count = 0
             for file_name in files_to_copy:
                 src = os.path.join(self.package_dir, file_name)
@@ -334,10 +355,18 @@ maya.utils.executeDeferred(_load_quick_materials)
                     self.log(f"Copied {file_name}", "INFO")
                 else:
                     self.log(f"Warning: {file_name} not found in package", "WARNING")
+
+            missing_required = [
+                name for name in self.REQUIRED_PACKAGE_FILES
+                if not os.path.isfile(os.path.join(self.quick_materials_dir, name))
+            ]
+            if missing_required:
+                for file_name in sorted(missing_required):
+                    self.log(f"Required package file missing after install: {file_name}", "ERROR")
+                return False
             
-            # Copy directories (settings/ and Settings/ ship defaults: quick_materials_settings_default.json, texture names, etc.)
-            dirs_to_copy = ["icons", "QtDesigner", "settings", "Settings"]
-            for dir_name in dirs_to_copy:
+            # Copy asset / UI directories (settings defaults, icons, help images, etc.)
+            for dir_name in self.PACKAGE_DATA_DIRS:
                 src = os.path.join(self.package_dir, dir_name)
                 if os.path.exists(src):
                     dst = os.path.join(self.quick_materials_dir, dir_name)
@@ -360,7 +389,10 @@ maya.utils.executeDeferred(_load_quick_materials)
                         except Exception as e2:
                             self.log(f"Error copying {dir_name}/: {str(e2)}", "ERROR")
             
-            self.log(f"Installed {copied_count} files to {self.quick_materials_dir}", "SUCCESS")
+            self.log(
+                f"Installed {copied_count} Python module(s) to {self.quick_materials_dir}",
+                "SUCCESS",
+            )
             return True
             
         except Exception as e:
