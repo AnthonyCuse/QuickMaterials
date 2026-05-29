@@ -150,13 +150,82 @@ def is_open_on_launch_enabled():
     return bool(qm.get('open_on_launch', False))
 
 
-def apply_open_on_launch_workspace_policy():
+QM_UI_OBJECT_NAME = "QuickMaterialsUI"
+
+
+def _find_attached_quick_materials_widget():
+    """Return the Quick Materials widget docked in our workspace control, if any."""
+    wc = QuickMaterialsUI.workspace_control_name
+    try:
+        if not cmds.workspaceControl(wc, exists=True):
+            return None
+        control_widget = omui.MQtUtil.findControl(wc)
+        if not control_widget:
+            return None
+        wrapped = wrapInstance(int(control_widget), QtWidgets.QWidget)
+        layout = wrapped.layout()
+        if not layout:
+            return None
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            w = item.widget() if item else None
+            if w is None:
+                continue
+            try:
+                if not isValid(w):
+                    continue
+            except Exception:
+                pass
+            if w.objectName() == QM_UI_OBJECT_NAME:
+                return w
+    except Exception:
+        pass
+    return None
+
+
+def _sync_quick_materials_instance_from_workspace():
+    """Point quick_materials_ui_instance at the docked widget when present."""
+    global quick_materials_ui_instance
+    w = _find_attached_quick_materials_widget()
+    if w is not None:
+        QuickMaterialsUI.quick_materials_ui_instance = w
+        quick_materials_ui_instance = w
+    return w
+
+
+def _is_quick_materials_root_widget(widget, cls=None):
+    """Identify our root widget across module reloads (objectName is stable)."""
+    if widget is None:
+        return False
+    try:
+        if not isValid(widget):
+            return False
+    except Exception:
+        pass
+    if widget.objectName() == QM_UI_OBJECT_NAME:
+        return True
+    if cls is not None:
+        try:
+            return isinstance(widget, cls)
+        except Exception:
+            pass
+    return False
+
+
+def apply_open_on_launch_workspace_policy(force=False):
     """
     When open-on-launch is disabled, hide the saved workspace panel so Quick Materials
     does not appear in the layout after Maya starts (workspace uiScript / saved layout).
     Returns True if launch is enabled, False if the panel was suppressed.
+
+    force=True when the user disables open-on-launch in settings — hide even if open.
     """
     if is_open_on_launch_enabled():
+        return True
+
+    # Manual show_ui() attaches the widget before uiScript / idle enforcement runs.
+    if not force and _find_attached_quick_materials_widget() is not None:
+        _sync_quick_materials_instance_from_workspace()
         return True
 
     wc = QuickMaterialsUI.workspace_control_name
@@ -197,6 +266,17 @@ def schedule_open_on_launch_policy_enforcement():
 
 def deferred_workspace_panel_on_maya_start():
     """Maya workspace uiScript entry: restore UI only when open-on-launch is enabled."""
+    # show_ui() attaches the widget before Maya runs uiScript on first create — do not hide/recreate.
+    attached = _find_attached_quick_materials_widget()
+    if attached is not None:
+        _sync_quick_materials_instance_from_workspace()
+        try:
+            attached.show()
+            attached._install_workspace_state_job()
+        except Exception:
+            pass
+        return
+
     if not apply_open_on_launch_workspace_policy():
         return
     QuickMaterialsUI.restore_from_workspace()
@@ -3835,24 +3915,22 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         """Display the UI as a dockable widget inside Maya."""
         global quick_materials_ui_instance
 
-        # Check if workspace control already exists (from saved workspace)
+        attached = _find_attached_quick_materials_widget()
+        if attached is not None:
+            cls.quick_materials_ui_instance = attached
+            quick_materials_ui_instance = attached
+            if cmds.workspaceControl(cls.workspace_control_name, query=True, exists=True):
+                cmds.workspaceControl(cls.workspace_control_name, edit=True, visible=True)
+            attached.show()
+            attached.raise_()
+            try:
+                attached._install_workspace_state_job()
+            except Exception:
+                pass
+            return
+
+        # Check if workspace control already exists (from saved workspace) without our widget
         if cmds.workspaceControl(cls.workspace_control_name, query=True, exists=True):
-            # Check if widget is already attached to the workspace control
-            control_widget = omui.MQtUtil.findControl(cls.workspace_control_name)
-            if control_widget:
-                wrapped_widget = wrapInstance(int(control_widget), QtWidgets.QWidget)
-                layout = wrapped_widget.layout()
-                if layout:
-                    # Check if our widget is already there
-                    for i in range(layout.count()):
-                        item = layout.itemAt(i)
-                        if item and item.widget() and isinstance(item.widget(), cls):
-                            # Widget already attached, just make visible
-                            cls.quick_materials_ui_instance = item.widget()
-                            quick_materials_ui_instance = cls.quick_materials_ui_instance
-                            cmds.workspaceControl(cls.workspace_control_name, edit=True, visible=True)
-                            return
-            # Workspace control exists but widget not attached - clean up and recreate
             cls.delete_existing_instance()
 
         # Create new instance
@@ -3898,25 +3976,13 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         # Use executeDeferred to ensure Maya UI is fully ready
         def _do_restore():
             try:
-                # If the workspace control already has our widget (from show_ui() just attaching it),
-                # Maya ran uiScript on first create - do NOT delete/recreate or the window flashes and closes.
-                control_widget = omui.MQtUtil.findControl(cls.workspace_control_name)
-                if control_widget:
-                    try:
-                        wrapped = wrapInstance(int(control_widget), QtWidgets.QWidget)
-                        layout = wrapped.layout()
-                        if layout:
-                            for i in range(layout.count()):
-                                item = layout.itemAt(i)
-                                if item and item.widget() and isinstance(item.widget(), cls):
-                                    existing = item.widget()
-                                    if existing is cls.quick_materials_ui_instance:
-                                        existing.show()
-                                        existing._install_workspace_state_job()
-                                        return
-                                    break
-                    except Exception:
-                        pass
+                # If show_ui() already attached the widget, do NOT delete/recreate.
+                attached = _find_attached_quick_materials_widget()
+                if attached is not None:
+                    _sync_quick_materials_instance_from_workspace()
+                    attached.show()
+                    attached._install_workspace_state_job()
+                    return
 
                 # Remove any existing instance so we can reattach cleanly (real restore from saved layout)
                 if cls.quick_materials_ui_instance:
@@ -4381,7 +4447,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             except Exception:
                 pass
         else:
-            apply_open_on_launch_workspace_policy()
+            apply_open_on_launch_workspace_policy(force=True)
 
     def _settings_file_path(self):
         return quick_materials_user_settings_path()
