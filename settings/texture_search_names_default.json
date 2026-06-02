@@ -1,1 +1,134 @@
-{}
+{
+    "baseColor": [
+        "basecolor",
+        "base_color",
+        "clr",
+        "col",
+        "bc",
+        "albedo"
+    ],
+    "aoMultiplied": [
+        "ao",
+        "ambientocclusion",
+        "ambient_occlusion",
+        "aomap",
+        "ao_map",
+        "occ",
+        "cavity"
+    ],
+    "roughness": [
+        "roughness",
+        "rgh",
+        "specroughness"
+    ],
+    "normal": [
+        "normal",
+        "nrm",
+        "nrml",
+        "norm",
+        "normalmap",
+        "normal_map",
+        "bump"
+    ],
+    "opacity": [
+        "opacity",
+        "alpha",
+        "opac"
+    ],
+    "metallic": [
+        "metallic",
+        "metalness",
+        "metal",
+        "met",
+        "mtl"
+    ],
+    "emission": [
+        "emission_amount",
+        "emission_weight",
+        "emission_amt",
+        "emission_wt",
+        "emissive_amount",
+        "emissive_weight",
+        "emissive_amt",
+        "emissive_wt"
+    ],
+    "emissionClr": [
+        "emission",
+        "emissive",
+        "emit",
+        "glow",
+        "incanadescence"
+    ],
+    "subsurface": [
+        "subsurface",
+        "subsurf",
+        "sss",
+        "scattering",
+        "subsurfaceamount"
+    ],
+    "subsurfaceClr": [
+        "subsurfacecolor",
+        "subsurface_color",
+        "ssscolor",
+        "sss_color",
+        "scatteringcolor"
+    ],
+    "specular": [
+        "specular",
+        "spec",
+        "specularweight",
+        "specweight"
+    ],
+    "specularClr": [
+        "specularcolor",
+        "specular_color",
+        "speccolor",
+        "spec_color"
+    ],
+    "transmission": [
+        "transmission",
+        "trans",
+        "transparency_weight"
+    ],
+    "transmissionClr": [
+        "transmissioncolor",
+        "transmission_color",
+        "transcolor",
+        "trans_color"
+    ],
+    "coat": [
+        "coat",
+        "clearcoat",
+        "clear_coat"
+    ],
+    "coatRoughness": [
+        "coatroughness",
+        "coat_roughness",
+        "clearcoatroughness",
+        "clearcoat_roughness"
+    ],
+    "displacement": [
+        "displacement",
+        "disp",
+        "dis",
+        "height",
+        "heightmap",
+        "height_map",
+        "displace"
+    ],
+    "packedTextures": [
+        {
+            "searchNames": "occlusionroughnessmetallic, orm",
+            "assignments": [
+                {
+                    "attribute": "roughness",
+                    "channel": "g"
+                },
+                {
+                    "attribute": "metallic",
+                    "channel": "b"
+                }
+            ]
+        }
+    ]
+}

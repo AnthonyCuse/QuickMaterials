@@ -7,7 +7,10 @@
 #   2) run: TextureBakeUI.show_dialog()
 
 import os
+import re
 import maya.cmds as cmds
+
+UI_ACCENT_CYAN = "#00f7c8"
 
 # ---- Qt compatibility ----
 try:
@@ -123,6 +126,23 @@ MATERIAL_TYPES = {
 }
 SHADER_PORTS = ("surfaceShader", "miMaterialShader", "aiSurfaceShader")
 
+# Float weight inputs — baked color textures must not be wired here.
+_SHADER_WEIGHT_ATTRS = frozenset({
+    "base", "specular", "emission", "metalness", "transmission",
+    "coat", "sheen", "diffuse", "reflectivity",
+})
+
+# Primary diffuse/base plug per shader type (last-resort assign target).
+_SHADER_PRIMARY_COLOR_ATTR = {
+    "lambert": "color",
+    "blinn": "color",
+    "phong": "color",
+    "phongE": "color",
+    "standardSurface": "baseColor",
+    "aiStandardSurface": "baseColor",
+    "surfaceShader": "outColor",
+}
+
 
 from contextlib import contextmanager
 
@@ -137,6 +157,69 @@ def maya_undo_chunk(name="TextureBake"):
 
 def _short(obj):
     return obj.split("|")[-1] if obj else obj
+
+
+def _sanitize_bake_filename_part(name):
+    """Filesystem-safe token for baked texture filenames."""
+    if not name:
+        return "texture"
+    part = _short(str(name))
+    part = os.path.splitext(part)[0]
+    part = re.sub(r"[^\w.\-]+", "_", part).strip("._")
+    return part or "texture"
+
+
+def _file_texture_basename(file_node):
+    """Prefer the image file basename; fall back to the Maya node name."""
+    if not file_node or not cmds.objExists(file_node):
+        return None
+    try:
+        path = cmds.getAttr(file_node + ".fileTextureName") or ""
+    except Exception:
+        path = ""
+    if path:
+        base = os.path.splitext(os.path.basename(path))[0]
+        if base:
+            return _sanitize_bake_filename_part(base)
+    return _sanitize_bake_filename_part(_short(file_node))
+
+
+def _source_texture_basename_for_projection(proj_node):
+    """Basename of the image driving a Maya projection node."""
+    if not proj_node or not cmds.objExists(proj_node):
+        return None
+    for attr in ("image",):
+        plug = f"{proj_node}.{attr}"
+        if not cmds.objExists(plug):
+            continue
+        src_nodes = cmds.listConnections(plug, s=True, d=False) or []
+        for src in src_nodes:
+            if cmds.nodeType(src) in IMAGE_TEXTURE_TYPES:
+                base = _file_texture_basename(src)
+                if base:
+                    return base
+    try:
+        hist = cmds.listHistory(proj_node, pruneDagObjects=True, future=False) or []
+    except Exception:
+        hist = []
+    for node in hist:
+        if cmds.nodeType(node) in IMAGE_TEXTURE_TYPES:
+            base = _file_texture_basename(node)
+            if base:
+                return base
+    return None
+
+
+def _bake_output_filename(node, kind, res, fmt):
+    """
+    Concise output name: <textureOrNode>_<resolution>.<format>
+    Projections use the source file texture name when available.
+    """
+    if kind == "projection":
+        base = _source_texture_basename_for_projection(node) or _sanitize_bake_filename_part(_short(node))
+    else:
+        base = _sanitize_bake_filename_part(_short(node))
+    return "%s_%s.%s" % (base, res, fmt.lower())
 
 def _get_selected_shapes():
     sel = cmds.ls(sl=True, long=True) or []
@@ -352,6 +435,32 @@ class TextureBakeUI(QtWidgets.QDialog):
             "Scan selected meshes, find procedural or projected texture networks, and bake them to UV textures."
         )
 
+        how_to_widget = QtWidgets.QWidget()
+        how_to_layout = QtWidgets.QVBoxLayout(how_to_widget)
+        how_to_layout.setContentsMargins(12, 0, 12, 6)
+        how_to_layout.setSpacing(4)
+
+        how_to_title = QtWidgets.QLabel("How to Use:")
+        how_to_title.setAlignment(QtCore.Qt.AlignCenter)
+        how_to_title.setStyleSheet(
+            "font-weight:600; font-size:13px; color:#e8e8e8; padding:0px;"
+        )
+
+        lbl_how_step1 = QtWidgets.QLabel(
+            "Select mesh(es), then scan for procedural or projected textures on their materials."
+        )
+        lbl_how_step2 = QtWidgets.QLabel(
+            "Bake checked rows to flat UV textures. Assign to the existing shader or a duplicated _baked material."
+        )
+        for lbl in (lbl_how_step1, lbl_how_step2):
+            lbl.setAlignment(QtCore.Qt.AlignCenter)
+            lbl.setWordWrap(True)
+            lbl.setStyleSheet("font-size:12px; color:#aaaaaa; padding:0px;")
+
+        how_to_layout.addWidget(how_to_title)
+        how_to_layout.addWidget(lbl_how_step1)
+        how_to_layout.addWidget(lbl_how_step2)
+
         # --- Output settings (placed after table in layout) ---
         output_title = QtWidgets.QLabel("Output settings")
         output_title.setStyleSheet("font-weight:600; margin:0px; color:#ffffff;")
@@ -445,6 +554,7 @@ class TextureBakeUI(QtWidgets.QDialog):
         self.btn_scan = QtWidgets.QPushButton("Scan Selected Meshes for Procedural Nodes")
         self.btn_scan.setMinimumHeight(26)
         self.btn_scan.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        self.btn_scan.setStyleSheet("color: %s; font-weight:600;" % UI_ACCENT_CYAN)
         self.btn_scan.setToolTip(
             "Analyze the current selection for mesh shapes, shading groups, and bakeable procedural or projection nodes."
         )
@@ -529,7 +639,9 @@ class TextureBakeUI(QtWidgets.QDialog):
         # --- Bake options ---
         options_title = QtWidgets.QLabel("Bake options")
         options_title.setStyleSheet("font-weight:600; margin:0px; color:#ffffff;")
-        options_title.setToolTip("Dry-run, assignment to shaders, and bake actions.")
+        options_title.setToolTip(
+            "Dry-run, assign baked textures to existing or duplicated shaders, and bake actions."
+        )
 
         self.chk_dryrun = QtWidgets.QCheckBox("Dry-run (log only)")
         self.chk_dryrun.setChecked(False)
@@ -537,18 +649,36 @@ class TextureBakeUI(QtWidgets.QDialog):
             "Print the bake plan to this Activity log and the Script Editor; no files written and no convertSolidTx execution."
         )
 
-        self.chk_assign = QtWidgets.QCheckBox("Assign to material")
-        self.chk_assign.setChecked(True)
-        self.chk_assign.setToolTip(
-            "After baking, disconnect the procedural/projection node and connect a file texture with the new image. "
-            "When on, each mesh gets its own duplicated shader before wiring (default)."
+        self.chk_assign_existing = QtWidgets.QCheckBox("Assign to existing material")
+        self.chk_assign_existing.setChecked(True)
+        self.chk_assign_existing.setToolTip(
+            "After baking, disconnect the procedural/projection node on the current shader "
+            "and connect a file texture with the baked image."
         )
+
+        self.chk_assign_new = QtWidgets.QCheckBox("Assign to new material (per mesh)")
+        self.chk_assign_new.setChecked(False)
+        self.chk_assign_new.setToolTip(
+            "Duplicate the shader for each mesh, assign the mesh to the copy, "
+            "then wire the baked file texture into that new material."
+        )
+
+        self._assign_mode_group = QtWidgets.QButtonGroup(self)
+        self._assign_mode_group.setExclusive(True)
+        self._assign_mode_group.addButton(self.chk_assign_existing, 0)
+        self._assign_mode_group.addButton(self.chk_assign_new, 1)
+
+        assign_col = QtWidgets.QVBoxLayout()
+        assign_col.setContentsMargins(0, 0, 0, 0)
+        assign_col.setSpacing(2)
+        assign_col.addWidget(self.chk_assign_existing)
+        assign_col.addWidget(self.chk_assign_new)
 
         opts_row = QtWidgets.QHBoxLayout()
         opts_row.setContentsMargins(0, 0, 0, 0)
         opts_row.setSpacing(8)
         opts_row.addWidget(self.chk_dryrun)
-        opts_row.addWidget(self.chk_assign)
+        opts_row.addLayout(assign_col)
         opts_row.addStretch(1)
 
         self.lbl_bake_hint = QtWidgets.QLabel("This will bake one texture per selected mesh.")
@@ -559,7 +689,7 @@ class TextureBakeUI(QtWidgets.QDialog):
         self.btn_bake.setFixedHeight(28)
         self.btn_bake.setMinimumWidth(160)
         self.btn_bake.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        self.btn_bake.setStyleSheet("color: #00f7c8; font-weight:600;")
+        self.btn_bake.setStyleSheet("color: %s; font-weight:600;" % UI_ACCENT_CYAN)
         self.btn_bake.setToolTip(
             "Run convertSolidTx for every checked row using the resolution, format, and folder in Output settings."
         )
@@ -658,6 +788,7 @@ class TextureBakeUI(QtWidgets.QDialog):
         lay.setContentsMargins(6, 6, 6, 6)
         lay.setSpacing(6)
         lay.addWidget(title)
+        lay.addWidget(how_to_widget)
         lay.addWidget(outer_frame)
 
     def _wire(self):
@@ -834,7 +965,10 @@ class TextureBakeUI(QtWidgets.QDialog):
         cspace = self.cmb_colorspace.currentText()
         padding = int(self.spn_padding.value())
         dry = self.chk_dryrun.isChecked()
-        assign = self.chk_assign.isChecked()
+        assign_existing = self.chk_assign_existing.isChecked()
+        assign_new = self.chk_assign_new.isChecked()
+        assign = assign_existing or assign_new
+        duplicate_material = assign_new
 
         if not out_dir:
             cmds.warning("Choose an output folder.")
@@ -865,7 +999,13 @@ class TextureBakeUI(QtWidgets.QDialog):
             "Resolution: %s x %s  | Format: %s | ColorSpace: %s | Padding: %spx"
             % (res, res, fmt, cspace, padding)
         )
-        _plan("Assign to material: %s" % ("yes" if assign else "no"))
+        if assign_new:
+            assign_mode = "new material per mesh"
+        elif assign_existing:
+            assign_mode = "existing material"
+        else:
+            assign_mode = "no"
+        _plan("Assign after bake: %s" % assign_mode)
         _plan("-" * 80)
 
         jobs = []
@@ -903,7 +1043,7 @@ class TextureBakeUI(QtWidgets.QDialog):
                 camera = entry.get("camera")
                 node_type = cmds.nodeType(node)
 
-                filename = "%s_%s_%s.%s" % (mesh_name, _short(node), res, fmt)
+                filename = _bake_output_filename(node, kind, res, fmt)
                 out_path = os.path.join(out_dir, filename).replace("\\", "/")
 
                 cam_label = "  Camera=%s" % _short(camera) if camera else ""
@@ -945,9 +1085,15 @@ class TextureBakeUI(QtWidgets.QDialog):
             for line in plan_lines:
                 self._log(line)
             self._log("—" * 40)
-            if assign:
+            if assign_new:
                 self._log(
-                    "With Assign on, each job duplicates the mesh shader before wiring (skipped in dry-run)."
+                    "Assign to new material: each job will duplicate the shader per mesh before wiring "
+                    "(skipped in dry-run)."
+                )
+            elif assign_existing:
+                self._log(
+                    "Assign to existing material: baked textures wire into the current shader "
+                    "(skipped in dry-run)."
                 )
             self._log("Dry-run only — no scene changes and no files written. Uncheck 'Dry-run' to execute.")
             return
@@ -969,7 +1115,8 @@ class TextureBakeUI(QtWidgets.QDialog):
                                     if mats:
                                         j["material"] = mats[0]
                                         break
-                    if j.get("material") and j.get("sg"):
+                    if duplicate_material and j.get("material") and j.get("sg"):
+                        j["source_material"] = j["material"]
                         new_mat, new_sg = self._duplicate_material_for_mesh(
                             j["material"], j["sg"], j["mesh"], j["shape"]
                         )
@@ -978,7 +1125,7 @@ class TextureBakeUI(QtWidgets.QDialog):
 
             for j in jobs:
                 j["assign_to_material"] = assign
-                j["duplicate_per_mesh"] = assign
+                j["duplicate_per_mesh"] = duplicate_material
 
             exec_msg = "Executing bake…"
             print(exec_msg)
@@ -1034,9 +1181,122 @@ class TextureBakeUI(QtWidgets.QDialog):
                 except Exception:
                     pass
 
+    @staticmethod
+    def _is_shader_weight_attr(attr):
+        """True for float weight plugs (e.g. standardSurface.base), not color inputs."""
+        if not attr:
+            return False
+        return attr in _SHADER_WEIGHT_ATTRS
+
+    @staticmethod
+    def _same_shader_node(node_a, node_b):
+        if not node_a or not node_b:
+            return False
+        return node_a == node_b or _short(node_a) == _short(node_b)
+
+    def _shader_color_input_attrs(self, material):
+        """Color attributes on this shader that may receive a baked texture."""
+        t = cmds.nodeType(material)
+        by_type = {
+            "lambert": ("color",),
+            "blinn": ("color", "specularColor", "incandescence", "reflectedColor", "ambientColor"),
+            "phong": ("color", "specularColor", "incandescence", "reflectedColor", "ambientColor"),
+            "phongE": ("color", "specularColor", "incandescence"),
+            "standardSurface": (
+                "baseColor", "specularColor", "emissionColor",
+                "transmissionColor", "coatColor", "sheenColor",
+            ),
+            "aiStandardSurface": (
+                "baseColor", "specularColor", "emissionColor",
+                "transmissionColor", "coatColor", "sheenColor",
+            ),
+            "surfaceShader": ("outColor",),
+        }
+        attrs = by_type.get(t)
+        if attrs:
+            return tuple(
+                a for a in attrs if cmds.objExists(f"{material}.{a}")
+            )
+        for a in ("baseColor", "color", "diffuseColor", "outColor"):
+            if cmds.objExists(f"{material}.{a}"):
+                return (a,)
+        return ()
+
+    def _primary_shader_color_attr(self, material):
+        t = cmds.nodeType(material)
+        primary = _SHADER_PRIMARY_COLOR_ATTR.get(t)
+        if primary and cmds.objExists(f"{material}.{primary}"):
+            return primary
+        attrs = self._shader_color_input_attrs(material)
+        return attrs[0] if attrs else None
+
+    def _material_attrs_driven_by_texture(self, proc_node, material):
+        """Material color inputs whose upstream network includes proc_node."""
+        if not proc_node or not material or not cmds.objExists(material):
+            return []
+        driven = []
+        for attr in self._shader_color_input_attrs(material):
+            plug = f"{material}.{attr}"
+            try:
+                upstream = cmds.listHistory(plug, pruneDagObjects=True, future=False) or []
+            except Exception:
+                upstream = []
+            if proc_node in upstream:
+                driven.append(attr)
+        return driven
+
+    def _resolve_bake_assign_dests(self, dest_plugs, target_mat, proc_node=None):
+        """
+        Resolve where to wire the baked file on target_mat.
+        Uses upstream history so utilities between texture and shader are handled.
+        Never fans out to every color channel on the shader.
+        """
+        if not target_mat or not cmds.objExists(target_mat):
+            return []
+
+        driven = (
+            self._material_attrs_driven_by_texture(proc_node, target_mat)
+            if proc_node else []
+        )
+        driven_set = set(driven)
+
+        seen = set()
+        out = []
+
+        for plug in dest_plugs or []:
+            if "." not in plug:
+                continue
+            node, attr = plug.split(".", 1)
+            if not self._same_shader_node(node, target_mat):
+                continue
+            if self._is_shader_weight_attr(attr):
+                continue
+            if driven_set and attr not in driven_set:
+                continue
+            dst = f"{target_mat}.{attr}"
+            if dst in seen or not cmds.objExists(dst):
+                continue
+            seen.add(dst)
+            out.append(dst)
+
+        if not out and driven:
+            for attr in driven:
+                dst = f"{target_mat}.{attr}"
+                if dst in seen or not cmds.objExists(dst):
+                    continue
+                seen.add(dst)
+                out.append(dst)
+
+        if not out:
+            primary = self._primary_shader_color_attr(target_mat)
+            if primary:
+                dst = f"{target_mat}.{primary}"
+                if cmds.objExists(dst):
+                    out.append(dst)
+        return out
+
     def _assign_baked_into_network(self, job, texture_path):
         proc_plug  = job["src_plug"]
-        orig_mat   = job.get("material")
         recorded   = job.get("dest_plugs", [])
         all_targets = job.get("all_targets", [job])
 
@@ -1051,24 +1311,13 @@ class TextureBakeUI(QtWidgets.QDialog):
                 pass
 
         for tgt in all_targets:
-            target_mat = tgt.get("material") or orig_mat
+            target_mat = tgt.get("material")
             if not target_mat or not cmds.objExists(target_mat):
                 continue
 
-            mat_dests = [d for d in base_dests if d.split(".")[0] == orig_mat] if base_dests else []
-
-            if not mat_dests:
-                mat_dests = [
-                    f"{orig_mat}.{a}" for a in
-                    ("baseColor", "color", "diffuseColor", "base", "specularColor",
-                     "emissionColor", "outColor")
-                    if cmds.objExists(f"{orig_mat}.{a}")
-                ]
-
-            remapped = []
-            for dst in mat_dests:
-                attr = dst.split(".", 1)[1]
-                remapped.append(f"{target_mat}.{attr}")
+            remapped = self._resolve_bake_assign_dests(
+                base_dests, target_mat, proc_node=job.get("proc")
+            )
 
             for dst_attr in remapped:
                 self._try_connect_texture(file_node, dst_attr)
@@ -1150,7 +1399,7 @@ class TextureBakeUI(QtWidgets.QDialog):
             raise RuntimeError("Cannot resolve material to duplicate for mesh '%s'." % mesh_name)
 
         mat_type      = cmds.nodeType(material)
-        base_new_name = f"{material}_{mesh_name}".replace("|", "_").replace(":", "_")
+        base_new_name = f"{_short(material)}_baked".replace(":", "_")
 
         new_mat = None
         try:

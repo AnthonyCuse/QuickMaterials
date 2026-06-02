@@ -148,6 +148,21 @@ def resolve_texture_import_mapping(material, logical_texture_type, std_attr, kin
         out["normal_utility"] = "aiNormalMap"
         return out
 
+    if logical_texture_type == "aoMultiplied" or kind == "ao_multiply":
+        if shader_type in STANDARD_SHADER_FAMILY:
+            out["target_attr"] = "baseColor" if _exists_attr(material, "baseColor") else None
+        elif shader_type in LEGACY_SHADER_TYPES:
+            out["target_attr"] = "color" if _exists_attr(material, "color") else None
+        else:
+            out["target_attr"] = std_attr if _exists_attr(material, std_attr) else None
+        if not out["target_attr"]:
+            out["warning"] = (
+                "AO (multiplied): %s has no base color attribute (%s)."
+                % (material, shader_type)
+            )
+            out["skip"] = True
+        return out
+
     if shader_type in STANDARD_SHADER_FAMILY:
         out["normal_utility"] = "aiNormalMap"
         if not _exists_attr(material, std_attr):

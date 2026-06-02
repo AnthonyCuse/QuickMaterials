@@ -21,6 +21,7 @@
     "material_tool_visible_textureBakerButtonFrame": true,
     "material_tool_visible_sendToSubstanceButtonFrame": true,
     "material_tool_visible_deleteUnusedMaterialsButtonFrame": true,
-    "material_tool_visible_regenerateUvTilesButtonFrame": true
+    "material_tool_visible_regenerateUvTilesButtonFrame": true,
+    "material_tool_visible_reloadAllTexturesButtonFrame": true
   }
 }

@@ -61,25 +61,48 @@ def _texture_search_names_legacy_path():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "Settings", "texture_search_names.json")
 
 
+def _read_texture_search_names_json(path):
+    try:
+        if os.path.isfile(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {}
+
+
+def _merge_texture_search_names_dicts(base, overlay):
+    """
+    Merge keyword maps: overlay wins per texture type when it supplies a non-empty list.
+    packedTextures: overlay replaces base when overlay has a non-empty list.
+    """
+    merged = dict(base or {})
+    for key, val in (overlay or {}).items():
+        if key == "packedTextures":
+            if isinstance(val, list) and val:
+                merged[key] = val
+            continue
+        if isinstance(val, list) and val:
+            merged[key] = [str(v).strip() for v in val if str(v).strip()]
+    return merged
+
+
 def load_texture_search_names_raw_dict():
     """
-    Resolution order: user (settings/) → legacy (Settings/) → packaged default.
-    save_texture_names() writes only the user path; default JSON is never overwritten.
+    Layered merge: packaged default <- legacy Settings/ <- user settings/.
+    Per-type keyword lists and packedTextures only override when the later file
+    provides a non-empty value. save_texture_names() writes only the user path.
     """
+    merged = {}
     for path in (
-        _texture_search_names_user_path(),
-        _texture_search_names_legacy_path(),
         _texture_search_names_default_path(),
+        _texture_search_names_legacy_path(),
+        _texture_search_names_user_path(),
     ):
-        try:
-            if os.path.isfile(path):
-                with open(path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                if isinstance(data, dict):
-                    return data
-        except Exception:
-            continue
-    return {}
+        merged = _merge_texture_search_names_dicts(merged, _read_texture_search_names_json(path))
+    return merged
 
 
 try:
@@ -141,7 +164,8 @@ ADVANCED_TEXTURE_TYPES = [
     "transmissionClr", # sRGB (color)
     "coat",              # Raw (weight)
     "coatRoughness",     # Raw (float)
-    "displacement"       # Raw (special)
+    "displacement",      # Raw (special)
+    "aoMultiplied",      # AO × base color via aiMultiply (special)
 ]
 
 # All texture types in one combined list (standard first, then advanced)
@@ -153,6 +177,7 @@ ALL_TEXTURE_TYPES = STANDARD_TEXTURE_TYPES + ADVANCED_TEXTURE_TYPES
 TEXTURE_RULES = {
     # STANDARD
     "baseColor":        {"colorSpace": "sRGB", "attr": "baseColor",          "kind": "color"},
+    "aoMultiplied":     {"colorSpace": "Raw",  "attr": "baseColor",          "kind": "ao_multiply"},
     "roughness":        {"colorSpace": "Raw",  "attr": "specularRoughness",  "kind": "float"},
     "normal":           {"colorSpace": "Raw",  "attr": "normalCamera",       "kind": "normal"},   # special
     "opacity":          {"colorSpace": "Raw",  "attr": "opacity",            "kind": "color"},
@@ -182,6 +207,68 @@ BULK_FOLDER_MAX_DEPTH = 6
 BULK_MATERIAL_HEADER_COLOR = "#ff9330"
 # Shared accent for texture-attribute labels / combos (matches importer UDIM + combo styling)
 UI_ACCENT_CYAN = "#00f7c8"
+
+SEARCH_NAMES_LINE_EDIT_STYLESHEET = """
+    QLineEdit {
+        font-family: 'Segoe UI';
+        font-size: 11px;
+        color: #ffffff;
+        background-color: #333333;
+        border: 2px solid #444444;
+        border-radius: 6px;
+        padding: 2px 4px;
+        text-align: left;
+    }
+    QLineEdit:hover {
+        background-color: #222222;
+    }
+    QLineEdit:focus {
+        border: 2px solid #555555;
+        background-color: #222222;
+    }
+    QLineEdit:disabled {
+        color: #777777;
+        background-color: #555555;
+        border: 2px solid #666666;
+    }
+"""
+
+
+class TextureSearchNamesLineEdit(QtWidgets.QLineEdit):
+    """
+    QLineEdit for comma-separated search keywords: keep the start of the string visible
+    and clip overflow on the right (avoid Qt scrolling long text from the right edge).
+    """
+
+    def __init__(self, text="", parent=None):
+        super(TextureSearchNamesLineEdit, self).__init__(text, parent)
+        self.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.setLayoutDirection(QtCore.Qt.LeftToRight)
+        self._snap_left_timer = QtCore.QTimer(self)
+        self._snap_left_timer.setSingleShot(True)
+        self._snap_left_timer.timeout.connect(self._snap_to_left)
+
+    def _snap_to_left(self):
+        if self.hasFocus():
+            return
+        try:
+            self.setCursorPosition(0)
+            self.home(False)
+        except Exception:
+            pass
+
+    def resizeEvent(self, event):
+        super(TextureSearchNamesLineEdit, self).resizeEvent(event)
+        self._snap_left_timer.start(0)
+
+    def focusOutEvent(self, event):
+        super(TextureSearchNamesLineEdit, self).focusOutEvent(event)
+        self._snap_to_left()
+
+    def setText(self, text):
+        super(TextureSearchNamesLineEdit, self).setText(text)
+        if not self.hasFocus():
+            self._snap_to_left()
 
 
 def maya_main_window():
@@ -220,8 +307,8 @@ class ImportTxTool(QtWidgets.QWidget):
 
         # Minimum sizing + settings toggle state
         self._settings_toggle_initialized = False
-        self._minimum_width_baseline = 700
-        self._base_min_height = 330
+        self._minimum_width_baseline = 780
+        self._base_min_height = 420
         self._settings_frame_extra_height = 220
         # DEPRECATED: Textures folder default location functionality removed.
         # The file dialog remembers the last-used folder, making this redundant.
@@ -740,9 +827,8 @@ class ImportTxTool(QtWidgets.QWidget):
 
     def _load_keyword_map(self):
         """
-        Load per-texture-type keyword lists from settings/texture_search_names.json (user),
-        else legacy Settings/ path, else settings/texture_search_names_default.json.
-        Falls back to {type:[type]}. Also returns packed textures if present.
+        Load per-texture-type keyword lists from merged JSON layers (default, legacy, user).
+        Falls back to {type:[type]} when a type has no keywords. Also returns packed textures.
         """
         data = load_texture_search_names_raw_dict()
 
@@ -777,12 +863,8 @@ class ImportTxTool(QtWidgets.QWidget):
             and material_name.strip()
             and material_name != BULK_ALL_MATERIALS_LABEL
         ):
-            m = material_name.strip()
-            tokens.add(m.lower())
-            # Common variation: drop common prefixes
-            for prefix in ("m_", "mat_", "mtl_"):
-                if m.lower().startswith(prefix):
-                    tokens.add(m[len(prefix):].lower())
+            for variant in self._material_name_match_variants(material_name.strip()):
+                tokens.add(variant.lower())
         return list(tokens)
 
     def _type_required_keywords(self, texture_type, kw_map):
@@ -844,6 +926,24 @@ class ImportTxTool(QtWidgets.QWidget):
             return False
 
 
+    @staticmethod
+    def _material_name_match_variants(name):
+        """
+        Return material-name variants for filename matching, most specific first:
+        the full name, then the name with the first prefix segment stripped
+        (everything before the first '_' plus that underscore).
+        """
+        n = (name or "").strip()
+        if not n:
+            return []
+        variants = [n]
+        idx = n.find("_")
+        if idx >= 0:
+            rest = n[idx + 1:]
+            if rest and rest.lower() != n.lower():
+                variants.append(rest)
+        return variants
+
     def _strip_material_from_name(self, name_lc, material_name):
         """
         Return a version of name_lc with the material-name segment removed (separator-aware),
@@ -852,14 +952,11 @@ class ImportTxTool(QtWidgets.QWidget):
         try:
             if not material_name:
                 return name_lc
-            m = material_name.strip().lower()
+            m = material_name.strip()
             if not m:
                 return name_lc
 
-            variants = {m}
-            for prefix in ("m_", "mat_", "mtl_"):
-                if m.startswith(prefix):
-                    variants.add(m[len(prefix):])
+            variants = {v.lower() for v in self._material_name_match_variants(m)}
 
             parts = [re.escape(v) for v in variants if v]
             if not parts:
@@ -921,12 +1018,7 @@ class ImportTxTool(QtWidgets.QWidget):
         if not material_name:
             return None
         m = material_name.strip()
-        m_lc = m.lower()
-        # also accept common prefix-stripped variants
-        variants = {m_lc}
-        for prefix in ("m_", "mat_", "mtl_"):
-            if m_lc.startswith(prefix):
-                variants.add(m_lc[len(prefix):])
+        variants = {v.lower() for v in self._material_name_match_variants(m)}
         patterns = [re.compile(rf"(^|[._-]){re.escape(v)}([._-]|$)") for v in variants if v]
         def _pred(fname):
             n = os.path.basename(fname).lower()
@@ -1073,7 +1165,7 @@ class ImportTxTool(QtWidgets.QWidget):
                     count += 1
                 else:
                     # Multiple assignments (packed texture)
-                    self._import_packed_texture(texture_path, valid_assignments)
+                    self._import_packed_texture(texture_path, valid_assignments, texture_info=texture_info)
                     count += 1
         
         # Also check old texture_data for backward compatibility
@@ -1108,37 +1200,17 @@ class ImportTxTool(QtWidgets.QWidget):
         target_attr = mapping.get("target_attr")
         opacity_mode = mapping.get("opacity_mode")
         normal_utility = mapping.get("normal_utility") or "aiNormalMap"
+        use_projection = bool(texture_info.get("use_projection")) if texture_info else False
 
         # Displacement (no surface shader attribute)
         if kind == "displacement" or texture_type == "displacement":
             use_udim = self.use_udim and texture_info.get("udim_count", 0) > 1
             file_node, path_to_set = self._ensure_file_node(
-                material, texture_type, file_path, colorspace, use_udim
+                material, texture_type, file_path, colorspace, use_udim, use_projection
             )
+            tex_node = self._texture_output_node(file_node, use_projection)
             disp_node, sg = self._ensure_displacement_network(material)
-            ch = channel
-            if ch:
-                cl = ch.lower()
-                src = (
-                    f"{file_node}.outAlpha"
-                    if cl == "a"
-                    else f"{file_node}.outColorR"
-                    if cl == "r"
-                    else f"{file_node}.outColorG"
-                    if cl == "g"
-                    else f"{file_node}.outColorB"
-                )
-            else:
-                default_ch = self._default_channel_for_type(texture_type)
-                src = (
-                    f"{file_node}.outAlpha"
-                    if default_ch == "A"
-                    else f"{file_node}.outColorR"
-                    if default_ch == "R"
-                    else f"{file_node}.outColorG"
-                    if default_ch == "G"
-                    else f"{file_node}.outColorB"
-                )
+            src = self._get_channel_source_plug(tex_node, channel, texture_type)
             try:
                 incoming = cmds.listConnections(f"{disp_node}.displacement", plugs=True) or []
                 for plug in incoming:
@@ -1156,10 +1228,12 @@ class ImportTxTool(QtWidgets.QWidget):
 
         # Get UDIM info from texture_info
         use_udim = self.use_udim and texture_info.get("udim_count", 0) > 1
-        udim_pattern = texture_info.get("udim_pattern")
-        
-        # Create file node
-        file_node, path_to_set = self._ensure_file_node(material, texture_type, file_path, colorspace, use_udim)
+
+        # Create file node (and projection when requested)
+        file_node, path_to_set = self._ensure_file_node(
+            material, texture_type, file_path, colorspace, use_udim, use_projection
+        )
+        tex_node = self._texture_output_node(file_node, use_projection)
 
         try:
             if kind in ("float", "displacement") or texture_type == "opacity":
@@ -1174,40 +1248,25 @@ class ImportTxTool(QtWidgets.QWidget):
         attr = target_attr
         if not attr:
             return
-        
-        # Determine source channel
-        if channel:
-            if channel.lower() == "a":
-                src = f"{file_node}.outAlpha"
-            elif channel.lower() == "r":
-                src = f"{file_node}.outColorR"
-            elif channel.lower() == "g":
-                src = f"{file_node}.outColorG"
-            elif channel.lower() == "b":
-                src = f"{file_node}.outColorB"
-            else:
-                src = f"{file_node}.outColorR"
-        else:
-            # Use default channel for this type
-            default_ch = self._default_channel_for_type(texture_type)
-            if default_ch == "A":
-                src = f"{file_node}.outAlpha"
-            elif default_ch == "R":
-                src = f"{file_node}.outColorR"
-            elif default_ch == "G":
-                src = f"{file_node}.outColorG"
-            elif default_ch == "B":
-                src = f"{file_node}.outColorB"
-            else:
-                src = f"{file_node}.outColor"
-        
+
+        src = self._get_channel_source_plug(tex_node, channel, texture_type)
+
+        if kind == "ao_multiply":
+            try:
+                if cmds.attributeQuery("alphaIsLuminance", node=file_node, exists=True):
+                    cmds.setAttr("%s.alphaIsLuminance" % file_node, 1)
+            except Exception:
+                pass
+            self._connect_ao_multiply_base_color(material, tex_node, src, mapping)
+            return
+
         # Connect based on kind
         if kind == "normal":
             nn = self._ensure_normal_map_for_mapping(material, normal_utility)
-            self._connect_file_to_normal_utility(file_node, nn, normal_utility)
+            self._connect_file_to_normal_utility(tex_node, nn, normal_utility)
             self._debug_print(
-                f"[Import] {file_node}.outColor -> {nn} -> {material}.normalCamera "
-                f"(channel={channel or 'default'}, colorspace={colorspace})"
+                f"[Import] {tex_node}.outColor -> {nn} -> {material}.normalCamera "
+                f"(projection={use_projection}, channel={channel or 'default'}, colorspace={colorspace})"
             )
             return
 
@@ -1216,10 +1275,10 @@ class ImportTxTool(QtWidgets.QWidget):
             cp = ch_upper if ch_upper in ("A", "R", "G", "B") else (
                 "A" if texture_type == "opacity" else None
             )
-            self._connect_file_to_reversed_transparency(file_node, material, cp)
+            self._connect_file_to_reversed_transparency(tex_node, material, cp)
             self._debug_print(
-                f"[Import] {file_node} -> reverse -> {material}.transparency "
-                f"(channel={channel or 'default'}, colorspace={colorspace})"
+                f"[Import] {tex_node} -> reverse -> {material}.transparency "
+                f"(projection={use_projection}, channel={channel or 'default'}, colorspace={colorspace})"
             )
             return
 
@@ -1230,13 +1289,16 @@ class ImportTxTool(QtWidgets.QWidget):
                     cmds.connectAttr(src, f"{material}.{attr}", force=True)
                 except Exception:
                     # fallback to scalar replicate on failure
-                    self._connect_scalar_to_color(f"{file_node}.outColorR", material, attr)
+                    self._connect_scalar_to_color(f"{tex_node}.outColorR", material, attr)
             else:
                 self._connect_scalar_to_color(src, material, attr)
         elif kind == "float":
             self._connect_float_source_to_attr(src, material, attr)
         
-        self._debug_print(f"[Import] {file_node}.{src} -> {material}.{attr} (channel={channel or 'default'}, colorspace={colorspace})")
+        self._debug_print(
+            f"[Import] {src} -> {material}.{attr} "
+            f"(projection={use_projection}, channel={channel or 'default'}, colorspace={colorspace})"
+        )
 
     def _sync_all_texture_entries(self):
         """Push all open texture rows from the UI into selected_textures (bulk + single)."""
@@ -1279,7 +1341,7 @@ class ImportTxTool(QtWidgets.QWidget):
                     )
                 else:
                     self._import_packed_texture(
-                        texture_path, valid_assignments, material=mat
+                        texture_path, valid_assignments, material=mat, texture_info=texture_info
                     )
         self._flush_import_warnings()
 
@@ -1711,7 +1773,8 @@ class ImportTxTool(QtWidgets.QWidget):
             "name": file_name,
             "udim_pattern": udim_pattern,
             "udim_count": udim_count,
-            "assignments": info_dict.get("assignments", [])
+            "assignments": info_dict.get("assignments", []),
+            "use_projection": bool(info_dict.get("use_projection", False)),
         }
         self._debug_print(f"[BuildTextureInfo] Built texture info with {len(result['assignments'])} assignments, udim_count={udim_count}: {result['assignments']}")
         return result
@@ -2214,11 +2277,22 @@ class ImportTxTool(QtWidgets.QWidget):
                 yield os.path.join(dirpath, fn), depth_here
 
     def _pick_matching_material(self, basename_lc, mat_pairs):
-        """Longest material base name contained in basename (namespaces ignored on material)."""
-        for base, mfull in mat_pairs:
-            b = (base or "").strip().lower()
-            if b and b in basename_lc:
-                return mfull
+        """
+        Longest material base name contained in basename (namespaces ignored on material).
+        Tries full material names first, then names with the first prefix segment stripped
+        (e.g. M_shirt_torn -> shirt_torn).
+        """
+        for use_stripped in (False, True):
+            for base, mfull in mat_pairs:
+                if use_stripped:
+                    variants = self._material_name_match_variants(base)
+                    if len(variants) < 2:
+                        continue
+                    b = variants[1].strip().lower()
+                else:
+                    b = (base or "").strip().lower()
+                if b and b in basename_lc:
+                    return mfull
         return None
 
     def _run_bulk_folder_scan(self, root):
@@ -2492,9 +2566,11 @@ class ImportTxTool(QtWidgets.QWidget):
     def _populate_bulk_mode_scroll(self):
         """Bulk mode: same per-texture rows as single-material mode, grouped under collapsible material headers."""
         hint_folder = QtWidgets.QLabel(
-            "Select a textures folder to match files to scene materials (material name must appear in each filename)."
+            "Select a textures folder to match files to scene materials "
+            "<b>(material name must appear in each texture file name)</b>."
         )
         hint_folder.setWordWrap(True)
+        hint_folder.setTextFormat(QtCore.Qt.RichText)
         hint_folder.setStyleSheet(
             "font-family: 'Segoe UI'; font-size: 13px; color: #cccccc; padding: 4px; background: transparent;"
         )
@@ -2598,6 +2674,126 @@ class ImportTxTool(QtWidgets.QWidget):
             pass
         return bn
 
+    def _detach_ao_multiply_from_shading_groups(self, mult_name):
+        """
+        aiMultiply must be a utility, not a surface shader. Nodes created with asShader=True
+        can be wired to a shadingEngine and then show up in cmds.ls(materials=True).
+        """
+        try:
+            for dest in cmds.listConnections(f"{mult_name}.outColor", s=False, d=True) or []:
+                if cmds.nodeType(dest) != "shadingEngine":
+                    continue
+                try:
+                    cmds.disconnectAttr(f"{mult_name}.outColor", f"{dest}.surfaceShader")
+                    self._debug_print(f"[Import] Removed erroneous SG hook: {mult_name} -> {dest}")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _ensure_ao_multiply_node(self, material):
+        """Reuse or create an aiMultiply utility node for AO × base color (not a surface shader)."""
+        safe_mat = re.sub(r"[^A-Za-z0-9_]", "_", material)
+        mult_name = f"{safe_mat}_aoMultiplied_multiply"
+        if cmds.objExists(mult_name) and cmds.nodeType(mult_name) != "aiMultiply":
+            try:
+                cmds.delete(mult_name)
+            except Exception:
+                pass
+        if not cmds.objExists(mult_name):
+            mult_name = cmds.shadingNode("aiMultiply", asUtility=True, name=mult_name)
+        self._detach_ao_multiply_from_shading_groups(mult_name)
+        return mult_name
+
+    def _connect_scalar_to_ai_multiply_input2(self, src_plug, mult_node):
+        """Wire a single-channel source into aiMultiply.input2 RGB."""
+        for ch in ("R", "G", "B"):
+            try:
+                cmds.connectAttr(src_plug, f"{mult_node}.input2{ch}", force=True)
+            except Exception:
+                pass
+
+    def _connect_ao_multiply_base_color(self, material, tex_node, ao_src_plug, mapping):
+        """
+        Multiply existing base color (input1) with AO texture (input2) via aiMultiply,
+        then drive the material base color from the multiply output.
+        """
+        target_attr = mapping.get("target_attr")
+        if not target_attr:
+            self._record_import_warning(
+                "AO (multiplied): material '%s' has no base color attribute to drive." % material
+            )
+            return
+
+        dest = f"{material}.{target_attr}"
+        mult = self._ensure_ao_multiply_node(material)
+
+        incoming = cmds.listConnections(dest, s=True, d=False, plugs=True) or []
+        base_plug = None
+        for plug in incoming:
+            src_node = plug.split(".")[0]
+            if src_node == mult:
+                # Re-import: base color already routed through this multiply
+                in1 = cmds.listConnections(f"{mult}.input1", s=True, d=False, plugs=True) or []
+                if in1:
+                    base_plug = in1[0]
+                break
+            base_plug = plug
+            break
+
+        if base_plug:
+            try:
+                cmds.disconnectAttr(base_plug, dest)
+            except Exception:
+                pass
+            try:
+                cmds.connectAttr(base_plug, f"{mult}.input1", force=True)
+            except Exception as e:
+                self._debug_print(f"[Import] AO multiply input1 connect failed: {e}")
+        else:
+            try:
+                rgb = cmds.getAttr(dest)
+                if isinstance(rgb, (list, tuple)) and len(rgb) > 0 and isinstance(rgb[0], (list, tuple)):
+                    rgb = rgb[0]
+                if len(rgb) >= 3:
+                    cmds.setAttr(f"{mult}.input1", float(rgb[0]), float(rgb[1]), float(rgb[2]), type="double3")
+            except Exception as e:
+                self._record_import_warning(
+                    "AO (multiplied): could not read base color on %s for input1 (%s)." % (material, e)
+                )
+
+        for plug in cmds.listConnections(f"{mult}.input2", s=True, d=False, plugs=True) or []:
+            try:
+                cmds.disconnectAttr(plug, f"{mult}.input2")
+            except Exception:
+                pass
+
+        if ao_src_plug.endswith(".outColor"):
+            try:
+                cmds.connectAttr(ao_src_plug, f"{mult}.input2", force=True)
+            except Exception:
+                self._connect_scalar_to_ai_multiply_input2(f"{tex_node}.outColorR", mult)
+        else:
+            self._connect_scalar_to_ai_multiply_input2(ao_src_plug, mult)
+
+        for plug in list(cmds.listConnections(dest, s=True, d=False, plugs=True) or []):
+            try:
+                cmds.disconnectAttr(plug, dest)
+            except Exception:
+                pass
+        try:
+            cmds.connectAttr(f"{mult}.outColor", dest, force=True)
+        except Exception as e:
+            self._record_import_warning(
+                "AO (multiplied): failed to connect %s.outColor -> %s (%s)." % (mult, dest, e)
+            )
+            return
+
+        self._detach_ao_multiply_from_shading_groups(mult)
+        self._debug_print(
+            f"[Import] AO multiply: {ao_src_plug} * base -> {mult}.outColor -> {material}.{target_attr}"
+        )
+
     def _connect_file_to_normal_utility(self, file_node, utility_node, normal_utility):
         """Wire file texture into aiNormalMap.input or bump2d.bumpValue."""
         try:
@@ -2692,7 +2888,106 @@ class ImportTxTool(QtWidgets.QWidget):
         # Otherwise, fall back to default per type
         return self._default_channel_for_type(texture_type)
 
-    def _ensure_file_node(self, material, texture_type, file_path, color_space, use_udim):
+    def _get_channel_source_plug(self, tex_node, channel, texture_type):
+        """Return the output plug on a file or projection node for the chosen channel."""
+        if channel:
+            cl = channel.lower()
+            if cl == "a":
+                return f"{tex_node}.outAlpha"
+            if cl == "r":
+                return f"{tex_node}.outColorR"
+            if cl == "g":
+                return f"{tex_node}.outColorG"
+            if cl == "b":
+                return f"{tex_node}.outColorB"
+            return f"{tex_node}.outColorR"
+        default_ch = self._default_channel_for_type(texture_type)
+        if default_ch == "A":
+            return f"{tex_node}.outAlpha"
+        if default_ch == "R":
+            return f"{tex_node}.outColorR"
+        if default_ch == "G":
+            return f"{tex_node}.outColorG"
+        if default_ch == "B":
+            return f"{tex_node}.outColorB"
+        return f"{tex_node}.outColor"
+
+    def _connect_place2d_to_file(self, file_node):
+        """Attach a place2dTexture so the file node maps in UV space."""
+        place2d_name = f"{file_node}_place2dTexture"
+        if not cmds.objExists(place2d_name):
+            place2d_name = cmds.shadingNode("place2dTexture", asUtility=True, name=place2d_name)
+            self._debug_print(f"[Place2D] Created {place2d_name} for {file_node}")
+        try:
+            if not cmds.isConnected(f"{place2d_name}.outUV", f"{file_node}.uvCoord"):
+                cmds.connectAttr(f"{place2d_name}.outUV", f"{file_node}.uvCoord", force=True)
+            if not cmds.isConnected(f"{place2d_name}.outUvFilterSize", f"{file_node}.uvFilterSize"):
+                cmds.connectAttr(f"{place2d_name}.outUvFilterSize", f"{file_node}.uvFilterSize", force=True)
+            self._debug_print(f"[Place2D] Connected {place2d_name} to {file_node}")
+        except Exception as e:
+            self._debug_print(f"[Place2D] Failed to connect {place2d_name} to {file_node}: {e}")
+
+    def _disconnect_place2d_from_file(self, file_node):
+        """Remove UV placement so the file can drive a projection node instead."""
+        for dst_attr in ("uvCoord", "uvFilterSize"):
+            incoming = cmds.listConnections(f"{file_node}.{dst_attr}", s=True, d=False, plugs=True) or []
+            for plug in incoming:
+                try:
+                    cmds.disconnectAttr(plug, f"{file_node}.{dst_attr}")
+                except Exception:
+                    pass
+
+    def _ensure_place3d_for_projection(self, projection_node):
+        """Wire place3dTexture to projection placement at default world origin (not under a camera)."""
+        place3d_name = f"{projection_node}_place3dTexture"
+        if not cmds.objExists(place3d_name):
+            place3d_name = cmds.shadingNode("place3dTexture", asUtility=True, name=place3d_name)
+        try:
+            if not cmds.isConnected(f"{place3d_name}.worldInverseMatrix", f"{projection_node}.placementMatrix"):
+                cmds.connectAttr(
+                    f"{place3d_name}.worldInverseMatrix",
+                    f"{projection_node}.placementMatrix",
+                    force=True,
+                )
+        except Exception as e:
+            self._debug_print(f"[Projection] place3d placementMatrix failed: {e}")
+        try:
+            if cmds.listRelatives(place3d_name, parent=True):
+                cmds.parent(place3d_name, world=True)
+        except Exception as e:
+            self._debug_print(f"[Projection] unparent place3d to world failed: {e}")
+        return place3d_name
+
+    def _ensure_projection_node(self, file_node):
+        """
+        Create or reuse a Maya projection node fed by file_node.outColor.
+        Returns the projection node name.
+        """
+        if file_node.endswith("_file"):
+            proj_name = file_node[:-5] + "_projection"
+        else:
+            proj_name = f"{file_node}_projection"
+        if not cmds.objExists(proj_name):
+            proj_name = cmds.shadingNode("projection", asTexture=True, name=proj_name)
+
+        self._disconnect_place2d_from_file(file_node)
+        try:
+            if not cmds.isConnected(f"{file_node}.outColor", f"{proj_name}.image"):
+                cmds.connectAttr(f"{file_node}.outColor", f"{proj_name}.image", force=True)
+        except Exception as e:
+            self._debug_print(f"[Projection] file -> image failed: {e}")
+
+        self._ensure_place3d_for_projection(proj_name)
+        self._debug_print(f"[Projection] Using {proj_name} (file={file_node})")
+        return proj_name
+
+    def _texture_output_node(self, file_node, use_projection):
+        """Node whose outputs connect to the material (file or projection)."""
+        if use_projection:
+            return self._ensure_projection_node(file_node)
+        return file_node
+
+    def _ensure_file_node(self, material, texture_type, file_path, color_space, use_udim, use_projection=False):
         """
         Create or reuse a Maya 'file' node configured with colorSpace and (optionally) UDIM pattern.
         Enforces color management overrides so our explicit colorSpace (e.g., 'Raw') is respected.
@@ -2781,23 +3076,10 @@ class ImportTxTool(QtWidgets.QWidget):
         except Exception as e:
             self._debug_print(f"[FilePath] Failed to set fileTextureName on {node_name}: {e}")
 
-        # Create and connect place2dTexture node (like Maya does automatically)
-        place2d_name = f"{node_name}_place2dTexture"
-        if not cmds.objExists(place2d_name):
-            place2d_name = cmds.shadingNode("place2dTexture", asUtility=True, name=place2d_name)
-            self._debug_print(f"[Place2D] Created {place2d_name} for {node_name}")
-        
-        # Connect place2dTexture to file node (standard connections)
-        try:
-            # Connect outUV to uvCoord
-            if not cmds.isConnected(f"{place2d_name}.outUV", f"{node_name}.uvCoord"):
-                cmds.connectAttr(f"{place2d_name}.outUV", f"{node_name}.uvCoord", force=True)
-            # Connect outUvFilterSize to uvFilterSize
-            if not cmds.isConnected(f"{place2d_name}.outUvFilterSize", f"{node_name}.uvFilterSize"):
-                cmds.connectAttr(f"{place2d_name}.outUvFilterSize", f"{node_name}.uvFilterSize", force=True)
-            self._debug_print(f"[Place2D] Connected {place2d_name} to {node_name}")
-        except Exception as e:
-            self._debug_print(f"[Place2D] Failed to connect {place2d_name} to {node_name}: {e}")
+        if not use_projection:
+            self._connect_place2d_to_file(node_name)
+        else:
+            self._disconnect_place2d_from_file(node_name)
 
         return node_name, path_to_set
 
@@ -2942,7 +3224,7 @@ class ImportTxTool(QtWidgets.QWidget):
         # --- File node flags by type/kind ---
         try:
             # Default all linear/float maps to alphaIsLuminance = True so alpha works as luminance if needed
-            if kind in ("float", "displacement") or texture_type == "opacity":
+            if kind in ("float", "displacement", "ao_multiply") or texture_type == "opacity":
                 if cmds.attributeQuery("alphaIsLuminance", node=file_node, exists=True):
                     cmds.setAttr(f"{file_node}.alphaIsLuminance", 1)
             # Normal maps explicitly should NOT use alpha-as-luminance
@@ -2951,6 +3233,13 @@ class ImportTxTool(QtWidgets.QWidget):
                     cmds.setAttr(f"{file_node}.alphaIsLuminance", 0)
         except Exception:
             pass
+
+        # --- Special: AO multiplied into base color ---
+        if kind == "ao_multiply":
+            ch_pref = self._get_channel_selection(texture_type)
+            src = self._get_channel_source_plug(file_node, ch_pref.lower() if ch_pref else None, texture_type)
+            self._connect_ao_multiply_base_color(material, file_node, src, mapping)
+            return
 
         # --- Special: NORMAL ---
         if kind == "normal":
@@ -3016,7 +3305,7 @@ class ImportTxTool(QtWidgets.QWidget):
 
         self._debug_print(f"[Import] {texture_type}: {file_node} -> {material}.{tname}")
 
-    def _import_packed_texture(self, file_path, assignments, material=None):
+    def _import_packed_texture(self, file_path, assignments, material=None, texture_info=None):
         """
         Import a packed texture with multiple attribute assignments and channel selections.
         assignments: [{"attribute": "roughness", "channel": "b"}, {"attribute": "metallic", "channel": "g"}, ...]
@@ -3031,6 +3320,8 @@ class ImportTxTool(QtWidgets.QWidget):
         if not material:
             self._debug_print("[Import] No material selected for packed texture import")
             return
+
+        use_projection = bool(texture_info.get("use_projection")) if texture_info else False
         
         # Extract texture filename for node naming (use base name without extension)
         file_dir, file_name = os.path.split(file_path)
@@ -3104,22 +3395,12 @@ class ImportTxTool(QtWidgets.QWidget):
             self._debug_print(f"[FilePath] Failed to set fileTextureName on {file_node_name}: {e}")
             return
         
-        # Create and connect place2dTexture node (like Maya does automatically)
-        place2d_name = f"{file_node_name}_place2dTexture"
-        if not cmds.objExists(place2d_name):
-            place2d_name = cmds.shadingNode("place2dTexture", asUtility=True, name=place2d_name)
-            self._debug_print(f"[Place2D] Created {place2d_name} for {file_node_name}")
-        
-        # Connect place2dTexture to file node (standard connections)
-        try:
-            if not cmds.isConnected(f"{place2d_name}.outUV", f"{file_node_name}.uvCoord"):
-                cmds.connectAttr(f"{place2d_name}.outUV", f"{file_node_name}.uvCoord", force=True)
-            if not cmds.isConnected(f"{place2d_name}.outUvFilterSize", f"{file_node_name}.uvFilterSize"):
-                cmds.connectAttr(f"{place2d_name}.outUvFilterSize", f"{file_node_name}.uvFilterSize", force=True)
-            self._debug_print(f"[Place2D] Connected {place2d_name} to {file_node_name}")
-        except Exception as e:
-            self._debug_print(f"[Place2D] Failed to connect {place2d_name} to {file_node_name}: {e}")
-        
+        if use_projection:
+            tex_node = self._texture_output_node(file_node_name, True)
+        else:
+            self._connect_place2d_to_file(file_node_name)
+            tex_node = file_node_name
+
         # Process each assignment
         for assignment in assignments:
             texture_type = assignment.get("attribute")
@@ -3141,36 +3422,19 @@ class ImportTxTool(QtWidgets.QWidget):
             opacity_mode = mapping.get("opacity_mode")
             normal_utility = mapping.get("normal_utility") or "aiNormalMap"
 
-            # Determine source channel (JSON / UI may use lower case; match _import_one_type_with_channel)
-            if channel:
-                cl = channel.lower()
-                if cl == "a":
-                    src = f"{file_node_name}.outAlpha"
-                elif cl == "r":
-                    src = f"{file_node_name}.outColorR"
-                elif cl == "g":
-                    src = f"{file_node_name}.outColorG"
-                elif cl == "b":
-                    src = f"{file_node_name}.outColorB"
-                else:
-                    src = f"{file_node_name}.outColorR"
-            else:
-                ch_pref = self._default_channel_for_type(texture_type)
-                if ch_pref == "A":
-                    src = f"{file_node_name}.outAlpha"
-                elif ch_pref == "R":
-                    src = f"{file_node_name}.outColorR"
-                elif ch_pref == "G":
-                    src = f"{file_node_name}.outColorG"
-                elif ch_pref == "B":
-                    src = f"{file_node_name}.outColorB"
-                else:
-                    src = f"{file_node_name}.outColorR"
+            src = self._get_channel_source_plug(tex_node, channel, texture_type)
 
             # Connect based on kind
-            if kind == "normal":
+            if kind == "ao_multiply":
+                try:
+                    if cmds.attributeQuery("alphaIsLuminance", node=file_node_name, exists=True):
+                        cmds.setAttr(f"{file_node_name}.alphaIsLuminance", 1)
+                except Exception:
+                    pass
+                self._connect_ao_multiply_base_color(material, tex_node, src, mapping)
+            elif kind == "normal":
                 nn = self._ensure_normal_map_for_mapping(material, normal_utility)
-                self._connect_file_to_normal_utility(file_node_name, nn, normal_utility)
+                self._connect_file_to_normal_utility(tex_node, nn, normal_utility)
             elif kind == "displacement":
                 disp_node, sg = self._ensure_displacement_network(material)
                 try:
@@ -3195,8 +3459,8 @@ class ImportTxTool(QtWidgets.QWidget):
                 self._connect_float_source_to_attr(src, material, target_attr)
             
             self._debug_print(
-                f"[Import] Packed texture: {file_node_name}.{src} -> {material}.{target_attr} "
-                f"(channel={channel or 'default'}, kind={kind})"
+                f"[Import] Packed texture: {src} -> {material}.{target_attr} "
+                f"(projection={use_projection}, channel={channel or 'default'}, kind={kind})"
             )
 
     def open_texture_importer_settings(self):
@@ -3860,6 +4124,7 @@ class ImportTxTool(QtWidgets.QWidget):
         """Helper function to get display name for texture types."""
         display_names = {
             "baseColor": "Base Color",
+            "aoMultiplied": "AO (multiplied)",
             "emissionClr": "Emission Color",
             "subsurfaceClr": "Subsurface Color",
             "specularClr": "Specular Color",
@@ -4076,6 +4341,7 @@ class ImportTxTool(QtWidgets.QWidget):
             "attribute_combos": [],
             "plus_button": None,
             "channel_checkboxes": [],  # List of dicts with R/G/B/A checkboxes per assignment
+            "projection_checkbox": None,
             "status": status
         }
         
@@ -4093,6 +4359,10 @@ class ImportTxTool(QtWidgets.QWidget):
                 widget_info["channel_checkboxes"].append(assignment_widget.get("checkboxes", {}))
                 if idx == 0:
                     widget_info["plus_button"] = assignment_widget.get("plus_button")
+                    proj_cb = assignment_widget.get("projection_checkbox")
+                    if proj_cb:
+                        widget_info["projection_checkbox"] = proj_cb
+                        proj_cb.setChecked(bool(texture_info.get("use_projection", False)))
         
         # Store widget info
         self._update_texture_entry_widget_display(widget_info, texture_info)
@@ -4242,14 +4512,30 @@ class ImportTxTool(QtWidgets.QWidget):
         
         row_layout.addSpacing(4)
         row_layout.addWidget(channel_label)
-        
+
         result["checkboxes"] = checkboxes
+
+        if is_first:
+            row_layout.addStretch(1)
+            projection_cb = QtWidgets.QCheckBox("projection")
+            projection_cb.setStyleSheet(checkbox_stylesheet)
+            projection_cb.setMinimumHeight(18)
+            projection_cb.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+            projection_cb.toggled.connect(lambda: self._sync_texture_entry_to_data(texture_path))
+            row_layout.addWidget(projection_cb)
+            result["projection_checkbox"] = projection_cb
+            widget_info["projection_checkbox"] = projection_cb
+        else:
+            row_layout.addStretch(1)
         
         # Set initial enabled state based on attribute
         initial_attr = attribute_combo.itemData(attribute_combo.currentIndex())
         is_skip_initial = (initial_attr == "skip" or initial_attr is None)
         for cb in checkboxes.values():
             cb.setEnabled(not is_skip_initial)
+        proj_init = result.get("projection_checkbox")
+        if proj_init:
+            proj_init.setEnabled(not is_skip_initial)
         
         # Set channel checkbox based on assignment
         channel = assignment.get("channel")
@@ -4292,11 +4578,13 @@ class ImportTxTool(QtWidgets.QWidget):
                     cb.blockSignals(True)
                     cb.setChecked(False)
                     cb.blockSignals(False)
+            proj_cb = widget_info.get("projection_checkbox")
+            if proj_cb:
+                proj_cb.setEnabled(not is_skip)
             update_channel_label_text()
         
         attribute_combo.currentIndexChanged.connect(on_attribute_changed)
         
-        row_layout.addStretch(1)
         parent_layout.addWidget(row_widget)
         
         return result
@@ -4396,6 +4684,8 @@ class ImportTxTool(QtWidgets.QWidget):
         
         # Update texture info
         texture_info["assignments"] = assignments if assignments else [{"attribute": None, "channel": None, "colorspace": "default"}]
+        proj_cb = widget_info.get("projection_checkbox")
+        texture_info["use_projection"] = bool(proj_cb.isChecked()) if proj_cb else False
         
         # Update status based on assignments (but don't move between lists - just update visual)
         has_assignment = any(a.get("attribute") and a.get("attribute") != "skip" for a in texture_info["assignments"])
@@ -4427,6 +4717,8 @@ class ImportTxTool(QtWidgets.QWidget):
           - Color/normal textures => None (use full outColor)
         """
         if texture_type == "opacity":
+            return "A"
+        if texture_type == "aoMultiplied":
             return "A"
         rules = TEXTURE_RULES.get(texture_type, {})
         kind = rules.get("kind")
@@ -4964,9 +5256,8 @@ class PreviewImportDialog(QtWidgets.QDialog):
 class TextureSearchNamesUI(QtWidgets.QWidget):
     """
     Loads textureSearchnames.ui, then dynamically builds the scroll area content
-    for each texture type (label + line edit). Keywords load from user JSON, legacy
-    Settings/, or texture_search_names_default.json; save writes only
-    <script_dir>/settings/texture_search_names.json.
+    for each texture type (label + line edit). Keywords load from merged default,
+    legacy Settings/, and user JSON; save writes only settings/texture_search_names.json.
     """
     
     @staticmethod
@@ -4974,6 +5265,7 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         """Convert texture type key to user-friendly display name."""
         display_names = {
             "baseColor": "Base Color",
+            "aoMultiplied": "AO (multiplied)",
             "emissionClr": "Emission Color",
             "subsurfaceClr": "Subsurface Color",
             "specularClr": "Specular Color",
@@ -5014,6 +5306,9 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
 
         # 3.5) Fill from saved JSON if present
         self._apply_saved_texture_names()
+
+        # 3.6) Clear All (top-right) + save reminder above bottom buttons
+        self._setup_texture_search_names_chrome()
 
         # 4) Connect signals (e.g., Save button)
         self.setup_connections()
@@ -5138,35 +5433,10 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
             """ % UI_ACCENT_CYAN)
             row_layout.addWidget(label)
 
-            # 4b) A QLineEdit with objectName "<textureType>TextureNameLineEdit"
-            line_edit = QtWidgets.QLineEdit()
+            # 4b) Keyword line edit (left-aligned, clip overflow on the right)
+            line_edit = TextureSearchNamesLineEdit(ttype)
             line_edit.setObjectName(f"{ttype}TextureNameLineEdit")
-            # Set default text (will be overridden by _apply_saved_texture_names if JSON exists)
-            line_edit.setText(ttype)  # Default to texture type name
-            line_edit.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-            line_edit.setStyleSheet("""
-                QLineEdit {
-                    font-family: 'Segoe UI';
-                    font-size: 11px;
-                    color: #ffffff;
-                    background-color: #333333;
-                    border: 2px solid #444444;
-                    border-radius: 6px;
-                    padding: 2px 4px;
-                }
-                QLineEdit:hover {
-                    background-color: #222222;
-                }
-                QLineEdit:focus {
-                    border: 2px solid #555555;
-                    background-color: #222222;
-                }
-                QLineEdit:disabled {
-                    color: #777777;
-                    background-color: #555555;
-                    border: 2px solid #666666;
-                }
-            """)
+            line_edit.setStyleSheet(SEARCH_NAMES_LINE_EDIT_STYLESHEET)
             row_layout.addWidget(line_edit, 1)  # stretch = 1
 
             # Store reference for later (saving/loading)
@@ -5338,27 +5608,11 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         """)
         search_row.addWidget(search_label)
         
-        search_line_edit = QtWidgets.QLineEdit()
+        search_line_edit = TextureSearchNamesLineEdit(
+            "OcclusionRoughnessMetallic, ORM" if len(self.packed_texture_entries) == 0 else ""
+        )
         search_line_edit.setObjectName(f"packedTextureSearchNamesLineEdit_{len(self.packed_texture_entries)}")
-        search_line_edit.setText("OcclusionRoughnessMetallic, ORM" if len(self.packed_texture_entries) == 0 else "")
-        search_line_edit.setStyleSheet("""
-            QLineEdit {
-                font-family: 'Segoe UI';
-                font-size: 11px;
-                color: #ffffff;
-                background-color: #333333;
-                border: 2px solid #444444;
-                border-radius: 6px;
-                padding: 2px 4px;
-            }
-            QLineEdit:hover {
-                background-color: #222222;
-            }
-            QLineEdit:focus {
-                border: 2px solid #555555;
-                background-color: #222222;
-            }
-        """)
+        search_line_edit.setStyleSheet(SEARCH_NAMES_LINE_EDIT_STYLESHEET)
         search_row.addWidget(search_line_edit, 1)
         
         entry_layout.addLayout(search_row)
@@ -5547,9 +5801,7 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         self._update_packed_assignment_minus_enabled(assignment_rows_list)
 
     def _load_texture_search_names(self):
-        """
-        Return raw dict from user JSON, legacy Settings path, or texture_search_names_default.json.
-        """
+        """Return merged dict (default + legacy + user overrides)."""
         return load_texture_search_names_raw_dict()
 
     def _apply_saved_texture_names(self):
@@ -5628,10 +5880,78 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
                     self._update_packed_assignment_minus_enabled(assignment_rows)
 
 
+    def _texture_search_names_action_button_style(self):
+        return """
+            QPushButton {
+                font-family: 'Segoe UI';
+                font-size: 12px;
+                color: #ffffff;
+                background-color: #666666;
+                border: 2px solid #444444;
+                border-radius: 6px;
+                padding: 4px 10px;
+                min-height: 26px;
+            }
+            QPushButton:hover {
+                background-color: #888888;
+            }
+            QPushButton:pressed {
+                background-color: #1a1a1a;
+            }
+        """
+
+    def _setup_texture_search_names_chrome(self):
+        """Clear All under title labels (top-right); save reminder above bottom buttons (outside scroll)."""
+        frame = self.ui_elements.get("textureImporterFrame")
+        if not frame:
+            return
+        vlayout = frame.layout()
+        if not isinstance(vlayout, QtWidgets.QVBoxLayout):
+            return
+
+        btn_style = self._texture_search_names_action_button_style()
+
+        desc = self.ui_elements.get("textureImporterTitleLabelDesc")
+        desc_idx = vlayout.indexOf(desc) if desc else 1
+        clear_row = QtWidgets.QHBoxLayout()
+        clear_row.setContentsMargins(0, 2, 0, 4)
+        clear_row.setSpacing(4)
+        clear_row.addStretch(1)
+        self._clear_all_btn = QtWidgets.QPushButton("Clear All")
+        self._clear_all_btn.setStyleSheet(btn_style)
+        self._clear_all_btn.setFixedHeight(26)
+        self._clear_all_btn.clicked.connect(self.clear_all_texture_names)
+        clear_row.addWidget(self._clear_all_btn)
+        vlayout.insertLayout(desc_idx + 1, clear_row)
+
+        self._save_hint_label = QtWidgets.QLabel("Press 'Save Texture Names' to save changes.")
+        self._save_hint_label.setWordWrap(True)
+        self._save_hint_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self._save_hint_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Segoe UI';
+                font-size: 11px;
+                color: #ff9330;
+                background-color: transparent;
+                border: none;
+                padding: 4px 2px 6px 2px;
+            }
+        """)
+
+        save_btn = self.ui_elements.get("saveTextureNamesButton")
+        btn_row_idx = vlayout.count() - 1
+        if save_btn:
+            for i in range(vlayout.count()):
+                item = vlayout.itemAt(i)
+                if item and item.layout() and item.layout().indexOf(save_btn) >= 0:
+                    btn_row_idx = i
+                    break
+        vlayout.insertWidget(btn_row_idx, self._save_hint_label)
+
     def setup_connections(self):
         """
         Connect the Save Texture Names button to save_texture_names().
-        Also add "Open Settings Location" and "Cancel" buttons next to it.
+        Also add "Open Settings Location" and "Close" buttons next to it.
         """
         save_btn = self.ui_elements.get("saveTextureNamesButton")
         if save_btn:
@@ -5645,47 +5965,13 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
                 
                 # Create "Open Settings Location" button
                 open_settings_btn = QtWidgets.QPushButton("Open Settings Location")
-                open_settings_btn.setStyleSheet("""
-                    QPushButton {
-                        font-family: 'Segoe UI';
-                        font-size: 12px;
-                        color: #ffffff;
-                        background-color: #666666;
-                        border: 2px solid #444444;
-                        border-radius: 6px;
-                        padding: 4px 10px;
-                        min-height: 26px;
-                    }
-                    QPushButton:hover {
-                        background-color: #888888;
-                    }
-                    QPushButton:pressed {
-                        background-color: #1a1a1a;
-                    }
-                """)
+                open_settings_btn.setStyleSheet(self._texture_search_names_action_button_style())
                 open_settings_btn.clicked.connect(self.open_settings_location)
                 
-                # Create "Cancel" button
-                cancel_btn = QtWidgets.QPushButton("Cancel")
-                cancel_btn.setStyleSheet("""
-                    QPushButton {
-                        font-family: 'Segoe UI';
-                        font-size: 12px;
-                        color: #ffffff;
-                        background-color: #666666;
-                        border: 2px solid #444444;
-                        border-radius: 6px;
-                        padding: 4px 10px;
-                        min-height: 26px;
-                    }
-                    QPushButton:hover {
-                        background-color: #888888;
-                    }
-                    QPushButton:pressed {
-                        background-color: #1a1a1a;
-                    }
-                """)
-                cancel_btn.clicked.connect(self.close)
+                # Create "Close" button
+                close_btn = QtWidgets.QPushButton("Close")
+                close_btn.setStyleSheet(self._texture_search_names_action_button_style())
+                close_btn.clicked.connect(self.close)
                 
                 # Create horizontal button layout with all buttons matching sizes
                 btn_layout = QtWidgets.QHBoxLayout()
@@ -5698,33 +5984,16 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
                     parent_layout.removeWidget(save_btn)
                 
                 # Style save button to match others
-                save_btn.setStyleSheet("""
-                    QPushButton {
-                        font-family: 'Segoe UI';
-                        font-size: 12px;
-                        color: #ffffff;
-                        background-color: #666666;
-                        border: 2px solid #444444;
-                        border-radius: 6px;
-                        padding: 4px 10px;
-                        min-height: 26px;
-                    }
-                    QPushButton:hover {
-                        background-color: #888888;
-                    }
-                    QPushButton:pressed {
-                        background-color: #1a1a1a;
-                    }
-                """)
+                save_btn.setStyleSheet(self._texture_search_names_action_button_style())
                 
                 # Add all buttons with equal stretch
                 save_btn.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
                 open_settings_btn.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
-                cancel_btn.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+                close_btn.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
                 
                 btn_layout.addWidget(save_btn, 1)
                 btn_layout.addWidget(open_settings_btn, 1)
-                btn_layout.addWidget(cancel_btn, 1)
+                btn_layout.addWidget(close_btn, 1)
                 
                 # Add button layout to parent
                 if isinstance(parent_layout, QtWidgets.QVBoxLayout):
@@ -5741,6 +6010,19 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
                                 container_layout.addLayout(btn_layout)
         else:
             cmds.warning("saveTextureNamesButton not found in UI.")
+
+    def clear_all_texture_names(self):
+        """Clear all keyword fields and packed texture entries in the UI (does not save until Save is pressed)."""
+        for ttype in self.texture_types:
+            le = self.ui_elements.get(f"{ttype}TextureNameLineEdit")
+            if le and isValid(le):
+                le.clear()
+
+        if hasattr(self, "packed_texture_entries"):
+            for entry_data in list(self.packed_texture_entries):
+                frame = entry_data.get("frame")
+                if frame and isValid(frame):
+                    self._remove_packed_texture_entry(frame)
     
     def open_settings_location(self):
         """Open the Settings folder in the system file explorer."""

@@ -3,9 +3,11 @@ Help Doc Viewer
 ---------------
 Simple image viewer for help documentation PNGs.
 Supports zoom (scroll wheel, +/- buttons) and pan (click-drag).
+Multi-page docs use a _1, _2, _3 suffix (e.g. textureImporter_helpDoc_1.png).
 """
 
 import os
+import re
 
 try:
     from PySide6 import QtCore, QtWidgets, QtGui
@@ -79,21 +81,54 @@ STYLE_BUTTON_ICON = """
     }
 """
 
+STYLE_LABEL_PAGE_PREFIX = "color: #cccccc; font-size: 11px; padding-right: 3px; margin: 0px;"
+STYLE_LABEL_PAGE = "color: #6fa3d8; font-size: 12px; min-width: 35px; max-width: 35px; padding: 0px; margin: 0px;"
+
 HELP_DOCS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "helpDocs")
 
 HELP_DOC_MAP = {
     "quickMaterialsHelpButton":      "quickMaterials_helpDoc.png",
-    "matericalCreatorHelpButton":     "matericalCreator_helpDoc.png",
+    "materialCreatorHelpButton":     "materialCreator_helpDoc.png",
     "materialToolsHelpButton":       "materialTools_helpDoc.png",
     "materialListHelpButton":        "materialList_helpDoc.png",
     "textureImporterHelpButton":     "textureImporter_helpDoc.png",
 }
 
 
-class HelpDocViewer(QtWidgets.QDialog):
-    """Zoomable / pannable viewer for a single help-doc PNG."""
+def _discover_help_doc_pages(base_filename):
+    """Return ordered paths for a help doc, including numbered pages when present."""
+    base_stem = os.path.splitext(base_filename)[0]
+    pages = []
+    page_num = 1
+    while True:
+        page_path = os.path.join(HELP_DOCS_DIR, f"{base_stem}_{page_num}.png")
+        if os.path.isfile(page_path):
+            pages.append(page_path)
+            page_num += 1
+        else:
+            break
 
-    def __init__(self, image_path, title="Help", parent=None):
+    if pages:
+        return pages
+
+    single_path = os.path.join(HELP_DOCS_DIR, base_filename)
+    if os.path.isfile(single_path):
+        return [single_path]
+
+    return []
+
+
+def _friendly_help_doc_title(filename):
+    """Build a readable title from a mapped help-doc filename."""
+    stem = os.path.splitext(filename)[0]
+    stem = re.sub(r"_helpDoc(_\d+)?$", "", stem)
+    return stem.replace("_", " ").title()
+
+
+class HelpDocViewer(QtWidgets.QDialog):
+    """Zoomable / pannable viewer for help-doc PNGs (single or multi-page)."""
+
+    def __init__(self, image_paths, title="Help", parent=None):
         if parent is None:
             main_win = omui.MQtUtil.mainWindow()
             if main_win:
@@ -105,10 +140,13 @@ class HelpDocViewer(QtWidgets.QDialog):
         self.resize(900, 750)
         self.setStyleSheet(STYLE_WINDOW)
 
+        self._image_paths = list(image_paths or [])
+        self._current_page_index = 0
         self._original_pixmap = None
         self._manual_zoom = None
         self._is_dragging = False
         self._drag_last_pos = None
+        self._base_title = title
 
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
@@ -116,6 +154,38 @@ class HelpDocViewer(QtWidgets.QDialog):
 
         # --- controls bar ---
         controls = QtWidgets.QHBoxLayout()
+
+        self._page_prefix_label = QtWidgets.QLabel("Page:")
+        self._page_prefix_label.setStyleSheet(STYLE_LABEL_PAGE_PREFIX)
+        self._page_prefix_label.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
+        self._page_prefix_label.hide()
+
+        self._page_prev_btn = QtWidgets.QPushButton("←")
+        self._page_prev_btn.setToolTip("Previous page")
+        self._page_prev_btn.setFixedSize(22, 22)
+        self._page_prev_btn.setStyleSheet(STYLE_BUTTON_ICON)
+        self._page_prev_btn.clicked.connect(self._previous_page)
+        self._page_prev_btn.hide()
+
+        self._page_label = QtWidgets.QLabel("")
+        self._page_label.setStyleSheet(STYLE_LABEL_PAGE)
+        self._page_label.setAlignment(QtCore.Qt.AlignCenter)
+        self._page_label.hide()
+
+        self._page_next_btn = QtWidgets.QPushButton("→")
+        self._page_next_btn.setToolTip("Next page")
+        self._page_next_btn.setFixedSize(22, 22)
+        self._page_next_btn.setStyleSheet(STYLE_BUTTON_ICON)
+        self._page_next_btn.clicked.connect(self._next_page)
+        self._page_next_btn.hide()
+
+        controls.addWidget(self._page_prefix_label)
+        controls.addSpacing(1)
+        controls.addWidget(self._page_prev_btn)
+        controls.addSpacing(-2)
+        controls.addWidget(self._page_label)
+        controls.addSpacing(-2)
+        controls.addWidget(self._page_next_btn)
         controls.addStretch()
 
         self._zoom_out_btn = QtWidgets.QPushButton("-")
@@ -159,7 +229,54 @@ class HelpDocViewer(QtWidgets.QDialog):
         self._resize_timer.setSingleShot(True)
         self._resize_timer.timeout.connect(self._scale_image_to_fit)
 
-        self._load_image(image_path)
+        self._setup_page_navigation()
+        self._load_current_page()
+
+    # ------------------------------------------------------------------
+    # Page navigation
+    # ------------------------------------------------------------------
+
+    def _setup_page_navigation(self):
+        has_pages = len(self._image_paths) > 1
+        self._page_prefix_label.setVisible(has_pages)
+        self._page_prev_btn.setVisible(has_pages)
+        self._page_label.setVisible(has_pages)
+        self._page_next_btn.setVisible(has_pages)
+        self._update_page_controls()
+
+    def _update_page_controls(self):
+        total = len(self._image_paths)
+        if total <= 1:
+            self.setWindowTitle(self._base_title)
+            return
+
+        current = self._current_page_index + 1
+        self._page_label.setText(str(current))
+        self.setWindowTitle(f"{self._base_title} ({current}/{total})")
+        self._page_prev_btn.setEnabled(self._current_page_index > 0)
+        self._page_next_btn.setEnabled(self._current_page_index < total - 1)
+
+    def _previous_page(self):
+        if self._current_page_index <= 0:
+            return
+        self._current_page_index -= 1
+        self._load_current_page()
+
+    def _next_page(self):
+        if self._current_page_index >= len(self._image_paths) - 1:
+            return
+        self._current_page_index += 1
+        self._load_current_page()
+
+    def _load_current_page(self):
+        if not self._image_paths:
+            self.image_label.setText("No help documentation found.")
+            return
+
+        path = self._image_paths[self._current_page_index]
+        self._manual_zoom = None
+        self._load_image(path)
+        self._update_page_controls()
 
     # ------------------------------------------------------------------
     # Image loading
@@ -168,10 +285,12 @@ class HelpDocViewer(QtWidgets.QDialog):
     def _load_image(self, path):
         if not os.path.isfile(path):
             self.image_label.setText(f"Image not found:\n{path}")
+            self._original_pixmap = None
             return
         pixmap = QtGui.QPixmap(path)
         if pixmap.isNull():
             self.image_label.setText(f"Failed to load image:\n{path}")
+            self._original_pixmap = None
             return
         self._original_pixmap = pixmap
         QtCore.QTimer.singleShot(50, self._scale_image_to_fit)
@@ -357,7 +476,10 @@ def show_help_doc(button_name):
         print(f"[HelpDocViewer] No help doc mapped for button '{button_name}'")
         return None
 
-    image_path = os.path.join(HELP_DOCS_DIR, filename)
+    image_paths = _discover_help_doc_pages(filename)
+    if not image_paths:
+        print(f"[HelpDocViewer] No help doc images found for '{filename}' in {HELP_DOCS_DIR}")
+        return None
 
     existing = _open_viewers.get(button_name)
     if existing is not None:
@@ -366,8 +488,8 @@ def show_help_doc(button_name):
         except Exception:
             pass
 
-    friendly = filename.replace("_helpDoc.png", "").replace("_", " ").title()
-    viewer = HelpDocViewer(image_path, title=f"Help - {friendly}")
+    friendly = _friendly_help_doc_title(filename)
+    viewer = HelpDocViewer(image_paths, title=f"Help - {friendly}")
     viewer.show()
     _open_viewers[button_name] = viewer
     return viewer

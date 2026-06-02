@@ -53,6 +53,9 @@ importlib.reload(QuickMaterials.material_converter)
 import QuickMaterials.uv_tile_preview
 importlib.reload(QuickMaterials.uv_tile_preview)
 
+import QuickMaterials.reload_all_textures
+importlib.reload(QuickMaterials.reload_all_textures)
+
 import QuickMaterials.help_doc_viewer
 importlib.reload(QuickMaterials.help_doc_viewer)
 
@@ -210,6 +213,21 @@ def _is_quick_materials_root_widget(widget, cls=None):
         except Exception:
             pass
     return False
+
+
+def _widget_from_stale_class(widget, cls):
+    """True when widget was built under a previous QuickMaterialsUI (after importlib.reload)."""
+    if widget is None:
+        return False
+    try:
+        if not isValid(widget):
+            return False
+    except Exception:
+        return False
+    try:
+        return not isinstance(widget, cls)
+    except Exception:
+        return True
 
 
 def apply_open_on_launch_workspace_policy(force=False):
@@ -1645,7 +1663,7 @@ class LeftClipLineEdit(QtWidgets.QLineEdit):
       • Is read-only by default, becomes editable on double-click
     """
     def __init__(self, text="", parent=None):
-        super(LeftClipLineEdit, self).__init__(text, parent)
+        QtWidgets.QLineEdit.__init__(self, text, parent)
         self.setAttribute(QtCore.Qt.WA_StyledBackground, True)  # ensure QSS bg/radius render
         self.setAutoFillBackground(True)  # optional; helps in some Maya themes
         self.setAlignment(QtCore.Qt.AlignLeft)
@@ -1958,7 +1976,7 @@ class LeftClipLineEdit(QtWidgets.QLineEdit):
                 return
         
         # For all other keys, use default behavior
-        super(LeftClipLineEdit, self).keyPressEvent(e)
+        QtWidgets.QLineEdit.keyPressEvent(self, e)
 
     def focusOutEvent(self, e):
         """Lock again when focus is lost (optional)."""
@@ -1994,7 +2012,7 @@ class LeftClipLineEdit(QtWidgets.QLineEdit):
         Ensure text snaps back to the left when the widget is read-only, so the
         material name is always fully visible after programmatic updates.
         """
-        super(LeftClipLineEdit, self).setText(text)
+        QtWidgets.QLineEdit.setText(self, text)
         if self.isReadOnly():
             try:
                 self._snap_to_left()
@@ -2009,7 +2027,8 @@ class MaterialDisplayLineEdit(LeftClipLineEdit):
     file texture colorspace display.
     """
     def __init__(self, text="", parent=None):
-        super(MaterialDisplayLineEdit, self).__init__(text, parent)
+        # Explicit base call (reload-safe: pooled rows may be old-class instances).
+        LeftClipLineEdit.__init__(self, text, parent)
         self._secondary_text = ""
         self._secondary_color = QtGui.QColor("#999999")
 
@@ -2032,12 +2051,14 @@ class MaterialDisplayLineEdit(LeftClipLineEdit):
 
     def setReadOnly(self, value):
         previous = self.isReadOnly()
-        super(MaterialDisplayLineEdit, self).setReadOnly(value)
+        LeftClipLineEdit.setReadOnly(self, value)
         if previous != value:
             self.update()
 
     def paintEvent(self, event):
-        super(MaterialDisplayLineEdit, self).paintEvent(event)
+        # Must not use super(MaterialDisplayLineEdit, self) — breaks after importlib.reload
+        # when row widgets were created under a previous class object.
+        QtWidgets.QLineEdit.paintEvent(self, event)
 
         if not self.isReadOnly() or not self._secondary_text:
             return
@@ -3046,6 +3067,7 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
                     'material_tool_visible_sendToSubstanceButtonFrame': True,
                     'material_tool_visible_deleteUnusedMaterialsButtonFrame': True,
                     'material_tool_visible_regenerateUvTilesButtonFrame': True,
+                    'material_tool_visible_reloadAllTexturesButtonFrame': True,
                 }
             }
 
@@ -3573,7 +3595,17 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         ('sendToSubstanceFrameCheckbox', 'sendToSubstanceButtonFrame'),
         ('deleteUnusedMaterialsFrameCheckbox', 'deleteUnusedMaterialsButtonFrame'),
         ('regenerateUvTilesFrameCheckbox', 'regenerateUvTilesButtonFrame'),
+        ('reloadAllTexturesFrameCheckbox', 'reloadAllTexturesButtonFrame'),
     )
+
+    # Nested section frames are inside a parent; measure the parent only to avoid double-counting.
+    _SECTION_FRAME_PARENT = {
+        'materialCreatorSettingsFrame': 'materialCreatorFrame',
+        'textureImporterSettingsFrame': 'quickmaterialsSettingsFrame',
+        'materialToolsSettingsFrame': 'materialToolsFrame',
+        'materialListSettingsFrame': 'materialListFrame',
+        'materialListFiltersFrame': 'materialListFrame',
+    }
 
     MATERIAL_TABS = {
         'shaders': {
@@ -3911,12 +3943,54 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
     # Docking utilities
     # ------------------------------------------------------------------
     @classmethod
+    def _cleanup_widget_instance(cls, widget):
+        """Tear down a Quick Materials widget without deleting the workspace control."""
+        if widget is None:
+            return
+        try:
+            widget._remove_material_watchers()
+        except Exception:
+            pass
+        try:
+            widget._remove_selection_watcher()
+        except Exception:
+            pass
+        try:
+            widget._remove_workspace_state_job()
+        except Exception:
+            pass
+        try:
+            host = getattr(widget, '_workspace_host_widget', None)
+            if host and isValid(host):
+                host.removeEventFilter(widget)
+            if isValid(widget):
+                widget.removeEventFilter(widget)
+        except Exception:
+            pass
+        try:
+            widget.hide()
+            widget.setParent(None)
+        except Exception:
+            pass
+        try:
+            widget.deleteLater()
+        except Exception:
+            pass
+
+    @classmethod
     def show_ui(cls, dockable=True):
         """Display the UI as a dockable widget inside Maya."""
         global quick_materials_ui_instance
 
         attached = _find_attached_quick_materials_widget()
         if attached is not None:
+            if _widget_from_stale_class(attached, cls):
+                cls._cleanup_widget_instance(attached)
+                cls.quick_materials_ui_instance = cls()
+                quick_materials_ui_instance = cls.quick_materials_ui_instance
+                cls.quick_materials_ui_instance.setup_dockability()
+                return
+
             cls.quick_materials_ui_instance = attached
             quick_materials_ui_instance = attached
             if cmds.workspaceControl(cls.workspace_control_name, query=True, exists=True):
@@ -3975,10 +4049,17 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
         # Use executeDeferred to ensure Maya UI is fully ready
         def _do_restore():
+            global quick_materials_ui_instance
             try:
                 # If show_ui() already attached the widget, do NOT delete/recreate.
                 attached = _find_attached_quick_materials_widget()
                 if attached is not None:
+                    if _widget_from_stale_class(attached, cls):
+                        cls._cleanup_widget_instance(attached)
+                        cls.quick_materials_ui_instance = cls()
+                        quick_materials_ui_instance = cls.quick_materials_ui_instance
+                        cls.quick_materials_ui_instance.setup_dockability()
+                        return
                     _sync_quick_materials_instance_from_workspace()
                     attached.show()
                     attached._install_workspace_state_job()
@@ -3994,29 +4075,8 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                 # Create and attach a new instance
                 instance = cls()
                 cls.quick_materials_ui_instance = instance
-                
-                # Attach widget to existing workspace control
-                control_widget = omui.MQtUtil.findControl(cls.workspace_control_name)
-                if control_widget:
-                    wrapped_widget = wrapInstance(int(control_widget), QtWidgets.QWidget)
-                    layout = wrapped_widget.layout() or QtWidgets.QVBoxLayout(wrapped_widget)
-                    layout.setContentsMargins(0, 0, 0, 0)
-                    wrapped_widget.setLayout(layout)
-
-                    while layout.count():
-                        child = layout.takeAt(0)
-                        if child.widget():
-                            child.widget().deleteLater()
-
-                    layout.addWidget(instance)
-                    wrapped_widget.setVisible(True)
-                    wrapped_widget.update()
-                    instance.setMinimumWidth(instance._minimum_width_baseline)
-                    instance.resize(max(instance._minimum_width_baseline, instance.width()), instance.height())
-                    instance.show()
-                    QtCore.QTimer.singleShot(0, instance.snap_to_minimum)
-                    QtCore.QTimer.singleShot(0, instance._apply_minimum_width_baseline)
-                    instance._install_workspace_state_job()
+                quick_materials_ui_instance = instance
+                instance.setup_dockability()
             except Exception as e:
                 import traceback
                 traceback.print_exc()
@@ -4069,6 +4129,10 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             layout.addWidget(self)
             wrapped_widget.setVisible(True)
             wrapped_widget.update()
+
+            self._workspace_host_widget = wrapped_widget
+            self.installEventFilter(self)
+            wrapped_widget.installEventFilter(self)
 
             # Ensure a reasonable initial size when docked/floating
             self.setMinimumWidth(self._minimum_width_baseline)
@@ -4441,6 +4505,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
     def _on_open_on_launch_toggled(self, checked):
         self._quick_materials_settings['open_on_launch'] = bool(checked)
         self._mark_settings_dirty()
+        print(f"[QuickMaterials] Open on Maya launch setting updated: {bool(checked)}")
         if checked:
             try:
                 self._update_retain_state()
@@ -4895,6 +4960,144 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         self._texture_search_names_ui.raise_()
 
     # ---------- Dynamic minimum size helpers ----------
+    def _is_workspace_floating(self):
+        wc_name = getattr(self, 'workspace_control_name', None)
+        if not wc_name:
+            return True
+        try:
+            if not cmds.workspaceControl(wc_name, q=True, exists=True):
+                return True
+            return bool(cmds.workspaceControl(wc_name, q=True, floating=True))
+        except Exception:
+            return True
+
+    def _get_workspace_host_widget(self):
+        host = getattr(self, '_workspace_host_widget', None)
+        if host and isValid(host):
+            return host
+        wc_name = getattr(self, 'workspace_control_name', None)
+        if not wc_name:
+            return None
+        try:
+            ptr = omui.MQtUtil.findControl(wc_name)
+            if ptr:
+                host = wrapInstance(int(ptr), QtWidgets.QWidget)
+                if host and isValid(host):
+                    self._workspace_host_widget = host
+                    return host
+        except Exception:
+            pass
+        return None
+
+    def _should_skip_nested_section_frame(self, frame_name):
+        parent_name = self._SECTION_FRAME_PARENT.get(frame_name)
+        if not parent_name:
+            return False
+        parent = self.findChild(QtWidgets.QWidget, parent_name)
+        return bool(parent and isValid(parent) and parent.isVisible())
+
+    def _section_min_height(self, frame_name, profile_floor):
+        """Minimum height for a visible section frame from layout hints (floor = profile fallback)."""
+        w = self.findChild(QtWidgets.QWidget, frame_name)
+        if not w or not isValid(w) or not w.isVisible():
+            return 0
+
+        restore_tools_max = None
+        if frame_name == 'materialToolsFrame':
+            self._sync_material_tools_vertical_fit()
+            restore_tools_max = w.maximumHeight()
+            if restore_tools_max < 16777215:
+                w.setMaximumHeight(16777215)
+        elif frame_name == 'materialToolsSettingsFrame':
+            self._compact_material_tools_settings_layout()
+
+        w.updateGeometry()
+        app = QtWidgets.QApplication.instance()
+        if app:
+            app.sendPostedEvents(w, 0)
+
+        frame_height = w.minimumSizeHint().height()
+        if frame_height <= 0:
+            frame_height = w.sizeHint().height()
+        if frame_height <= 0:
+            frame_height = w.height()
+        if frame_height <= 0:
+            frame_height = int(profile_floor)
+        if frame_name == 'materialToolsFrame':
+            self._sync_material_tools_vertical_fit()
+        return max(int(profile_floor), int(frame_height))
+
+    def _sync_floating_workspace_minimums(self, min_w, min_h):
+        """Keep Maya workspaceControl and Qt host minimums aligned when floating."""
+        if not self._is_workspace_floating():
+            return
+        min_w = max(int(self._minimum_width_baseline), int(min_w))
+        min_h = max(1, int(min_h))
+        try:
+            self.setMinimumSize(min_w, min_h)
+        except Exception:
+            pass
+        host = self._get_workspace_host_widget()
+        if host:
+            try:
+                host.setMinimumSize(min_w, min_h)
+            except Exception:
+                pass
+        wc_name = getattr(self, 'workspace_control_name', None)
+        if wc_name and cmds.workspaceControl(wc_name, q=True, exists=True):
+            try:
+                cmds.workspaceControl(wc_name, e=True, minimumWidth=min_w, minimumHeight=min_h)
+            except Exception:
+                pass
+
+    def _ensure_within_minimum_bounds(self):
+        """When floating, grow the window/host if the user resized below the content minimum."""
+        if not isValid(self) or not self._is_workspace_floating():
+            return
+        min_sz = self.minimumSize()
+        min_w = max(int(self._minimum_width_baseline), int(min_sz.width()))
+        min_h = max(1, int(min_sz.height()))
+
+        target_w = max(self.width(), min_w)
+        target_h = max(self.height(), min_h)
+        if target_w != self.width() or target_h != self.height():
+            try:
+                self.resize(target_w, target_h)
+            except Exception:
+                pass
+
+        host = self._get_workspace_host_widget()
+        if host and isValid(host):
+            host_w = max(host.width(), min_w)
+            host_h = max(host.height(), min_h)
+            if host_w != host.width() or host_h != host.height():
+                try:
+                    host.resize(host_w, host_h)
+                except Exception:
+                    pass
+
+        self._sync_floating_workspace_minimums(min_w, min_h)
+
+    def _enforce_floating_minimum_after_resize(self):
+        if getattr(self, '_floating_resize_guard', False) or not isValid(self):
+            return
+        if not self._is_workspace_floating():
+            return
+        self._floating_resize_guard = True
+        try:
+            self.refresh_minimum_size()
+            self._ensure_within_minimum_bounds()
+        finally:
+            self._floating_resize_guard = False
+
+    def eventFilter(self, watched, event):
+        if event.type() == QtCore.QEvent.Resize:
+            host = getattr(self, '_workspace_host_widget', None)
+            if watched is self or (host and watched is host):
+                QtCore.QTimer.singleShot(0, self._enforce_floating_minimum_after_resize)
+        # Reload-safe: shelf button runs importlib.reload(qm) while the old widget may still exist.
+        return QtCore.QObject.eventFilter(self, watched, event)
+
     def _default_min_sizing_profile(self):
         """
         Returns a dict you can customize per section. Heights are additive.
@@ -4908,7 +5111,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                 "materialCreatorFrame": 250,  # visible => add this many pixels of min height (reduced from 210)
                 "materialCreatorSettingsFrame": 320,
                 "textureImporterSettingsFrame": 160,
-                "materialToolsFrame": 75,
+                "materialToolsFrame": 200,
                 "materialToolsSettingsFrame": 200,
                 "materialListFrame": 200,
                 "materialListSettingsFrame": 220,
@@ -4942,14 +5145,11 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
     def refresh_minimum_size(self):
         """
         Recalculate and apply window minimum size from currently visible sections.
-        For materialListSettingsFrame, uses actual widget size to account for UI scaling.
-        Also accounts for visible material attribute frames (20px each) within materialCreatorFrame.
+        Uses each section frame's layout hints (profile values are floors, not fixed sizes).
         """
-        # Check if self is still valid (not deleted)
         if not isValid(self):
             return
-        
-        # Ensure profile exists
+
         if not hasattr(self, "_minsize_profile"):
             self._minsize_profile = self._default_min_sizing_profile()
 
@@ -4957,99 +5157,24 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         min_w = max(self._minimum_width_baseline, int(profile.get("base_width", self._minimum_width_baseline)))
         min_h = int(profile.get("base_height", 50))
 
-        # Add section heights if frames are visible
         sections = profile.get("sections", {})
         for frame_name, add_h in sections.items():
-            # Check if self is still valid before each findChild call
             if not isValid(self):
                 return
-            w = self.findChild(QtWidgets.QWidget, frame_name)
-            if w and isValid(w) and w.isVisible():
-                try:
-                    # For materialListSettingsFrame, use actual widget size to account for UI scaling
-                    if frame_name == "materialListSettingsFrame":
-                        # Get the actual preferred size hint (accounts for current UI scale/DPI)
-                        hint = w.sizeHint()
-                        if hint.height() > 0:
-                            # Use sizeHint which already accounts for UI scaling in Qt
-                            frame_height = hint.height()
-                        else:
-                            # Fallback: ensure frame is laid out and get its size
-                            # Force layout update if needed
-                            w.updateGeometry()
-                            actual_size = w.size().height()
-                            if actual_size > 0:
-                                frame_height = actual_size
-                            else:
-                                # Last resort: use minimum size hint
-                                min_hint = w.minimumSizeHint()
-                                frame_height = min_hint.height() if min_hint.height() > 0 else add_h
-                        
-                        # Ensure we have a reasonable minimum even if size is 0
-                        if frame_height <= 0:
-                            frame_height = add_h
-                        frame_height = max(int(add_h), int(frame_height))
-                        min_h += int(frame_height)
-                    elif frame_name == "materialListFiltersFrame":
-                        hint = w.sizeHint()
-                        frame_height = hint.height() if hint.height() > 0 else 0
-                        if frame_height <= 0:
-                            w.updateGeometry()
-                            frame_height = w.size().height()
-                        if frame_height <= 0:
-                            min_hint = w.minimumSizeHint()
-                            frame_height = min_hint.height() if min_hint.height() > 0 else int(add_h)
-                        frame_height = max(int(add_h), int(frame_height))
-                        min_h += int(frame_height)
-                    elif frame_name == "materialToolsSettingsFrame":
-                        self._compact_material_tools_settings_layout()
-                        w.updateGeometry()
-                        min_hint = w.minimumSizeHint()
-                        frame_height = min_hint.height() if min_hint.height() > 0 else 0
-                        if frame_height <= 0:
-                            hint = w.sizeHint()
-                            frame_height = hint.height() if hint.height() > 0 else 0
-                        if frame_height <= 0:
-                            frame_height = int(add_h)
-                        frame_height = max(int(add_h), int(frame_height))
-                        min_h += int(frame_height)
-                    elif frame_name == "materialCreatorFrame":
-                        # For materialCreatorFrame, add base height, then add 20px for each visible attribute frame
-                        min_h += int(add_h)
-                        
-                        # Check which material attribute frames are visible (20px each, reduced from 30px)
-                        attribute_frames = [
-                            'colorPickerFrame',
-                            'roughnessSliderFrame',
-                            'metalnessSliderFrame',
-                            'emissionSliderFrame',
-                            'opacitySliderFrame',
-                            'transmissionSliderFrame',
-                            'subsurfaceSliderFrame'
-                        ]
-                        
-                        for attr_frame_name in attribute_frames:
-                            # Check if self is still valid before findChild
-                            if not isValid(self):
-                                return
-                            attr_frame = self.findChild(QtWidgets.QWidget, attr_frame_name)
-                            if attr_frame and isValid(attr_frame) and attr_frame.isVisible():
-                                min_h += 25  # 20px per visible attribute frame (reduced from 30px)
-                    else:
-                        # For other frames, use the profile value (Qt handles scaling automatically)
-                        min_h += int(add_h)
-                except Exception:
-                    pass
+            if self._should_skip_nested_section_frame(frame_name):
+                continue
+            try:
+                min_h += self._section_min_height(frame_name, add_h)
+            except Exception:
+                pass
 
-        # Apply to the dialog (self) once, after computing the total
-        # Check if self is still valid before applying size changes
         if not isValid(self):
             return
         self.setMinimumSize(min_w, min_h)
         self._last_minimum_size = QtCore.QSize(min_w, min_h)
+        self._sync_floating_workspace_minimums(min_w, min_h)
 
-        # Nudge layouts so Maya updates dock constraints
-        self.resize_ui(delay=1)  # Keep your small micro-timer bump
+        self.resize_ui(delay=1)
 
 
     def snap_to_minimum(self):
@@ -5223,11 +5348,18 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
             def _release_caps():
                 try:
+                    is_floating = self._is_workspace_floating()
+                    min_sz = self.minimumSize() if isValid(self) else QtCore.QSize()
+                    persist_min_w = max(self._minimum_width_baseline, min_sz.width())
+                    persist_min_h = max(1, min_sz.height())
                     if qt_host:
-                        if host_original_min_w is not None:
-                            qt_host.setMinimumWidth(host_original_min_w)
+                        if is_floating:
+                            qt_host.setMinimumSize(persist_min_w, persist_min_h)
                         else:
-                            qt_host.setMinimumWidth(0)
+                            if host_original_min_w is not None:
+                                qt_host.setMinimumWidth(host_original_min_w)
+                            else:
+                                qt_host.setMinimumWidth(0)
                         if host_original_max_w is not None and host_original_max_w >= host_original_min_w if host_original_min_w is not None else True:
                             qt_host.setMaximumWidth(host_original_max_w)
                         else:
@@ -5236,14 +5368,15 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                             qt_host.setMaximumHeight(host_original_max_h)
                         else:
                             qt_host.setMaximumHeight(16777215)
-                    # Keep our *minimumHeight* (we want the new min to persist),
-                    # but release width and height maximums so user can resize.
-                    self.setMinimumWidth(original_self_min_w if original_self_min_w else self._minimum_width_baseline)
-                    self.setMaximumWidth(original_self_max_w if original_self_max_w else 16777215)
-                    if original_self_max_h is not None:
-                        self.setMaximumHeight(original_self_max_h)
-                    else:
-                        self.setMaximumHeight(16777215)
+                    if isValid(self):
+                        self.setMinimumSize(persist_min_w, persist_min_h)
+                        self.setMaximumWidth(original_self_max_w if original_self_max_w else 16777215)
+                        if original_self_max_h is not None:
+                            self.setMaximumHeight(original_self_max_h)
+                        else:
+                            self.setMaximumHeight(16777215)
+                    if is_floating:
+                        self._sync_floating_workspace_minimums(persist_min_w, persist_min_h)
                 except Exception:
                     pass
             # Release constraints after layout has settled
@@ -5656,8 +5789,12 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         if regenerate_uv_tiles_btn:
             regenerate_uv_tiles_btn.clicked.connect(self._on_regenerate_uv_tile_previews)
 
+        reload_all_textures_btn = self.ui_elements.get('reloadAllTexturesButton')
+        if reload_all_textures_btn:
+            reload_all_textures_btn.clicked.connect(self._on_reload_all_textures)
+
         # Help doc buttons
-        for btn_name in ("quickMaterialsHelpButton", "matericalCreatorHelpButton",
+        for btn_name in ("quickMaterialsHelpButton", "materialCreatorHelpButton",
                          "materialToolsHelpButton", "materialListHelpButton"):
             btn = self.ui_elements.get(btn_name)
             if btn:
@@ -6105,6 +6242,12 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                         line_edit.setMaximumHeight(row_h)
                     else:
                         line_edit.setMaximumHeight(16777215)
+                    try:
+                        line_edit.style().unpolish(line_edit)
+                        line_edit.style().polish(line_edit)
+                        line_edit.update()
+                    except Exception:
+                        pass
                 except Exception as e:
                     print(f"[QuickMaterials] Failed to resize text for {material}: {e}")
             
@@ -6201,6 +6344,14 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                         le.setMaximumHeight(row_h)
                     else:
                         le.setMaximumHeight(16777215)
+                    # setStyleSheet resets the style engine; re-polish so parent-list QSS
+                    # (color, qmSelected, qmUnused, nodeType) applies again.
+                    try:
+                        le.style().unpolish(le)
+                        le.style().polish(le)
+                        le.update()
+                    except Exception:
+                        pass
                 except Exception:
                     pass
             if container and isValid(container):
@@ -8424,13 +8575,13 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                             return
         
         # If no editing is active, use default behavior (which may close the dialog)
-        super(QuickMaterialsUI, self).keyPressEvent(event)
+        QtWidgets.QDialog.keyPressEvent(self, event)
 
     def closeEvent(self, event):
         """Override closeEvent to save state before closing."""
         self._save_ui_state()
         self._flush_settings_cache_to_disk(force=True)
-        super(QuickMaterialsUI, self).closeEvent(event)
+        QtWidgets.QDialog.closeEvent(self, event)
 
     def set_random_hue_color(self):
         """Generate and apply a random hue while maintaining the current saturation and value."""
@@ -8752,6 +8903,54 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         except Exception as e:
             cmds.warning(f"Regenerate UV tile previews failed: {e}")
 
+    def _on_reload_all_textures(self):
+        """Reload all file texture nodes from disk after external overwrites."""
+        try:
+            importlib.reload(QuickMaterials.reload_all_textures)
+            result = QuickMaterials.reload_all_textures.reload_all_file_textures(
+                reload_viewport=True
+            )
+        except Exception as e:
+            cmds.warning(f"Reload all textures failed: {e}")
+            return
+
+        reloaded = int(result.get("reloaded_count", 0))
+        skipped = int(result.get("skipped_count", 0))
+        failed = result.get("failed") or []
+
+        if hasattr(self, "_file_texture_info_cache"):
+            self._file_texture_info_cache.clear()
+        try:
+            self.refresh_materials_list()
+        except Exception:
+            pass
+
+        if failed:
+            cmds.warning(
+                f"Reloaded {reloaded} texture(s); {len(failed)} failed. "
+                f"First error: {failed[0][1]}"
+            )
+        elif reloaded == 0:
+            cmds.inViewMessage(
+                amg="<hl>No file textures to reload</hl>",
+                pos="topCenter",
+                fade=True,
+            )
+        elif reloaded == 1:
+            cmds.inViewMessage(
+                amg="<hl>✔ 1 texture reloaded</hl>",
+                pos="topCenter",
+                fade=True,
+            )
+        else:
+            cmds.inViewMessage(
+                amg=f"<hl>✔ {reloaded} textures reloaded</hl>",
+                pos="topCenter",
+                fade=True,
+            )
+        if skipped and reloaded == 0 and not failed:
+            print(f"[QuickMaterials] Skipped {skipped} file node(s) with empty paths.")
+
 
 
 
@@ -8864,7 +9063,10 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
         # Collect materials (for shaders tab)
         materials_collect_start = time.perf_counter()
-        all_materials = [m for m in (cmds.ls(materials=True) or []) if m not in HIDDEN_MATERIALS]
+        all_materials = [
+            m for m in (cmds.ls(materials=True) or [])
+            if m not in HIDDEN_MATERIALS and cmds.nodeType(m) != 'aiMultiply'
+        ]
         all_nodes.extend(all_materials)
         materials_collect_duration = (time.perf_counter() - materials_collect_start) * 1000.0
 
@@ -9830,9 +10032,22 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         pool = getattr(self, "_material_row_pool", [])
         container = None
         while pool:
-            container = pool.pop()
-            if container is not None:
-                break
+            candidate = pool.pop()
+            if candidate is None:
+                continue
+            le_check = getattr(candidate, "_qm_line_edit", None)
+            if le_check is None:
+                le_check = candidate.findChild(QtWidgets.QLineEdit)
+            # After importlib.reload, pooled rows are old-class instances — discard them.
+            if le_check is None or type(le_check) is not MaterialDisplayLineEdit:
+                try:
+                    candidate.setParent(None)
+                    candidate.deleteLater()
+                except Exception:
+                    pass
+                continue
+            container = candidate
+            break
         line_edit = None
         if container is not None:
             # Clean up any existing swatch icons when reusing containers
@@ -12821,10 +13036,6 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
             is_sel = (m in sel)
             le.setProperty("qmSelected", "true" if is_sel else "false")
-            try:
-                le.style().unpolish(le); le.style().polish(le)
-            except Exception:
-                pass
 
             # swatch (visual only)
             if sw and isValid(sw) and hasattr(sw, "setSelected"):
@@ -12833,7 +13044,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                 except Exception:
                     pass
 
-        # unpolish/polish can revert inline font-size / min-height; restore geometry from current scale
+        # Restore scaled row metrics, then re-polish once (setStyleSheet in refresh invalidates QSS).
         try:
             self._refresh_material_list_row_heights()
         except Exception:
@@ -15432,6 +15643,9 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             # Check if it's a file texture
             elif node_type == 'file':
                 classification = 'file_textures'
+            # Arnold math nodes (e.g. aiMultiply) are utilities; asShader=True can list them as materials
+            elif node_type == 'aiMultiply':
+                classification = 'utilities'
             # Check if it's a material (shader) - MUST check before utilities to avoid misclassification
             # Materials should never be classified as utilities
             elif cmds.ls(node, materials=True):
