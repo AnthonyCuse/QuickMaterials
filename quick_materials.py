@@ -3059,7 +3059,9 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
                     'attribute_frame_visible_subsurfaceSliderFrame': False
                 },
                 'material_list': {},
-                'texture_importer': {},
+                'texture_importer': {
+                    'bulk_folder_max_depth': 5,
+                },
                 'material_tools': {
                     'material_tool_visible_TextureImporterButtonFrame': True,
                     'material_tool_visible_materialConverterButtonFrame': True,
@@ -3094,6 +3096,9 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
             
             # Default UI state
             default_state = {
+                'quick_materials': {
+                    'quick_materials_settings_visible': False,
+                },
                 'material_creator': {
                     'material_type': 'standardSurface',
                     'color': {'r': 255, 'g': 0, 'b': 0},
@@ -3108,7 +3113,8 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
                     'subsurfaceSpinBox': 0.0,
                     'materialPerMeshCheckbox': False,
                     'randomHueCheckbox': False,
-                    'material_naming_template': '(selection)'
+                    'material_naming_template': '(selection)',
+                    'material_creator_settings_visible': False,
                 },
                 'material_list': {
                     'sort_mode': 'name',
@@ -3131,9 +3137,11 @@ class QuickMaterialsSettingsUI(QtWidgets.QDialog):
                     'toggleMaterialManagerVis': True,
                     'active_tab': 'shaders'
                 },
-                'texture_importer': {},
+                'texture_importer': {
+                    'texture_importer_settings_visible': False,
+                },
                 'material_tools': {
-                    'material_tools_settings_visible': True,
+                    'material_tools_settings_visible': False,
                 }
             }
             
@@ -4562,7 +4570,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         self._wire_settings_frame_toggle(
             button_name='materialCreatorSettingsButton',
             frame_name='materialCreatorSettingsFrame',
-            default_visible=True
+            default_visible=False,
         )
 
         prefix_edit = self.ui_elements.get('materialNamingPrefixLineEdit')
@@ -4880,7 +4888,7 @@ class QuickMaterialsUI(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         self._wire_settings_frame_toggle(
             button_name='materialToolsSettingsButton',
             frame_name='materialToolsSettingsFrame',
-            default_visible=None,
+            default_visible=False,
         )
         self._compact_material_tools_settings_layout()
         for checkbox_name, frame_name in self.MATERIAL_TOOLS_CHECKBOX_TO_FRAME:

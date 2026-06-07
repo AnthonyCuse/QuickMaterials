@@ -202,7 +202,57 @@ BULK_ALL_MATERIALS_LABEL = (
     "All Materials (Import all matching textures to all materials)"
 )
 BULK_FOLDER_SKIP_DIRS = frozenset({"old", "archive"})
-BULK_FOLDER_MAX_DEPTH = 6
+BULK_FOLDER_MAX_DEPTH_DEFAULT = 5
+BULK_FOLDER_MAX_DEPTH_KEY = "bulk_folder_max_depth"
+BULK_FOLDER_MAX_DEPTH_MIN = 0
+BULK_FOLDER_MAX_DEPTH_MAX = 10
+
+
+def _quick_materials_user_settings_path():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings", "quick_materials_settings.json")
+
+
+def get_bulk_folder_max_depth():
+    """Read All Materials subfolder scan depth from user/default settings."""
+    data = _load_quick_materials_all_settings()
+    ti = data.get("texture_importer") or {}
+    val = ti.get(BULK_FOLDER_MAX_DEPTH_KEY, BULK_FOLDER_MAX_DEPTH_DEFAULT)
+    try:
+        depth = int(val)
+    except (TypeError, ValueError):
+        depth = BULK_FOLDER_MAX_DEPTH_DEFAULT
+    return max(BULK_FOLDER_MAX_DEPTH_MIN, min(BULK_FOLDER_MAX_DEPTH_MAX, depth))
+
+
+def save_bulk_folder_max_depth(depth):
+    """Persist All Materials subfolder scan depth to the user settings file."""
+    try:
+        depth = max(
+            BULK_FOLDER_MAX_DEPTH_MIN,
+            min(BULK_FOLDER_MAX_DEPTH_MAX, int(depth)),
+        )
+    except (TypeError, ValueError):
+        depth = BULK_FOLDER_MAX_DEPTH_DEFAULT
+
+    user_path = _quick_materials_user_settings_path()
+    data = {}
+    if os.path.isfile(user_path):
+        try:
+            with open(user_path, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+            if isinstance(loaded, dict):
+                data = loaded
+        except Exception:
+            data = {}
+
+    ti = data.setdefault("texture_importer", {})
+    ti[BULK_FOLDER_MAX_DEPTH_KEY] = depth
+
+    settings_dir = os.path.dirname(user_path)
+    os.makedirs(settings_dir, exist_ok=True)
+    with open(user_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    return depth
 # Bulk material group headers + review dialog (orange for separation from cyan controls)
 BULK_MATERIAL_HEADER_COLOR = "#ff9330"
 # Shared accent for texture-attribute labels / combos (matches importer UDIM + combo styling)
@@ -472,6 +522,7 @@ class ImportTxTool(QtWidgets.QWidget):
 
         # Texture Importer Settings Button toggle
         self._setup_settings_toggle_button()
+        self._setup_texture_search_depth_controls()
 
         # Auto-Find-All Button - REMOVED (functionality simplified)
         # auto_all_btn = self.ui_elements.get("autoFindAllButton")
@@ -575,6 +626,69 @@ class ImportTxTool(QtWidgets.QWidget):
         #     set_btn.clicked.connect(self._on_custom_path_set_button_clicked)
 
         self.connections_initialized = True  # Mark connections as initialized
+
+    def _setup_texture_search_depth_controls(self):
+        """Link texture search depth slider/spinbox and load saved setting."""
+        slider = self._get_widget("textureSearchDepthSlider", QtWidgets.QSlider)
+        spin = self._get_widget("textureSearchDepthSpinBox", QtWidgets.QDoubleSpinBox)
+        if not slider or not spin:
+            return
+
+        depth = get_bulk_folder_max_depth()
+        slider.setMinimum(BULK_FOLDER_MAX_DEPTH_MIN)
+        slider.setMaximum(BULK_FOLDER_MAX_DEPTH_MAX)
+        spin.setMinimum(float(BULK_FOLDER_MAX_DEPTH_MIN))
+        spin.setMaximum(float(BULK_FOLDER_MAX_DEPTH_MAX))
+        spin.setDecimals(0)
+        spin.setSingleStep(1.0)
+
+        slider.blockSignals(True)
+        spin.blockSignals(True)
+        slider.setValue(depth)
+        spin.setValue(float(depth))
+        slider.blockSignals(False)
+        spin.blockSignals(False)
+
+        slider.valueChanged.connect(self._on_texture_search_depth_slider_changed)
+        spin.valueChanged.connect(self._on_texture_search_depth_spin_changed)
+
+    def _on_texture_search_depth_slider_changed(self, value):
+        spin = self._get_widget("textureSearchDepthSpinBox", QtWidgets.QDoubleSpinBox)
+        if spin and isValid(spin):
+            spin.blockSignals(True)
+            spin.setValue(float(value))
+            spin.blockSignals(False)
+        save_bulk_folder_max_depth(value)
+        self._maybe_rescan_bulk_folder()
+
+    def _on_texture_search_depth_spin_changed(self, value):
+        slider = self._get_widget("textureSearchDepthSlider", QtWidgets.QSlider)
+        depth = int(value)
+        if slider and isValid(slider):
+            slider.blockSignals(True)
+            slider.setValue(depth)
+            slider.blockSignals(False)
+        save_bulk_folder_max_depth(depth)
+        self._maybe_rescan_bulk_folder()
+
+    def _get_bulk_folder_max_depth(self):
+        spin = self._get_widget("textureSearchDepthSpinBox", QtWidgets.QDoubleSpinBox)
+        if spin and isValid(spin):
+            try:
+                return max(
+                    BULK_FOLDER_MAX_DEPTH_MIN,
+                    min(BULK_FOLDER_MAX_DEPTH_MAX, int(spin.value())),
+                )
+            except Exception:
+                pass
+        return get_bulk_folder_max_depth()
+
+    def _maybe_rescan_bulk_folder(self):
+        if not self._is_all_materials_bulk_mode():
+            return
+        root = self._bulk_folder_root
+        if root and os.path.isdir(root):
+            self._run_bulk_folder_scan(root)
 
     def _setup_settings_toggle_button(self):
         """Wire textureImporterSettingsButton to show/hide its frame and update sizing."""
@@ -2267,7 +2381,7 @@ class ImportTxTool(QtWidgets.QWidget):
                 depth_here = 0
             else:
                 depth_here = len(rel.split(os.sep))
-            if depth_here > BULK_FOLDER_MAX_DEPTH:
+            if depth_here > self._get_bulk_folder_max_depth():
                 dirnames[:] = []
                 continue
             for fn in filenames:
@@ -2567,7 +2681,7 @@ class ImportTxTool(QtWidgets.QWidget):
         """Bulk mode: same per-texture rows as single-material mode, grouped under collapsible material headers."""
         hint_folder = QtWidgets.QLabel(
             "Select a textures folder to match files to scene materials "
-            "<b>(material name must appear in each texture file name)</b>."
+            "<b>(material name must appear in each texture file name, will ignore prefix)</b>."
         )
         hint_folder.setWordWrap(True)
         hint_folder.setTextFormat(QtCore.Qt.RichText)
@@ -2655,8 +2769,9 @@ class ImportTxTool(QtWidgets.QWidget):
 
     def _ensure_legacy_bump2d(self, material):
         """
-        Maya bump2d → normalCamera for Lambert / Blinn / Phong (and other non–Standard Surface shaders).
+        Maya bump2d → Blinn/Lambert/Phong normalCamera (attribute, not a separate node).
         Uses tangent-space normal interpretation (bumpInterp) so RGB normal maps display correctly.
+        Chain: file.outColor → bump2d.bumpValue, bump2d.outNormal → material.normalCamera
         """
         bn = "%s_bump2d" % material
         if not cmds.objExists(bn):
@@ -2667,11 +2782,19 @@ class ImportTxTool(QtWidgets.QWidget):
                 cmds.setAttr("%s.bumpInterp" % bn, 1)
         except Exception as e:
             self._debug_print("[Import] bump2d bumpInterp: %s" % e)
+
+        dest = "%s.normalCamera" % material
+        src = "%s.outNormal" % bn
         try:
-            if not cmds.isConnected("%s.outNormal" % bn, "%s.normalCamera" % material):
-                cmds.connectAttr("%s.outNormal" % bn, "%s.normalCamera" % material, force=True)
-        except Exception:
-            pass
+            for plug in cmds.listConnections(dest, s=True, d=False, plugs=True) or []:
+                if plug != src:
+                    try:
+                        cmds.disconnectAttr(plug, dest)
+                    except Exception:
+                        pass
+            cmds.connectAttr(src, dest, force=True)
+        except Exception as e:
+            self._debug_print("[Import] bump2d -> normalCamera failed: %s" % e)
         return bn
 
     def _detach_ao_multiply_from_shading_groups(self, mult_name):
@@ -2795,14 +2918,20 @@ class ImportTxTool(QtWidgets.QWidget):
         )
 
     def _connect_file_to_normal_utility(self, file_node, utility_node, normal_utility):
-        """Wire file texture into aiNormalMap.input or bump2d.bumpValue."""
+        """Wire file/projection outColor into aiNormalMap.input or bump2d.bumpValue."""
         try:
             if normal_utility == "bump2d":
                 dst_plug = "%s.bumpValue" % utility_node
             else:
                 dst_plug = "%s.input" % utility_node
-            if not cmds.isConnected("%s.outColor" % file_node, dst_plug):
-                cmds.connectAttr("%s.outColor" % file_node, dst_plug, force=True)
+            src_plug = "%s.outColor" % file_node
+            for plug in cmds.listConnections(dst_plug, s=True, d=False, plugs=True) or []:
+                if plug != src_plug:
+                    try:
+                        cmds.disconnectAttr(plug, dst_plug)
+                    except Exception:
+                        pass
+            cmds.connectAttr(src_plug, dst_plug, force=True)
         except Exception as e:
             self._debug_print("[Import] normal file -> utility failed: %s" % e)
 
@@ -3091,12 +3220,18 @@ class ImportTxTool(QtWidgets.QWidget):
         nn = f"{material}_aiNormalMap"
         if not cmds.objExists(nn):
             nn = cmds.shadingNode("aiNormalMap", asUtility=True, name=nn)
-        # Connect its output to material.normalCamera
+        dest = f"{material}.normalCamera"
+        src = f"{nn}.outValue"
         try:
-            if not cmds.isConnected(f"{nn}.outValue", f"{material}.normalCamera"):
-                cmds.connectAttr(f"{nn}.outValue", f"{material}.normalCamera", force=True)
-        except Exception:
-            pass
+            for plug in cmds.listConnections(dest, s=True, d=False, plugs=True) or []:
+                if plug != src:
+                    try:
+                        cmds.disconnectAttr(plug, dest)
+                    except Exception:
+                        pass
+            cmds.connectAttr(src, dest, force=True)
+        except Exception as e:
+            self._debug_print("[Import] aiNormalMap -> normalCamera failed: %s" % e)
         return nn
 
     def _ensure_displacement_network(self, material):
@@ -5458,8 +5593,8 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
     def _add_packed_texture_section(self, parent_layout):
         """
         Add the Packed Texture section with:
+        - Search names line edit per entry (above attribute rows)
         - Multiple attribute rows (combobox + plus button + R/G/B/A checkboxes)
-        - Single line edit for search names
         """
         # Container for the entire packed texture section
         packed_section = QtWidgets.QWidget()
@@ -5534,8 +5669,8 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         """
         Add a new packed texture entry with:
         - Frame around the entry
+        - Search names label and line edit (above attribute rows)
         - Multiple attribute rows (combobox + plus button + R/G/B/A checkboxes)
-        - Search names label and line edit inline
         """
         # Frame for this packed texture entry
         entry_frame = QtWidgets.QFrame()
@@ -5552,7 +5687,7 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         entry_layout.setContentsMargins(4, 4, 4, 4)
         entry_layout.setSpacing(4)
         
-        # Delete button for entire packed texture entry (above first attribute)
+        # Delete button for entire packed texture entry
         delete_entry_btn = QtWidgets.QPushButton("Delete Entry")
         delete_entry_btn.setStyleSheet("""
             QPushButton {
@@ -5574,6 +5709,34 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         """)
         delete_entry_btn.clicked.connect(lambda: self._remove_packed_texture_entry(entry_frame))
         entry_layout.addWidget(delete_entry_btn)
+
+        # Search names label and line edit (above attribute rows)
+        search_row = QtWidgets.QHBoxLayout()
+        search_row.setContentsMargins(0, 0, 0, 0)
+        search_row.setSpacing(4)
+
+        search_label = QtWidgets.QLabel("Search Names:")
+        search_label.setStyleSheet("""
+            QLabel {
+                font-family: 'Segoe UI';
+                font-size: 12px;
+                color: #ffffff;
+                background-color: #444444;
+                border: 2px solid #444444;
+                border-radius: 6px;
+                padding: 2px 6px;
+            }
+        """)
+        search_row.addWidget(search_label)
+
+        search_line_edit = TextureSearchNamesLineEdit(
+            "OcclusionRoughnessMetallic, ORM" if len(self.packed_texture_entries) == 0 else ""
+        )
+        search_line_edit.setObjectName(f"packedTextureSearchNamesLineEdit_{len(self.packed_texture_entries)}")
+        search_line_edit.setStyleSheet(SEARCH_NAMES_LINE_EDIT_STYLESHEET)
+        search_row.addWidget(search_line_edit, 1)
+
+        entry_layout.addLayout(search_row)
         
         # Container for attribute assignments (will hold multiple rows)
         assignments_container = QtWidgets.QWidget()
@@ -5588,34 +5751,6 @@ class TextureSearchNamesUI(QtWidgets.QWidget):
         row_data = self._add_packed_assignment_row(assignments_layout, assignment_rows)
         
         entry_layout.addWidget(assignments_container)
-        
-        # Search names label and line edit inline
-        search_row = QtWidgets.QHBoxLayout()
-        search_row.setContentsMargins(0, 0, 0, 0)
-        search_row.setSpacing(4)
-        
-        search_label = QtWidgets.QLabel("Search Names:")
-        search_label.setStyleSheet("""
-            QLabel {
-                font-family: 'Segoe UI';
-                font-size: 12px;
-                color: #ffffff;
-                background-color: #444444;
-                border: 2px solid #444444;
-                border-radius: 6px;
-                padding: 2px 6px;
-            }
-        """)
-        search_row.addWidget(search_label)
-        
-        search_line_edit = TextureSearchNamesLineEdit(
-            "OcclusionRoughnessMetallic, ORM" if len(self.packed_texture_entries) == 0 else ""
-        )
-        search_line_edit.setObjectName(f"packedTextureSearchNamesLineEdit_{len(self.packed_texture_entries)}")
-        search_line_edit.setStyleSheet(SEARCH_NAMES_LINE_EDIT_STYLESHEET)
-        search_row.addWidget(search_line_edit, 1)
-        
-        entry_layout.addLayout(search_row)
         
         # Store entry data
         entry_data = {

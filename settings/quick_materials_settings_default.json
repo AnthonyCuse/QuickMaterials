@@ -14,7 +14,9 @@
     "attribute_frame_visible_subsurfaceSliderFrame": false
   },
   "material_list": {},
-  "texture_importer": {},
+  "texture_importer": {
+    "bulk_folder_max_depth": 5
+  },
   "material_tools": {
     "material_tool_visible_TextureImporterButtonFrame": true,
     "material_tool_visible_materialConverterButtonFrame": true,

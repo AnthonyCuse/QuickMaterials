@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>680</width>
-    <height>400</height>
+    <width>592</width>
+    <height>512</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -463,7 +463,7 @@ QPushButton:disabled {
              </widget>
             </item>
             <item>
-             <layout class="QHBoxLayout" name="autoSetLayout_2">
+             <layout class="QHBoxLayout" name="editTextureSearchNamesButtonLayout">
               <property name="spacing">
                <number>0</number>
               </property>
@@ -557,6 +557,335 @@ QPushButton:disabled {
               </item>
              </layout>
             </item>
+            <item>
+             <layout class="QHBoxLayout" name="textureSearchDepthLayout">
+              <property name="spacing">
+               <number>3</number>
+              </property>
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <widget class="QFrame" name="textureSearchDepthFrame">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="styleSheet">
+                 <string notr="true">QFrame {
+    /* Background */
+    background-color:#3a3a3a;  /* Dark grey background color */ 
+    /* background-image: url('background.png');  /* Optional background image */ 
+    /* background-repeat: no-repeat;  /* Prevents the background image from repeating */ 
+    /* background-position: center;  /* Centers the background image */ 
+
+    /* Border */
+	border: 1px solid #00f7c8;  /* Solid border with color and thickness */ 
+    border-radius: 5px;  /* Rounded corners with 10px radius */ 
+    /* border-style: solid;  /* Border style can be solid, dashed, dotted, etc. */ 
+
+    /* Padding and Margin */
+    padding: 1px;  /* Inner space between the frame content and its border */ 
+    margin: 1px;  /* Outer space around the frame */ 
+    border-radius: 10px;  /* Rounded corners */
+    
+    /* Font */
+    /*font-family: Arial, Helvetica, sans-serif;  /* Font family */
+    /*font-size: 14px;  /* Font size */
+    /*font-weight: bold;  /* Font weight: normal, bold, bolder, lighter, or numeric values */
+    /*font-style: italic;  /* Font style: normal, italic, or oblique */
+   color: #ffffff;  /* Text color */
+    /*text-align: center;  /* Text alignment: left, right, center, justify */
+    /*text-decoration: underline;  /* Text decoration: underline, overline, line-through, none */
+    /*letter-spacing: 1px;  /* Spacing between letters */
+    
+    /* Shadow */
+    /*box-shadow: 2px 2px 5px #1a1a1a;  /* Adds a shadow with x-offset, y-offset, blur radius, and color */
+    
+    /* Gradient Background (Optional) */
+    /*background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #3e3e3e, stop:1 #2b2b2b);  /* Linear gradient */
+    /*background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #4a4a4a, stop:1 #2b2b2b);  /* Radial gradient */
+    
+    /* Opacity */
+    /*opacity: 0.9;  /* Transparency: 0.0 (fully transparent) to 1.0 (fully opaque) */
+    
+    /* Cursor */
+    /*cursor: pointer;  /* Changes the cursor to a pointer when hovering */
+}
+</string>
+                </property>
+                <property name="frameShape">
+                 <enum>QFrame::StyledPanel</enum>
+                </property>
+                <property name="frameShadow">
+                 <enum>QFrame::Raised</enum>
+                </property>
+                <layout class="QHBoxLayout" name="horizontalLayout_2">
+                 <property name="spacing">
+                  <number>0</number>
+                 </property>
+                 <property name="leftMargin">
+                  <number>2</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>2</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                 <item>
+                  <widget class="QLabel" name="searchTextLabel">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>200</width>
+                     <height>16777215</height>
+                    </size>
+                   </property>
+                   <property name="font">
+                    <font>
+                     <family>Segoe UI</family>
+                     <pointsize>-1</pointsize>
+                    </font>
+                   </property>
+                   <property name="toolTip">
+                    <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;When loading textures for 'All Materials' the starting folder will search through this many sub-folders to find textures matching the material name. &lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QLabel {
+    font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
+    font-size: 14px;  /* Adjust the font size as needed */
+    color: #f2f2f2;  /* White text color */
+    /*background-color: #555555;  /* Dark background color */
+    border: 0px solid #555555;  /* Optional border with dark grey color */
+    border-radius: 8px;  /* Rounded corners */
+    padding: 0px 0px;  /* Padding around the text */
+}
+
+QPushButton:hover {
+    background-color: #666666;  /* Slightly lighter background on hover */
+}
+
+QPushButton:pressed {
+    background-color: #1a1a1a;  /* Darker background when pressed */
+}
+QPushButton:disabled {
+    color: #cccccc;  /* Light grey text color to indicate disabled */
+    border: 1px solid #555555;  /* Optional border with dark grey color */
+    background-color: #4a4a4a;  /* Lighter grey background color for disabled state */
+    color: #666666;  /* White text color */
+}</string>
+                   </property>
+                   <property name="text">
+                    <string>Texture Search Max-Depth</string>
+                   </property>
+                   <property name="alignment">
+                    <set>Qt::AlignBottom|Qt::AlignLeading|Qt::AlignLeft</set>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QDoubleSpinBox" name="textureSearchDepthSpinBox">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="minimumSize">
+                    <size>
+                     <width>39</width>
+                     <height>15</height>
+                    </size>
+                   </property>
+                   <property name="autoFillBackground">
+                    <bool>false</bool>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QDoubleSpinBox {
+    font-family: 'Segoe UI';
+    font-size: 12px;
+    color: #ffffff;
+    background-color: #404040;
+    border: 1px solid #444444;
+    border-radius: 7px;             /* Rounded field */
+    padding: 2px 5px;               /* Text padding (fixed missing colon) */
+    padding-right: 2px;            /* Reserve space for the buttons */
+    min-height: 5px;               /* Avoid vertical clipping */
+    min-width: 30px;
+    margin: 2px 0;
+    selection-background-color: transparent;
+    selection-color: #ffffff;   /* keep text readable */
+
+}
+
+/* Define button sizes/placement so padding-right matches them */
+QDoubleSpinBox::up-button,
+QDoubleSpinBox::down-button {
+    subcontrol-origin: border;
+    width: 12px;                    /* Button width */
+    border: none;
+    background: transparent;        /* Keep your look; arrows are default */
+}
+
+QDoubleSpinBox::up-button {
+    subcontrol-position: top right;
+    margin: 0px 0px 0 0;        /* Tighter to text */
+}
+
+QDoubleSpinBox::down-button {
+    subcontrol-position: bottom right;
+    margin: 0px 0px 0 0;        /* Tighter to text */
+}
+
+QDoubleSpinBox::up-arrow   { 
+    image: url(&quot;:/icons/arrow_up.png&quot;);   
+    width: 10px; height: 10px; 
+    margin: 3px 10px 0 0; 
+}
+
+QDoubleSpinBox::down-arrow { 
+    image: url(&quot;:/icons/arrow_down.png&quot;); 
+    width: 10px; height: 10px; 
+    margin: -3px 10px 0 0; 
+}
+
+/* Alternate icons when pressed */
+QDoubleSpinBox::up-arrow:pressed {
+    image: url(&quot;:/icons/arrow_pressed_up.png&quot;);
+}
+QDoubleSpinBox::down-arrow:pressed {
+    image: url(&quot;:/icons/arrow_pressed_down.png&quot;);
+}
+
+
+/* NOTE: No ::up-arrow / ::down-arrow blocks here, so Qt draws the default arrows */
+</string>
+                   </property>
+                   <property name="decimals">
+                    <number>0</number>
+                   </property>
+                   <property name="maximum">
+                    <double>10.000000000000000</double>
+                   </property>
+                   <property name="singleStep">
+                    <double>0.100000000000000</double>
+                   </property>
+                   <property name="value">
+                    <double>5.000000000000000</double>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QSlider" name="textureSearchDepthSlider">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="acceptDrops">
+                    <bool>false</bool>
+                   </property>
+                   <property name="toolTip">
+                    <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Determines the roughness of the newly created materials.&lt;/p&gt;&lt;p&gt;0 - Shiny&lt;/p&gt;&lt;p&gt;1- Rough&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                   </property>
+                   <property name="autoFillBackground">
+                    <bool>false</bool>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QSlider {
+    padding: 0px;
+    border: #333333;  /* Clean slider background */
+    background: #404040;  /* Avoid filling behind groove */
+    border-radius: 6px;
+    height:15px;
+    width: 10px;   
+}
+
+QSlider::groove:horizontal {
+    border: 0px;
+    height:4px;  /* Groove height (make this smaller for thinner bar) */
+    background: #262626;
+    border-radius: 2px;
+}
+
+
+QSlider::handle:horizontal {
+    background: #e0e0e0;
+    border: 1px solid #555555;
+    width: 10px;        /* Round handle size */
+    height: 10px;
+    margin: -4px 0;     /* Centers the handle on thin groove */
+    border-radius: 5px; /* Fully rounded handle */
+
+}
+
+QSlider::handle:horizontal:hover {
+    background: #ffffff;
+}
+
+QSlider::handle:horizontal:pressed {
+    background: #aaaaaa;
+}
+
+QSlider::add-page:horizontal {
+    background: #222222;
+}
+
+QSlider::sub-page:horizontal {
+    background: #777777;
+}
+</string>
+                   </property>
+                   <property name="maximum">
+                    <number>10</number>
+                   </property>
+                   <property name="value">
+                    <number>10</number>
+                   </property>
+                   <property name="sliderPosition">
+                    <number>10</number>
+                   </property>
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <spacer name="horizontalSpacer_3">
+                   <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                   </property>
+                   <property name="sizeHint" stdset="0">
+                    <size>
+                     <width>195</width>
+                     <height>20</height>
+                    </size>
+                   </property>
+                  </spacer>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+             </layout>
+            </item>
            </layout>
           </widget>
          </item>
@@ -589,12 +918,15 @@ QPushButton:disabled {
               <font>
                <family>Segoe UI</family>
                <pointsize>-1</pointsize>
+               <weight>75</weight>
+               <bold>true</bold>
               </font>
              </property>
              <property name="styleSheet">
               <string notr="true">QLabel {
     font-family: 'Segoe UI';  /* Sets the font to Segoe UI */
-    font-size: 14px;  /* Adjust the font size as needed */
+    font-size: 16px;  /* Adjust the font size as needed */
+    font-weight: bold;  /* Makes the text bold */
     color: #d6d6d6;  /* White text color */
     /*background-color: #555555;  /* Dark background color */
     border: 0px solid #555555;  /* Optional border with dark grey color */
@@ -631,6 +963,13 @@ QPushButton:disabled {
                <horstretch>0</horstretch>
                <verstretch>0</verstretch>
               </sizepolicy>
+             </property>
+             <property name="font">
+              <font>
+               <pointsize>12</pointsize>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
              </property>
              <property name="toolTip">
               <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Material type to create new materials with. Settings are applied to appropriate attributes per material type.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
@@ -799,8 +1138,8 @@ QScrollArea &gt; QWidget &gt; QWidget {
              <rect>
               <x>0</x>
               <y>0</y>
-              <width>528</width>
-              <height>83</height>
+              <width>533</width>
+              <height>251</height>
              </rect>
             </property>
             <layout class="QVBoxLayout" name="verticalLayout_6"/>
